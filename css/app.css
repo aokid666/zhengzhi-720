@@ -240,3 +240,7 @@ body.annomode #qnav{display:none}
 @media (min-width:820px) and (orientation:portrait){
   .wrap{max-width:900px}
 }
+
+/* ---------- PDF 跳转 ---------- */
+.pdflink{display:inline-flex;align-items:center;gap:6px;text-decoration:none;background:#f4f8f7;border-color:#cfe0dd;color:var(--teal)}
+.pdflink .tiny{margin-left:2px}
