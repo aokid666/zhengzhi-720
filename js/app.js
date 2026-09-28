@@ -1,4 +1,5 @@
 /* 720题 主应用 */
+const DATA_VER = 42;
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -9,7 +10,7 @@
   /* ---------- 数据 ---------- */
   async function boot() {
     try {
-      const r = await fetch('data/questions.json');
+      const r = await fetch('data/questions.json?v=' + DATA_VER);
       S.qs = await r.json();
     } catch (e) { document.body.innerHTML = '<div class="empty">题库加载失败：' + esc(e.message) + '</div>'; return; }
     S.qs.forEach(q => S.byId[q.id] = q);
@@ -23,8 +24,8 @@
 
   async function needLect() {
     if (Object.keys(S.lk).length) return;
-    try { S.lk = await (await fetch('data/lecture-k.json')).json(); } catch (e) { S.lk = {}; }
-    try { S.ls = await (await fetch('data/lecture-s.json')).json(); } catch (e) { S.ls = {}; }
+    try { S.lk = await (await fetch('data/lecture-k.json?v=' + DATA_VER)).json(); } catch (e) { S.lk = {}; }
+    try { S.ls = await (await fetch('data/lecture-s.json?v=' + DATA_VER)).json(); } catch (e) { S.ls = {}; }
   }
 
   /* ---------- 进度 ---------- */
