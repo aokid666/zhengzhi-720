@@ -5,10 +5,10 @@
 window.ANNO = (function () {
   const COLORS = ['#d0342c', '#1f6feb', '#1f8a5b', '#111111', '#d89055', '#8e44ad'];
   const HL = '#ffd640';
-  const WIDTHS = [0.6, 1.0, 1.45, 2.2, 3.4];    // 归一化宽度档位（×主机宽度/100）
+  const WIDTHS = [0.45, 0.65, 0.9, 1.2, 1.6, 2.1, 2.8, 3.8];   // 8 档：约 0.7mm ~ 6mm
 
   const st = {
-    on: false, color: COLORS[0], wi: 2, mode: 'pen', scroll: false,
+    on: false, color: COLORS[0], wi: 3, mode: 'pen', scroll: false,
     host: null, key: null, strokes: [], cv: null, drawing: false, cur: null, dirty: false
   };
   const seen = new WeakSet();
@@ -284,7 +284,7 @@ window.ANNO = (function () {
       if (b) b.classList.toggle('on', st.mode === m);
     });
     const w = bar.querySelector('#annoW');
-    if (w) w.textContent = '笔宽 ' + (st.wi + 1) + '/5';
+    if (w) w.textContent = '笔宽 ' + (st.wi + 1) + '/' + WIDTHS.length;
     const mb = bar.querySelector('#annoMode');
     if (mb) {
       mb.textContent = st.scroll ? '🖐 滚动中（点此书写）' : '✍️ 书写中（点此滚动）';
@@ -301,8 +301,8 @@ window.ANNO = (function () {
     else if (a === 'pen') st.mode = 'pen';
     else if (a === 'hl') st.mode = 'hl';
     else if (a === 'eraser') st.mode = 'eraser';
-    else if (a === 'thin') { st.wi = Math.max(0, st.wi - 1); ZS.toast('笔宽 ' + (st.wi + 1) + '/5', 900); }
-    else if (a === 'bold') { st.wi = Math.min(WIDTHS.length - 1, st.wi + 1); ZS.toast('笔宽 ' + (st.wi + 1) + '/5', 900); }
+    else if (a === 'thin') { st.wi = Math.max(0, st.wi - 1); ZS.toast('笔宽 ' + (st.wi + 1) + '/' + WIDTHS.length, 900); }
+    else if (a === 'bold') { st.wi = Math.min(WIDTHS.length - 1, st.wi + 1); ZS.toast('笔宽 ' + (st.wi + 1) + '/' + WIDTHS.length, 900); }
     else if (a === 'undo') { if (st.strokes.length) { st.strokes.pop(); markDirty(); redraw(); ZS.toast('撤销一笔', 900); } else ZS.toast('没有可撤销的笔画'); }
     else if (a === 'clear') {
       if (!st.strokes.length) return ZS.toast('本区域还没有笔记');

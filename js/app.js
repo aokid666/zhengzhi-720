@@ -339,16 +339,33 @@
   }
 
   const PAGE_OFF = { a: 4, k: 8, s: 9, q: 6 };
+  const PAGE_NAME = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
   const PDFFILE = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
+  const PDFCHUNK = { a: 40, k: 40, q: 0, s: 0 };     // 0 = 不分卷
+  const PDFTOTAL = { a: 460, k: 326, q: 164, s: 197 };
+  const pad3 = n => String(n).padStart(3, '0');
+  function chunkOf(kind, page) {
+    const cs = PDFCHUNK[kind];
+    if (!cs) return { file: PDFFILE[kind] + '.pdf', page: page };
+    const idx = Math.floor((page - 1) / cs);
+    const start = idx * cs + 1;
+    const end = Math.min(start + cs - 1, PDFTOTAL[kind]);
+    return { file: PDFFILE[kind] + '-P' + pad3(start) + '-' + pad3(end) + '.pdf', page: page - start + 1 };
+  }
+  /* 为一组页生成 PDF 跳转按钮（跨卷时给出多个按钮） */
   function pdfLink(kind, pages, label) {
     if (!pages || !pages.length) return '';
-    const n = pages[0];
     const off = PAGE_OFF[kind] || 0;
-    return `<a class="btn pdflink" target="_blank" rel="noopener"
-      href="pdf/${encodeURIComponent(PDFFILE[kind])}.pdf#page=${n}&zoom=page-width">📄 ${label || ('打开《' + PDFFILE[kind] + '》PDF')}<span class="tiny muted">（第 ${n - off} 页）</span></a>`;
+    const seen = {}, list = [];
+    pages.forEach(n => {
+      const c = chunkOf(kind, n);
+      if (seen[c.file]) { seen[c.file].cnt++; return; }
+      seen[c.file] = { file: c.file, page: c.page, first: n, cnt: 1 };
+      list.push(seen[c.file]);
+    });
+    return list.map(c => `<a class="btn pdflink" target="_blank" rel="noopener"
+      href="pdf/${encodeURIComponent(c.file)}#page=${c.page}&zoom=page-width">📄 ${label}${c.cnt > 1 ? ' +' : ''}<span class="tiny muted">（第 ${c.first - off} 页）</span></a>`).join('');
   }
-  const PAGE_NAME = { a: '解析册', k: '知识清单', s: '速成班讲义' };
-
   function pagesHtml(pages, kind, id, label) {
     if (!pages || !pages.length) return '<div class="tiny muted">未匹配到对应页</div>';
     const cur = S['pg_' + kind + '_' + id];
@@ -389,8 +406,7 @@
 
   /* ---------- 笔记区 ---------- */
   const NC = ['#1f6feb', '#d0342c', '#1f8a5b', '#111111', '#d89055', '#8e44ad'];
-  const NW = [0.6, 1.0, 1.45, 2.2, 3.4];
-  const WIDE = () => window.matchMedia('(min-width: 820px)').matches;
+  const NW = [0.45, 0.65, 0.9, 1.2, 1.6, 2.1, 2.8, 3.8];
   let nd = null;                       // 笔记手写状态
 
   function renderNote(id) {
@@ -404,7 +420,6 @@
       <div class="tiny muted" id="noteSum">${noteSummary(n)}</div>
       <div id="noteBox"></div>
     </div>`;
-    if (WIDE()) openNote(id, true);
   }
   function noteSummary(n) {
     const t = (n.text || '').replace(/<[^>]+>/g, '').trim();
@@ -495,7 +510,7 @@
     const bd = $('#btnDraw'); if (bd) bd.classList.add('on');
     const cv = wrap.querySelector('canvas');
     const n = ZS.data.notes[id];
-    nd = nd && nd.id === id ? nd : { id: id, wi: 2, color: NC[0], mode: 'pen', scroll: false, cur: null, dirty: false };
+    nd = nd && nd.id === id ? nd : { id: id, wi: 3, color: NC[0], mode: 'pen', scroll: false, cur: null, dirty: false };
     nd.strokes = n.strokes;
 
     cv.style.pointerEvents = nd.scroll ? 'none' : 'auto';
@@ -761,8 +776,8 @@
     }
     if (a === 'pen') nd.mode = 'pen';
     else if (a === 'eraser') nd.mode = 'eraser';
-    else if (a === 'thin') { nd.wi = Math.max(0, nd.wi - 1); ZS.toast('笔宽 ' + (nd.wi + 1) + '/5', 900); }
-    else if (a === 'bold') { nd.wi = Math.min(NW.length - 1, nd.wi + 1); ZS.toast('笔宽 ' + (nd.wi + 1) + '/5', 900); }
+    else if (a === 'thin') { nd.wi = Math.max(0, nd.wi - 1); ZS.toast('笔宽 ' + (nd.wi + 1) + '/' + NW.length, 900); }
+    else if (a === 'bold') { nd.wi = Math.min(NW.length - 1, nd.wi + 1); ZS.toast('笔宽 ' + (nd.wi + 1) + '/' + NW.length, 900); }
     else if (a === 'undo') { if (nd.strokes.length) { nd.strokes.pop(); noteRepaint(); ZS.toast('撤销一笔', 900); } else ZS.toast('没有可撤销的笔画'); }
     else if (a === 'clear') {
       if (!nd.strokes.length) return ZS.toast('手写板还没有内容');
