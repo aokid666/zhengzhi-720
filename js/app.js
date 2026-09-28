@@ -342,7 +342,7 @@ const DATA_VER = 42;
   const PAGE_OFF = { a: 4, k: 8, s: 9, q: 6 };
   const PAGE_NAME = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
   const PDFFILE = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
-  const PDFCHUNK = { a: 40, k: 40, q: 0, s: 0 };     // 0 = 不分卷
+  const PDFCHUNK = { a: 40, k: 40, q: 40, s: 40 };     // 0 = 不分卷
   const PDFTOTAL = { a: 460, k: 326, q: 164, s: 197 };
   const pad3 = n => String(n).padStart(3, '0');
   function chunkOf(kind, page) {
