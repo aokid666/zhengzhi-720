@@ -5,10 +5,10 @@
 window.ANNO = (function () {
   const COLORS = ['#d0342c', '#1f6feb', '#1f8a5b', '#111111', '#d89055', '#8e44ad'];
   const HL = '#ffd640';
-  const WIDTHS = [1.6, 2.6, 4.2, 6.5, 10];      // 归一化宽度档位（×主机宽度/100）
+  const WIDTHS = [0.6, 1.0, 1.45, 2.2, 3.4];    // 归一化宽度档位（×主机宽度/100）
 
   const st = {
-    on: false, color: COLORS[0], wi: 1, mode: 'pen',
+    on: false, color: COLORS[0], wi: 2, mode: 'pen', scroll: false,
     host: null, key: null, strokes: [], cv: null, drawing: false, cur: null, dirty: false
   };
   const seen = new WeakSet();
@@ -74,6 +74,12 @@ window.ANNO = (function () {
       path(ctx, s.p, w, h);
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
+  }
+
+  function applyMode() {
+    if (!st.cv) return;
+    st.cv.style.pointerEvents = st.scroll ? 'none' : 'auto';
+    st.cv.classList.toggle('editing', !st.scroll && st.on);
   }
 
   function redraw() {
@@ -172,8 +178,8 @@ window.ANNO = (function () {
   }
 
   function mkStroke() {
-    if (st.mode === 'eraser') return { c: '#000', w: width() * 5, e: 1, p: [] };
-    if (st.mode === 'hl') return { c: HL, w: width() * 4.2, a: .35, p: [] };
+    if (st.mode === 'eraser') return { c: '#000', w: Math.max(width() * 8, 2.4), e: 1, p: [] };
+    if (st.mode === 'hl') return { c: HL, w: width() * 7, a: .32, p: [] };
     return { c: st.color, w: width(), p: [] };
   }
 
@@ -201,14 +207,14 @@ window.ANNO = (function () {
     if (!host.clientHeight) host.style.minHeight = '160px';
     st.host = host; st.key = key;
     st.cv = ensure(host);
-    st.cv.style.pointerEvents = 'auto';
-    st.cv.classList.add('editing');
+    st.scroll = localStorage.getItem('zz720.annoScroll') === '1';
     if (!fit(host, st.cv)) setTimeout(redraw, 300);
     bind(st.cv);
     const rec = ZS.data.annos[key];
     st.strokes = rec && rec.strokes ? JSON.parse(JSON.stringify(rec.strokes)) : [];
     st.on = true;
     redraw();
+    applyMode();
     document.body.classList.add('annomode');
     if (!window._annoWin) { window._annoWin = redraw; window.addEventListener('resize', redraw); }
     showBar();
@@ -237,6 +243,8 @@ window.ANNO = (function () {
       '<div class="r1"><span class="colors" id="annoColors"></span>' +
       '<span id="annoW" class="tiny muted" style="margin-left:4px"></span></div>' +
       '<div class="r1">' +
+      '<button class="iconbtn" data-a="mode" id="annoMode"></button>' +
+      '<span style="width:1px;height:18px;background:var(--line)"></span>' +
       '<button class="iconbtn" data-a="pen">✏️ 笔</button>' +
       '<button class="iconbtn" data-a="hl">🖍 荧光</button>' +
       '<button class="iconbtn" data-a="eraser">🧽 橡皮</button>' +
@@ -277,9 +285,20 @@ window.ANNO = (function () {
     });
     const w = bar.querySelector('#annoW');
     if (w) w.textContent = '笔宽 ' + (st.wi + 1) + '/5';
+    const mb = bar.querySelector('#annoMode');
+    if (mb) {
+      mb.textContent = st.scroll ? '🖐 滚动中（点此书写）' : '✍️ 书写中（点此滚动）';
+      mb.classList.toggle('on', st.scroll);
+    }
   }
   function act(a) {
-    if (a === 'pen') st.mode = 'pen';
+    if (a === 'mode') {
+      st.scroll = !st.scroll;
+      localStorage.setItem('zz720.annoScroll', st.scroll ? '1' : '0');
+      applyMode();
+      ZS.toast(st.scroll ? '已切到滚动：手指可自由滑页面' : '已切到书写：可以直接写', 1600);
+    }
+    else if (a === 'pen') st.mode = 'pen';
     else if (a === 'hl') st.mode = 'hl';
     else if (a === 'eraser') st.mode = 'eraser';
     else if (a === 'thin') { st.wi = Math.max(0, st.wi - 1); ZS.toast('笔宽 ' + (st.wi + 1) + '/5', 900); }

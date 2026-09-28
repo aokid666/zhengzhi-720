@@ -225,7 +225,8 @@
     });
     h += `</div></div>`;
     if (revealed) {
-      h += `<div class="acts" style="margin-top:0"><button class="btn" onclick="ZS_ANNO('${id}','q-txt')">✍️ 在题目与选项上做笔记</button></div>`;
+      h += `<div class="acts" style="margin-top:0"><button class="btn" onclick="ZS_ANNO('${id}','q-txt')">✍️ 在题目与选项上做笔记</button>
+        ${pdfLink('q', [q.qPage + PAGE_OFF.q], '打开《试题册》PDF')}</div>`;
     }
     if (!revealed) {
       h += `<div class="acts">
@@ -249,7 +250,8 @@
         <div class="bd">
           <div class="pages" id="aPages">${pagesHtml(q.aPages, 'a', id, '分析解析页')}</div>
           <div class="acts"><button class="btn" onclick="ZS_ANNO('${id}','a-img')">✍️ 在解析截图上做笔记</button>
-          <button class="btn" onclick="ZS_ANNO('${id}','a-txt')">✍️ 在解析文字上做笔记</button></div>
+          <button class="btn" onclick="ZS_ANNO('${id}','a-txt')">✍️ 在解析文字上做笔记</button>
+          ${pdfLink('a', S['pg_a_' + id] ? shiftList(q.aPages, S['pg_a_' + id]) : q.aPages, '打开《解析册》PDF')}</div>
           <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">解析文字（点开查看 · 可编辑）<span class="arw">›</span></div>
             <div class="bd" id="aText">
               <div class="txt" data-anno="${id}|a-txt" data-editkey="a">${editHtml(id, 'a', analysisHtml(q))}</div>
@@ -337,6 +339,14 @@
   }
 
   const PAGE_OFF = { a: 4, k: 8, s: 9, q: 6 };
+  const PDFFILE = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
+  function pdfLink(kind, pages, label) {
+    if (!pages || !pages.length) return '';
+    const n = pages[0];
+    const off = PAGE_OFF[kind] || 0;
+    return `<a class="btn pdflink" target="_blank" rel="noopener"
+      href="pdf/${encodeURIComponent(PDFFILE[kind])}.pdf#page=${n}&zoom=page-width">📄 ${label || ('打开《' + PDFFILE[kind] + '》PDF')}<span class="tiny muted">（第 ${n - off} 页）</span></a>`;
+  }
   const PAGE_NAME = { a: '解析册', k: '知识清单', s: '速成班讲义' };
 
   function pagesHtml(pages, kind, id, label) {
@@ -367,7 +377,8 @@
       if (!txt) txt = '（未检索到对应讲义文字，请以截图为准）';
       box.innerHTML = `<div class="pages">${pagesHtml(pages, t, q.id, t === 'k' ? '知识清单' : '速成班讲义')}</div>
         <div class="acts"><button class="btn" onclick="ZS_ANNO('${q.id}','${t}-img')">✍️ 在讲义截图上做笔记</button>
-        <button class="btn" onclick="ZS_ANNO('${q.id}','${t}-txt')">✍️ 在讲义文字上做笔记</button></div>
+        <button class="btn" onclick="ZS_ANNO('${q.id}','${t}-txt')">✍️ 在讲义文字上做笔记</button>
+        ${pdfLink(t, S['pg_' + t + '_' + q.id] ? shiftList(pages, S['pg_' + t + '_' + q.id]) : pages, '打开《' + (t === 'k' ? '知识清单' : '速成班讲义') + '》PDF')}</div>
         <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">讲义文字（点开查看 · 可编辑）<span class="arw">›</span></div>
           <div class="bd" id="${t}Text">
             <div class="txt" data-anno="${q.id}|${t}-txt" data-editkey="${t}">${editHtml(q.id, t, esc(txt))}</div>
@@ -378,7 +389,7 @@
 
   /* ---------- 笔记区 ---------- */
   const NC = ['#1f6feb', '#d0342c', '#1f8a5b', '#111111', '#d89055', '#8e44ad'];
-  const NW = [1.8, 3, 4.8, 7.5, 11];
+  const NW = [0.6, 1.0, 1.45, 2.2, 3.4];
   const WIDE = () => window.matchMedia('(min-width: 820px)').matches;
   let nd = null;                       // 笔记手写状态
 
@@ -429,6 +440,7 @@
           <span class="sp" style="flex:1"></span>
         </div>
         <div class="ntools" id="drawTools" style="display:none">
+          <button class="iconbtn" id="noteMode" onclick="ZS_NOTETOOL('mode')"></button>
           <span class="colors" id="nColors"></span>
           <button class="iconbtn" data-n="pen">✏️ 笔</button>
           <button class="iconbtn" data-n="eraser">🧽 橡皮</button>
@@ -483,9 +495,11 @@
     const bd = $('#btnDraw'); if (bd) bd.classList.add('on');
     const cv = wrap.querySelector('canvas');
     const n = ZS.data.notes[id];
-    nd = nd && nd.id === id ? nd : { id: id, wi: 1, color: NC[0], mode: 'pen', cur: null, dirty: false };
+    nd = nd && nd.id === id ? nd : { id: id, wi: 2, color: NC[0], mode: 'pen', scroll: false, cur: null, dirty: false };
     nd.strokes = n.strokes;
 
+    cv.style.pointerEvents = nd.scroll ? 'none' : 'auto';
+    cv.style.touchAction = nd.scroll ? 'pan-y' : 'none';
     const resize = () => {
       const w = wrap.clientWidth, h = wrap.clientHeight;
       if (!w || !h) return;
@@ -514,7 +528,9 @@
     const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
     cv.onpointerdown = e => {
       e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) { }
-      nd.cur = { c: nd.mode === 'eraser' ? '#000' : nd.color, w: NW[nd.wi] * (nd.mode === 'eraser' ? 5 : 1), e: nd.mode === 'eraser' ? 1 : 0, p: [pos(e)] };
+      nd.cur = { c: nd.mode === 'eraser' ? '#000' : nd.color,
+                 w: NW[nd.wi] * (nd.mode === 'eraser' ? 8 : 1),
+                 e: nd.mode === 'eraser' ? 1 : 0, p: [pos(e)] };
       resize();
     };
     cv.onpointermove = e => {
@@ -537,10 +553,15 @@
     };
     cv.onpointerup = end; cv.onpointercancel = end; cv.onpointerleave = end;
     noteToolSync();
-    if (!silent) ZS.toast('手写板已打开：在虚线框里写');
+    if (!silent) ZS.toast('手写板已打开；想滑动页面时点「✍️ 书写中」切到滚动', 2600);
   }
   function noteToolSync() {
     const dt = $('#drawTools'); if (!dt || !nd) return;
+    const mb = dt.querySelector('#noteMode');
+    if (mb) {
+      mb.textContent = nd.scroll ? '🖐 滚动中（点此书写）' : '✍️ 书写中（点此滚动）';
+      mb.classList.toggle('on', nd.scroll);
+    }
     ['pen', 'eraser'].forEach(m => {
       const b = dt.querySelector('[data-n="' + m + '"]');
       if (b) b.classList.toggle('on', nd.mode === m);
@@ -706,7 +727,7 @@
     if (ANNO.on) ANNO.close();
     if (!host.clientWidth || !host.clientHeight) host.style.minHeight = '120px';
     ANNO.open(host, key);
-    ZS.toast('标注模式：直接用手写/手指涂画');
+    ZS.toast('书写中：直接涂画；要滑页面就点工具条上的「✍️ 书写中」切换', 2600);
     setTimeout(() => host.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
   };
   window.ZS_NOTEOPEN = id => openNote(id);
@@ -728,6 +749,16 @@
   };
   window.ZS_NOTETOOL = a => {
     if (!nd) return;
+    if (a === 'mode') {
+      nd.scroll = !nd.scroll;
+      const wrap = $('#noteCv'), cv = wrap && wrap.querySelector('canvas');
+      if (cv) {
+        cv.style.pointerEvents = nd.scroll ? 'none' : 'auto';
+        cv.style.touchAction = nd.scroll ? 'pan-y' : 'none';
+      }
+      noteToolSync();
+      return ZS.toast(nd.scroll ? '已切到滚动：手指可自由滑页面' : '已切到书写：可以直接写', 1600);
+    }
     if (a === 'pen') nd.mode = 'pen';
     else if (a === 'eraser') nd.mode = 'eraser';
     else if (a === 'thin') { nd.wi = Math.max(0, nd.wi - 1); ZS.toast('笔宽 ' + (nd.wi + 1) + '/5', 900); }
