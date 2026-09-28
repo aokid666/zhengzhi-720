@@ -226,3 +226,7 @@ body.annomode #qnav{display:none}
 /* ---------- PDF 跳转 ---------- */
 .pdflink{display:inline-flex;align-items:center;gap:6px;text-decoration:none;background:#f4f8f7;border-color:#cfe0dd;color:var(--teal)}
 .pdflink .tiny{margin-left:2px}
+
+/* ---------- 解析裁切图 ---------- */
+.pgwrap.crop{border:none;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(20,40,38,.06)}
+.pgwrap.crop img{width:100%}
