@@ -248,7 +248,7 @@
       h += `<div class="acc open" id="accA">
         <div class="hd" onclick="ZS_ACC(this)">📖 解析（对应解析册原页）<span class="arw">›</span></div>
         <div class="bd">
-          <div class="pages" id="aPages">${pagesHtml(q.aPages, 'a', id, '分析解析页')}</div>
+          <div class="pages" id="aPages">${aBoxHtml(q)}</div>
           <div class="acts"><button class="btn" onclick="ZS_ANNO('${id}','a-img')">✍️ 在解析截图上做笔记</button>
           <button class="btn" onclick="ZS_ANNO('${id}','a-txt')">✍️ 在解析文字上做笔记</button>
           ${pdfLink('a', S['pg_a_' + id] ? shiftList(q.aPages, S['pg_a_' + id]) : q.aPages, '打开《解析册》PDF')}</div>
@@ -366,6 +366,24 @@
     return list.map(c => `<a class="btn pdflink" target="_blank" rel="noopener"
       href="pdf/${encodeURIComponent(c.file)}#page=${c.page}&zoom=page-width">📄 ${label}${c.cnt > 1 ? ' +' : ''}<span class="tiny muted">（第 ${c.first - off} 页）</span></a>`).join('');
   }
+  /* 解析区：直接显示「按本题裁切」的高清解析图 */
+  function aBoxHtml(q) {
+    const has = (q.aCrops || []).length;
+    if (!has) {
+      return `<div class="hint" style="padding:14px">本题解析图尚未生成，可点下方「解析册 PDF」查看。</div>`;
+    }
+    const inner = q.aCrops.map((src, i) =>
+      `<div class="pgwrap crop" data-tgt="a-img" data-id="${q.id}">
+        <img loading="lazy" src="img/ac/${src}" alt="本题解析 ${i + 1}" onclick="ZS_ZOOM(this)">
+      </div>`).join('');
+    const more = q.aCrops.length > 1
+      ? `<span class="tiny muted" style="align-self:center">本题解析共 ${q.aCrops.length} 张（跨页）</span>` : '';
+    return inner + `<div class="pager">${more}
+      <span class="tiny muted" style="align-self:center">点击图片可放大</span>
+    </div>`;
+  }
+  window.ZS_AMODE = () => {};
+
   function pagesHtml(pages, kind, id, label) {
     if (!pages || !pages.length) return '<div class="tiny muted">未匹配到对应页</div>';
     const cur = S['pg_' + kind + '_' + id];
@@ -735,6 +753,7 @@
     const key = id + '|' + tgt;
     let host = document.querySelector('[data-anno="' + key + '"]');
     if (!host && tgt.endsWith('-img')) host = $(`.pgwrap[data-tgt="${tgt}"][data-id="${id}"]`);
+    if (!host && tgt === 'a-img') host = $(`.pgwrap[data-tgt="a-imgfull"][data-id="${id}"]`);
     if (!host) return ZS.toast('找不到可标注的区域');
     // 自动展开祖先折叠块
     let p = host;
@@ -821,7 +840,8 @@
     if (i > all.length - 1) { i = all.length - 1; }
     S['pg_' + kind + '_' + id] = all[i];
     if (kind === 'a') {
-      const box = $('#aPages'); if (box) box.innerHTML = pagesHtml(shiftList(q.aPages, all[i]), 'a', id, '解析册');
+      const box = $('#aPages'); if (box) box.innerHTML = aBoxHtml(q);
+      ANNO.renderScope(box || document.getElementById('view'));
     } else {
       q._lectDone = 1; paintLect(q);
     }
