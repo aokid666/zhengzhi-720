@@ -1,27 +1,27 @@
 /* 手写标注引擎
    - 编辑模式：open(host,key) 画布可交互
    - 阅读模式：renderScope() 把已保存的笔画以「只读」画布叠在原文上，随时可见
-   笔画以 0~1 归一化坐标存储，跨设备等比缩放 */
+   笔画以 0~1 归一化坐标存储，跨设备等比缩放；绘制用中点二次贝塞尔平滑 */
 window.ANNO = (function () {
   const COLORS = ['#d0342c', '#1f6feb', '#1f8a5b', '#111111', '#d89055', '#8e44ad'];
   const HL = '#ffd640';
+  const WIDTHS = [1.6, 2.6, 4.2, 6.5, 10];      // 归一化宽度档位（×主机宽度/100）
+
   const st = {
-    on: false, color: COLORS[0], width: 2.2, mode: 'pen',
+    on: false, color: COLORS[0], wi: 1, mode: 'pen',
     host: null, key: null, strokes: [], cv: null, drawing: false, cur: null, dirty: false
   };
   const seen = new WeakSet();
   let obsList = [];
   let visible = localStorage.getItem('zz720.annoOn') !== '0';
 
+  const width = () => WIDTHS[st.wi];
+
   function ensure(host) {
     host.classList.add('annohost');
     let cv = null;
     for (const c of host.children) if (c.classList && c.classList.contains('anno-cv')) cv = c;
-    if (!cv) {
-      cv = document.createElement('canvas');
-      cv.className = 'anno-cv';
-      host.appendChild(cv);
-    }
+    if (!cv) { cv = document.createElement('canvas'); cv.className = 'anno-cv'; host.appendChild(cv); }
     cv.style.pointerEvents = 'none';
     cv.classList.remove('editing');
     return cv;
@@ -34,9 +34,32 @@ window.ANNO = (function () {
     const W = Math.round(w * dpr), H = Math.round(h * dpr);
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
     cv.style.width = w + 'px'; cv.style.height = h + 'px';
-    const ctx = cv.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
     return true;
+  }
+
+  /* 一条笔画 → 路径（中点二次贝塞尔平滑） */
+  function path(ctx, pts, w, h) {
+    if (!pts || !pts.length) return;
+    if (pts.length === 1) {
+      const r = ctx.lineWidth / 2;
+      ctx.beginPath();
+      ctx.arc(pts[0][0] * w, pts[0][1] * h, Math.max(r, 0.4), 0, 6.283);
+      ctx.fillStyle = ctx.strokeStyle; ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0] * w, pts[0][1] * h);
+    if (pts.length === 2) { ctx.lineTo(pts[1][0] * w, pts[1][1] * h); ctx.stroke(); return; }
+    let i = 1;
+    for (; i < pts.length - 1; i++) {
+      const xc = (pts[i][0] + pts[i + 1][0]) / 2 * w;
+      const yc = (pts[i][1] + pts[i + 1][1]) / 2 * h;
+      ctx.quadraticCurveTo(pts[i][0] * w, pts[i][1] * h, xc, yc);
+    }
+    ctx.quadraticCurveTo(pts[i][0] * w, pts[i][1] * h,
+      (pts[i][0] + pts[i][0]) / 2 * w, (pts[i][1] + pts[i][1]) / 2 * h);
+    ctx.stroke();
   }
 
   function paint(cv, strokes, w, h) {
@@ -44,37 +67,26 @@ window.ANNO = (function () {
     ctx.clearRect(0, 0, w, h);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (const s of strokes) {
-      const pts = s.p; if (!pts || !pts.length) continue;
       ctx.strokeStyle = s.c;
       ctx.globalAlpha = s.a == null ? 1 : s.a;
       ctx.globalCompositeOperation = s.e ? 'destination-out' : 'source-over';
-      ctx.lineWidth = Math.max(1, (s.w / 100) * w);
-      if (pts.length === 1) {
-        ctx.beginPath();
-        ctx.arc(pts[0][0] * w, pts[0][1] * h, ctx.lineWidth / 2, 0, 6.283);
-        ctx.fillStyle = s.c; ctx.fill();
-      } else {
-        ctx.beginPath();
-        ctx.moveTo(pts[0][0] * w, pts[0][1] * h);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0] * w, pts[i][1] * h);
-        ctx.stroke();
-      }
+      ctx.lineWidth = Math.max(0.8, (s.w / 100) * w);
+      path(ctx, s.p, w, h);
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
   }
 
-  let ro = null;
   function redraw() {
     if (!st.host || !st.cv) return;
     if (!fit(st.host, st.cv)) return;
     paint(st.cv, st.strokes, st.host.clientWidth, st.host.clientHeight);
   }
 
-  /* ---------- 只读渲染：把已有笔记画到页面上，一直可见 ---------- */
+  /* ---------- 只读层 ---------- */
   function renderOne(host, tries) {
     const key = host.getAttribute('data-anno');
     if (!key) return;
-    if (!host.offsetParent && host.offsetWidth === 0) return;   // 折叠中，展开后会重画
+    if (!host.offsetParent && host.offsetWidth === 0) return;
     const rec = ZS.data.annos[key];
     const has = rec && rec.strokes && rec.strokes.length;
     if (!has || !visible) {
@@ -82,17 +94,14 @@ window.ANNO = (function () {
       if (c) c.remove();
       return;
     }
-    if (st.on && st.host === host) return;      // 正在编辑，不动它
+    if (st.on && st.host === host) return;
     const cv = ensure(host);
-    cv.style.pointerEvents = 'none';
-    cv.classList.remove('editing');
-    if (!fit(host, cv)) {                       // 尺寸还没出来（图片未加载）
+    if (!fit(host, cv)) {
       tries = tries || 0;
       if (tries < 8) setTimeout(() => renderOne(host, tries + 1), 350);
       return;
     }
     paint(cv, rec.strokes, host.clientWidth, host.clientHeight);
-    if (ro) { }
     if (!seen.has(host)) {
       seen.add(host);
       const ob = new ResizeObserver(() => {
@@ -110,33 +119,31 @@ window.ANNO = (function () {
     obsList.forEach(o => { try { o.disconnect(); } catch (e) { } });
     obsList = [];
     const root = scope || document.getElementById('view') || document;
-    root.querySelectorAll('[data-anno]').forEach(renderOne);
+    root.querySelectorAll('[data-anno]').forEach(el => renderOne(el));
   }
 
   function setVisible(v) {
     visible = !!v;
     localStorage.setItem('zz720.annoOn', visible ? '1' : '0');
+    if (!visible) document.querySelectorAll('canvas.anno-cv').forEach(c => { if (!(st.on && c.parentElement === st.host)) c.remove(); });
     renderScope();
-    if (!visible) {
-      document.querySelectorAll('canvas.anno-cv').forEach(c => { if (!(st.on && c.parentElement === st.host)) c.remove(); });
-    }
     document.dispatchEvent(new CustomEvent('anno-visibility'));
   }
 
   /* ---------- 编辑 ---------- */
+  function pos(e, cv) {
+    const r = cv.getBoundingClientRect();
+    return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+  }
   function bind(cv) {
     const host = st.host;
-    const pos = e => {
-      const r = cv.getBoundingClientRect();
-      return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
-    };
     cv.onpointerdown = e => {
       if (!st.on) return;
       e.preventDefault(); e.stopPropagation();
       st.drawing = true;
-      try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+      try { cv.setPointerCapture(e.pointerId); } catch (_) { }
       st.cur = mkStroke();
-      st.cur.p.push(pos(e));
+      st.cur.p.push(pos(e, cv));
       paint(cv, st.strokes.concat([st.cur]), host.clientWidth, host.clientHeight);
     };
     cv.onpointermove = e => {
@@ -145,25 +152,29 @@ window.ANNO = (function () {
       let evs = [];
       try { evs = e.getCoalescedEvents ? e.getCoalescedEvents() : []; } catch (_) { evs = []; }
       if (!evs || !evs.length) evs = [e];
-      for (const ev of evs) st.cur.p.push(pos(ev));
-      if (st.cur.p.length < 6 || st.cur.p.length % 3 === 0)
-        paint(cv, st.strokes.concat([st.cur]), host.clientWidth, host.clientHeight);
+      const p = st.cur.p;
+      for (const ev of evs) {
+        const q = pos(ev, cv);
+        const l = p[p.length - 1];
+        if (l && Math.abs(q[0] - l[0]) < 0.0012 && Math.abs(q[1] - l[1]) < 0.0012) continue;  // 去抖
+        p.push(q);
+      }
+      paint(cv, st.strokes.concat([st.cur]), host.clientWidth, host.clientHeight);
     };
-    const up = e => {
+    const up = () => {
       if (!st.drawing) return;
       st.drawing = false;
       if (st.cur && st.cur.p.length) { st.strokes.push(st.cur); markDirty(); }
       st.cur = null;
-      try { cv.releasePointerCapture(e.pointerId); } catch (_) {}
       redraw();
     };
     cv.onpointerup = up; cv.onpointercancel = up; cv.onpointerleave = up;
   }
 
   function mkStroke() {
-    if (st.mode === 'eraser') return { c: '#000', w: st.width * 4.5, e: 1, p: [] };
-    if (st.mode === 'hl') return { c: HL, w: st.width * 6.5, a: .38, p: [] };
-    return { c: st.color, w: st.width, p: [] };
+    if (st.mode === 'eraser') return { c: '#000', w: width() * 5, e: 1, p: [] };
+    if (st.mode === 'hl') return { c: HL, w: width() * 4.2, a: .35, p: [] };
+    return { c: st.color, w: width(), p: [] };
   }
 
   let saveT = null;
@@ -176,8 +187,7 @@ window.ANNO = (function () {
   function flush() {
     if (!st.dirty || !st.key) return;
     ZS.data.annos[st.key] = { ts: Date.now(), strokes: JSON.parse(JSON.stringify(st.strokes)) };
-    ZS.save();
-    st.dirty = false;
+    ZS.save(); st.dirty = false;
   }
 
   function open(host, key) {
@@ -188,11 +198,12 @@ window.ANNO = (function () {
       if (p.classList && p.classList.contains('acc')) p.classList.add('open');
       p = p.parentElement;
     }
-    if (!host.clientHeight) host.style.minHeight = '140px';
+    if (!host.clientHeight) host.style.minHeight = '160px';
     st.host = host; st.key = key;
     st.cv = ensure(host);
     st.cv.style.pointerEvents = 'auto';
-    if (!fit(host, st.cv)) setTimeout(() => redraw(), 300);
+    st.cv.classList.add('editing');
+    if (!fit(host, st.cv)) setTimeout(redraw, 300);
     bind(st.cv);
     const rec = ZS.data.annos[key];
     st.strokes = rec && rec.strokes ? JSON.parse(JSON.stringify(rec.strokes)) : [];
@@ -223,17 +234,18 @@ window.ANNO = (function () {
     if (!bar) return;
     bar.classList.add('show');
     bar.innerHTML =
-      '<div class="r1"><span class="colors" id="annoColors"></span></div>' +
+      '<div class="r1"><span class="colors" id="annoColors"></span>' +
+      '<span id="annoW" class="tiny muted" style="margin-left:4px"></span></div>' +
       '<div class="r1">' +
       '<button class="iconbtn" data-a="pen">✏️ 笔</button>' +
       '<button class="iconbtn" data-a="hl">🖍 荧光</button>' +
-      '<button class="iconbtn" data-a="eraser">🧽 擦</button>' +
+      '<button class="iconbtn" data-a="eraser">🧽 橡皮</button>' +
       '<span style="width:1px;height:18px;background:var(--line)"></span>' +
-      '<button class="iconbtn" data-a="thin">细</button>' +
-      '<button class="iconbtn" data-a="bold">粗</button>' +
+      '<button class="iconbtn" data-a="thin">－ 细</button>' +
+      '<button class="iconbtn" data-a="bold">＋ 粗</button>' +
       '<span style="flex:1"></span>' +
-      '<button class="iconbtn" data-a="undo">↶</button>' +
-      '<button class="iconbtn" data-a="clear">🗑</button>' +
+      '<button class="iconbtn" data-a="undo">↶ 撤销</button>' +
+      '<button class="iconbtn" data-a="clear">🗑 清空</button>' +
       '<button class="iconbtn" data-a="close" style="background:var(--teal);color:#fff;border-color:var(--teal)">✓ 完成</button>' +
       '</div>';
     const cs = bar.querySelector('#annoColors');
@@ -243,7 +255,7 @@ window.ANNO = (function () {
       b.style.background = c;
       b.onclick = () => {
         st.color = c;
-        if (st.mode === 'eraser' || st.mode === 'hl') st.mode = 'pen';
+        if (st.mode !== 'pen') st.mode = 'pen';
         bar.querySelectorAll('.sw').forEach(x => x.classList.remove('on'));
         b.classList.add('on'); syncBar();
       };
@@ -263,17 +275,23 @@ window.ANNO = (function () {
       const b = bar.querySelector('[data-a="' + m + '"]');
       if (b) b.classList.toggle('on', st.mode === m);
     });
+    const w = bar.querySelector('#annoW');
+    if (w) w.textContent = '笔宽 ' + (st.wi + 1) + '/5';
   }
   function act(a) {
     if (a === 'pen') st.mode = 'pen';
     else if (a === 'hl') st.mode = 'hl';
     else if (a === 'eraser') st.mode = 'eraser';
-    else if (a === 'thin') st.width = Math.max(1.2, st.width - 1);
-    else if (a === 'bold') st.width = Math.min(8, st.width + 1);
-    else if (a === 'undo') { if (st.strokes.length) { st.strokes.pop(); markDirty(); redraw(); } }
+    else if (a === 'thin') { st.wi = Math.max(0, st.wi - 1); ZS.toast('笔宽 ' + (st.wi + 1) + '/5', 900); }
+    else if (a === 'bold') { st.wi = Math.min(WIDTHS.length - 1, st.wi + 1); ZS.toast('笔宽 ' + (st.wi + 1) + '/5', 900); }
+    else if (a === 'undo') { if (st.strokes.length) { st.strokes.pop(); markDirty(); redraw(); ZS.toast('撤销一笔', 900); } else ZS.toast('没有可撤销的笔画'); }
     else if (a === 'clear') {
-      if (st.strokes.length && confirm('清空本区域的全部手写笔记？')) { st.strokes = []; markDirty(); redraw(); }
-    } else if (a === 'close') { close(); }
+      if (!st.strokes.length) return ZS.toast('本区域还没有笔记');
+      ZS.confirm('清空本区域的全部手写笔记？', () => {
+        st.strokes = []; markDirty(); redraw(); ZS.toast('已清空');
+      });
+    }
+    else if (a === 'close') close();
     syncBar();
   }
 
@@ -282,10 +300,19 @@ window.ANNO = (function () {
     if (hd) setTimeout(() => renderScope(hd.closest('.acc') || document), 120);
   }, true);
 
+  function paintOn(cv, strokes, w, h) {
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+    paint(cv, strokes, w, h);
+  }
+
   return {
-    open, close, renderScope, renderOne, setVisible,
+    open, close, renderScope, renderOne, setVisible, paintOn, WIDTHS,
     get on() { return st.on; },
+    get widthIndex() { return st.wi; },
     get visible() { return visible; },
-    COLORS
+    COLORS,
   };
 })();

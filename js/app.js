@@ -59,6 +59,26 @@
     window.scrollTo(0, 0);
   }
 
+  function showQNav(on, idx) {
+    const bar = document.getElementById('qnav');
+    if (!bar) return;
+    bar.classList.toggle('show', !!on);
+    document.body.classList.toggle('hasqnav', !!on);
+    const info = document.getElementById('qnavInfo');
+    if (info) info.textContent = on ? (idx + 1) + ' / ' + S.qs.length : '';
+    const pv = document.getElementById('qnavPrev'), nx = document.getElementById('qnavNext');
+    if (pv) pv.disabled = !on || idx <= 0;
+    if (nx) nx.disabled = !on || idx >= S.qs.length - 1;
+  }
+  window.ZS_QNAV = d => {
+    const i = qIndexOf(S.curId);
+    if (i < 0) return;
+    const n = i + d;
+    if (n < 0) return ZS.toast('已经是第一题');
+    if (n >= S.qs.length) return ZS.toast('已经是最后一题');
+    go('q/' + S.qs[n].id);
+  };
+
   /* ---------- 首页 ---------- */
   function chapters() {
     const map = new Map();
@@ -75,6 +95,7 @@
     return { done, right, wrong: done - right, guess, total: ids.length };
   }
   function renderHome() {
+    showQNav(false);
     const chs = chapters();
     const all = S.qs.map(q => q.id);
     const st = statOf(all);
@@ -140,6 +161,7 @@
 
   /* ---------- 章节列表 ---------- */
   function renderChapter(key) {
+    showQNav(false);
     let list;
     if (key === 'first') { list = S.qs; key = S.qs[0].moduleIdx + '-' + S.qs[0].chapter; }
     else { const [mi, ch] = key.split('-'); list = S.qs.filter(q => q.moduleIdx == mi && q.chapter === ch); }
@@ -166,8 +188,9 @@
   function renderQuestion(id) {
     const q = S.byId[id];
     if (!q) { shell('<div class="empty">题目不存在</div>'); return; }
-    S.cur = q;
+    S.cur = q; S.curId = id;
     localStorage.setItem('zz720.last', id);
+    showQNav(true, qIndexOf(id));
     const p = P(id);
     const revealed = !!(p && p.s) || !!S['rev_' + id];
     if (revealed) { needLect().then(() => { if (S.cur === q && !q._lectDone) { q._lectDone = 1; paintLect(q); } }); }
@@ -227,8 +250,11 @@
           <div class="pages" id="aPages">${pagesHtml(q.aPages, 'a', id, '分析解析页')}</div>
           <div class="acts"><button class="btn" onclick="ZS_ANNO('${id}','a-img')">✍️ 在解析截图上做笔记</button>
           <button class="btn" onclick="ZS_ANNO('${id}','a-txt')">✍️ 在解析文字上做笔记</button></div>
-          <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">解析文字（点开查看）<span class="arw">›</span></div>
-            <div class="bd" id="aText"><div class="txt">${analysisHtml(q)}</div></div></div>
+          <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">解析文字（点开查看 · 可编辑）<span class="arw">›</span></div>
+            <div class="bd" id="aText">
+              <div class="txt" data-anno="${id}|a-txt" data-editkey="a">${editHtml(id, 'a', analysisHtml(q))}</div>
+              ${edTools(id, 'a')}
+            </div></div>
         </div></div>`;
 
       h += `<div class="acc" id="accL">
@@ -243,10 +269,6 @@
         </div></div>`;
 
       h += `<div id="noteSection"></div>`;
-      h += `<div class="acts" style="margin-top:16px">
-        ${idx > 0 ? `<button class="btn" onclick="ZS_GO('q/${S.qs[idx - 1].id}')">‹ 上一题</button>` : ''}
-        ${idx < S.qs.length - 1 ? `<button class="btn main" onclick="ZS_GO('q/${S.qs[idx + 1].id}')">下一题 ›</button>` : ''}
-      </div>`;
     } else {
       h += `<div class="card pad" style="margin-top:12px;text-align:center;color:var(--ink3)" class="tiny">
         🔒 做完本题后才会显示解析、讲义与你的笔记</div>`;
@@ -259,6 +281,55 @@
       ANNO.renderScope();
     }
   }
+
+  function editHtml(id, key, fallback) {
+    const e = ZS.data.edit[id];
+    return (e && e[key] != null) ? e[key] : fallback;
+  }
+  function edTools(id, key) {
+    const edited = !!(ZS.data.edit[id] && ZS.data.edit[id][key] != null);
+    return `<div class="acts edacts">
+      <button class="btn" id="edb-${id}-${key}" onclick="ZS_EDIT('${id}','${key}')">✏️ 编辑文字</button>
+      <span class="edtools" id="edt-${id}-${key}" style="display:none">
+        <button class="btn" onmousedown="event.preventDefault()" onclick="ZS_FMT('bold')"><b>B</b></button>
+        <button class="btn" onmousedown="event.preventDefault()" onclick="ZS_FMT('hiliteColor','#ffe066')" style="background:#fff8dc">高亮</button>
+        <button class="btn" onmousedown="event.preventDefault()" onclick="ZS_FMT('foreColor','#d0342c')" style="color:#d0342c">红字</button>
+        <button class="btn" onmousedown="event.preventDefault()" onclick="ZS_FMT('removeFormat')">清格式</button>
+        <button class="btn" onclick="ZS_EDRESET('${id}','${key}')">还原原文</button>
+      </span>
+      ${edited ? '<span class="chip warn">已修改</span>' : ''}
+    </div>`;
+  }
+  window.ZS_EDIT = (id, key) => {
+    const el = document.querySelector('[data-anno="' + id + '|' + key + '-txt"]');
+    const btn = document.getElementById('edb-' + id + '-' + key);
+    const tools = document.getElementById('edt-' + id + '-' + key);
+    if (!el) return;
+    if (el.isContentEditable) {
+      el.contentEditable = 'false';
+      el.classList.remove('editing');
+      const e = ZS.data.edit[id] = ZS.data.edit[id] || { ts: 0 };
+      e[key] = el.innerHTML; e.ts = Date.now();
+      ZS.save();
+      if (btn) btn.textContent = '✏️ 编辑文字';
+      if (tools) tools.style.display = 'none';
+      ZS.toast('已保存修改 ✓');
+    } else {
+      el.contentEditable = 'true';
+      el.classList.add('editing');
+      el.focus();
+      if (btn) btn.textContent = '✓ 完成编辑';
+      if (tools) tools.style.display = '';
+      ZS.toast('可以直接改文字；选中后用 B / 高亮 标记重点');
+    }
+  };
+  window.ZS_FMT = (cmd, val) => { try { document.execCommand(cmd, false, val || null); } catch (e) { } };
+  window.ZS_EDRESET = (id, key) => {
+    ZS.confirm('还原为原始讲义文字？（你改过的内容会丢失）', () => {
+      if (ZS.data.edit[id]) { delete ZS.data.edit[id][key]; if (!Object.keys(ZS.data.edit[id]).length) delete ZS.data.edit[id]; }
+      ZS.save(true); renderQuestion(id); ZS.toast('已还原');
+    });
+  };
 
   function analysisHtml(q) {
     const parts = (q.analysis || []).map(p => `<div style="margin-bottom:8px"><span class="lbl">${esc(p.k)}</span>${esc(p.t)}</div>`).join('');
@@ -297,24 +368,32 @@
       box.innerHTML = `<div class="pages">${pagesHtml(pages, t, q.id, t === 'k' ? '知识清单' : '速成班讲义')}</div>
         <div class="acts"><button class="btn" onclick="ZS_ANNO('${q.id}','${t}-img')">✍️ 在讲义截图上做笔记</button>
         <button class="btn" onclick="ZS_ANNO('${q.id}','${t}-txt')">✍️ 在讲义文字上做笔记</button></div>
-        <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">讲义文字（点开查看）<span class="arw">›</span></div>
-          <div class="bd" id="${t}Text"><div class="txt" data-anno="${q.id}|${t}-txt">${esc(txt)}</div></div></div>`;
+        <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">讲义文字（点开查看 · 可编辑）<span class="arw">›</span></div>
+          <div class="bd" id="${t}Text">
+            <div class="txt" data-anno="${q.id}|${t}-txt" data-editkey="${t}">${editHtml(q.id, t, esc(txt))}</div>
+            ${edTools(q.id, t)}
+          </div></div>`;
     });
   }
 
   /* ---------- 笔记区 ---------- */
+  const NC = ['#1f6feb', '#d0342c', '#1f8a5b', '#111111', '#d89055', '#8e44ad'];
+  const NW = [1.8, 3, 4.8, 7.5, 11];
+  const WIDE = () => window.matchMedia('(min-width: 820px)').matches;
+  let nd = null;                       // 笔记手写状态
+
   function renderNote(id) {
     const box = $('#noteSection'); if (!box) return;
     const n = ZS.data.notes[id] || { text: '', strokes: [], pics: [] };
-    box.innerHTML = `<div class="card pad" style="margin-top:14px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <b style="color:var(--teal)">📝 本题笔记区</b>
-        <span class="sp" style="flex:1"></span>
-        <button class="btn" onclick="ZS_NOTEOPEN('${id}')">打开笔记</button>
+    box.innerHTML = `<div class="card pad" id="noteCard">
+      <div class="notehd">
+        <b>📝 本题笔记区</b><span class="sp"></span>
+        <button class="iconbtn" onclick="ZS_NOTEOPEN('${id}')" id="noteToggle">打开</button>
       </div>
-      <div class="tiny muted" style="margin-top:6px" id="noteSum">${noteSummary(n)}</div>
-      <div id="noteBox" style="display:none"></div>
+      <div class="tiny muted" id="noteSum">${noteSummary(n)}</div>
+      <div id="noteBox"></div>
     </div>`;
+    if (WIDE()) openNote(id, true);
   }
   function noteSummary(n) {
     const t = (n.text || '').replace(/<[^>]+>/g, '').trim();
@@ -324,85 +403,154 @@
     if ((n.pics || []).length) bits.push('图片 ' + n.pics.length + ' 张');
     return bits.length ? '已保存：' + bits.join(' · ') + '（' + ZS.fmt(n.ts) + '）' : '还没有笔记';
   }
-  function openNote(id) {
+  function openNote(id, force) {
     const box = $('#noteBox'); if (!box) return;
-    if (box.style.display !== 'none') { box.style.display = 'none'; return; }
-    box.style.display = '';
+    const tg = $('#noteToggle');
+    if (!force && box.innerHTML.trim()) {
+      box.innerHTML = '';
+      if (tg) tg.textContent = '打开';
+      if (nd && nd.id === id) nd = null;
+      return;
+    }
+    if (tg) tg.textContent = '收起';
     const n = ZS.data.notes[id] || (ZS.data.notes[id] = { text: '', strokes: [], pics: [], ts: Date.now() });
+    if (!n.strokes) n.strokes = [];
+    if (!n.pics) n.pics = [];
     box.innerHTML = `<div id="notearea">
-      <div class="nhd"><span>文字 / 手写 / 图片 都可以</span><span class="sp" style="flex:1"></span>
-        <button class="iconbtn" onclick="ZS_NOTESAVE('${id}')">💾 保存</button></div>
+      <div class="nhd"><span class="tiny muted">文字 · 手写 · 图片</span><span class="sp"></span>
+        <button class="iconbtn" onclick="ZS_NOTESAVE('${id}')">💾 保存</button>
+        <button class="iconbtn" onclick="ZS_NOTEDEL('${id}')">🗑 删除本条</button></div>
       <div class="nbd">
         <div id="noteText" contenteditable="true" data-ph="在这里输入文字笔记…"></div>
-        <div class="acts">
-          <button class="btn" onclick="document.getElementById('picIn').click()">🖼 插入图片</button>
+        <div class="ntools">
+          <button class="iconbtn" onclick="document.getElementById('picIn').click()">🖼 插图</button>
           <input type="file" id="picIn" accept="image/*" style="display:none">
-          <button class="btn" onclick="ZS_NOTEDRAW('${id}')">✍️ 手写开/关</button>
-          <button class="btn" onclick="ZS_NOTEDEL('${id}')">🗑 删除笔记</button>
+          <button class="iconbtn" id="btnDraw" onclick="ZS_NOTEDRAW('${id}')">✍️ 手写板</button>
+          <span class="sp" style="flex:1"></span>
+        </div>
+        <div class="ntools" id="drawTools" style="display:none">
+          <span class="colors" id="nColors"></span>
+          <button class="iconbtn" data-n="pen">✏️ 笔</button>
+          <button class="iconbtn" data-n="eraser">🧽 橡皮</button>
+          <button class="iconbtn" data-n="thin">－ 细</button>
+          <button class="iconbtn" data-n="bold">＋ 粗</button>
+          <span class="sp" style="flex:1"></span>
+          <button class="iconbtn" data-n="undo">↶ 撤销</button>
+          <button class="iconbtn" data-n="clear">🗑 清空</button>
         </div>
         <div class="notepics" id="notePics"></div>
         <div class="ncanvas" id="noteCv" style="display:none"><canvas></canvas></div>
       </div></div>`;
     $('#noteText').innerHTML = n.text || '';
-    $('#noteText').addEventListener('input', () => { n.text = $('#noteText').innerHTML; n.ts = Date.now(); ZS.save(); $('#noteSum').textContent = noteSummary(n); });
+    $('#noteText').addEventListener('input', () => {
+      n.text = $('#noteText').innerHTML; n.ts = Date.now(); ZS.save();
+      $('#noteSum').textContent = noteSummary(n);
+    });
     $('#picIn').addEventListener('change', e => {
       const f = e.target.files[0]; if (!f) return;
-      shrinkImg(f, d => { n.pics = n.pics || []; n.pics.push(d); n.ts = Date.now(); ZS.save(); drawPics(id); $('#noteSum').textContent = noteSummary(n); });
+      shrinkImg(f, d => { n.pics.push(d); n.ts = Date.now(); ZS.save(); drawPics(id); $('#noteSum').textContent = noteSummary(n); });
+      e.target.value = '';
     });
     drawPics(id);
-    if ((n.strokes || []).length) { noteDrawOn(id); }
+    if (n.strokes.length) noteDrawOn(id, true);
   }
   function drawPics(id) {
     const n = ZS.data.notes[id] || {}; const box = $('#notePics'); if (!box) return;
-    box.innerHTML = (n.pics || []).map((p, i) => `<figure><img src="${p}"><button class="del" onclick="ZS_PICDEL('${id}',${i})">×</button></figure>`).join('');
+    box.innerHTML = (n.pics || []).map((p, i) =>
+      `<figure><img src="${p}" onclick="ZS_ZOOMSRC(this.src)"><button class="del" onclick="ZS_PICDEL('${id}',${i})">×</button></figure>`).join('');
   }
   function shrinkImg(file, cb) {
     const fr = new FileReader();
     fr.onload = () => {
       const im = new Image();
       im.onload = () => {
-        const max = 1280, sc = Math.min(1, max / Math.max(im.width, im.height));
+        const max = 1400, sc = Math.min(1, max / Math.max(im.width, im.height));
         const cv = document.createElement('canvas');
         cv.width = Math.round(im.width * sc); cv.height = Math.round(im.height * sc);
         cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
-        cb(cv.toDataURL('image/jpeg', 0.72));
+        cb(cv.toDataURL('image/jpeg', 0.78));
       };
       im.src = fr.result;
     };
     fr.readAsDataURL(file);
   }
-  let noteCvState = null;
-  function noteDrawOn(id) {
+
+  /* 笔记区手写板：与标注引擎同一套笔画格式（归一化 + 平滑） */
+  function noteDrawOn(id, silent) {
     const wrap = $('#noteCv'); if (!wrap) return;
     wrap.style.display = '';
+    const dt = $('#drawTools'); if (dt) dt.style.display = '';
+    const bd = $('#btnDraw'); if (bd) bd.classList.add('on');
     const cv = wrap.querySelector('canvas');
-    const dpr = Math.min(3, window.devicePixelRatio || 1);
-    const w = wrap.clientWidth, h = wrap.clientHeight;
-    cv.width = w * dpr; cv.height = h * dpr;
-    const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const n = ZS.data.notes[id];
-    const st = noteCvState = { id: id, strokes: n.strokes || [], cur: null, color: '#1f6feb', width: 2.4 };
-    const paint = () => {
-      ctx.clearRect(0, 0, w, h); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      st.strokes.forEach(s => {
-        ctx.strokeStyle = s.c; ctx.lineWidth = s.w;
-        ctx.beginPath(); ctx.moveTo(s.p[0][0] * w, s.p[0][1] * h);
-        s.p.slice(1).forEach(pt => ctx.lineTo(pt[0] * w, pt[1] * h)); ctx.stroke();
-      });
-      if (st.cur) { ctx.strokeStyle = st.cur.c; ctx.lineWidth = st.cur.w; ctx.beginPath(); ctx.moveTo(st.cur.p[0][0] * w, st.cur.p[0][1] * h); st.cur.p.slice(1).forEach(pt => ctx.lineTo(pt[0] * w, pt[1] * h)); ctx.stroke(); }
+    nd = nd && nd.id === id ? nd : { id: id, wi: 1, color: NC[0], mode: 'pen', cur: null, dirty: false };
+    nd.strokes = n.strokes;
+
+    const resize = () => {
+      const w = wrap.clientWidth, h = wrap.clientHeight;
+      if (!w || !h) return;
+      ANNO.paintOn(cv, nd.strokes.concat(nd.cur ? [nd.cur] : []), w, h);
     };
-    paint();
-    wrap.oncontextmenu = e => e.preventDefault();
-    cv.onpointerdown = e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); const r = cv.getBoundingClientRect(); st.cur = { c: st.color, w: st.width, p: [[(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]] }; };
-    cv.onpointermove = e => { if (!st.cur) return; e.preventDefault(); const r = cv.getBoundingClientRect(); st.cur.p.push([(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]); paint(); };
-    const end = e => { if (!st.cur) return; st.strokes.push(st.cur); st.cur = null; n.strokes = st.strokes; n.ts = Date.now(); ZS.save(); $('#noteSum').textContent = noteSummary(n); paint(); };
+    resize();
+    if (nd.ro) nd.ro.disconnect();
+    nd.ro = new ResizeObserver(resize); nd.ro.observe(wrap);
+
+    const colors = $('#nColors');
+    if (colors && !colors.dataset.done) {
+      colors.dataset.done = '1';
+      NC.forEach((c, i) => {
+        const b = document.createElement('span');
+        b.className = 'sw' + (i === 0 ? ' on' : '');
+        b.style.background = c;
+        b.onclick = () => {
+          nd.color = c; nd.mode = 'pen';
+          colors.querySelectorAll('.sw').forEach(x => x.classList.remove('on')); b.classList.add('on');
+          noteToolSync();
+        };
+        colors.appendChild(b);
+      });
+      $('#drawTools').querySelectorAll('[data-n]').forEach(btn => btn.onclick = () => ZS_NOTETOOL(btn.dataset.n));
+    }
+    const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+    cv.onpointerdown = e => {
+      e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) { }
+      nd.cur = { c: nd.mode === 'eraser' ? '#000' : nd.color, w: NW[nd.wi] * (nd.mode === 'eraser' ? 5 : 1), e: nd.mode === 'eraser' ? 1 : 0, p: [pos(e)] };
+      resize();
+    };
+    cv.onpointermove = e => {
+      if (!nd.cur) return; e.preventDefault();
+      let evs = []; try { evs = e.getCoalescedEvents ? e.getCoalescedEvents() : []; } catch (_) { }
+      if (!evs || !evs.length) evs = [e];
+      for (const ev of evs) {
+        const q = pos(ev), l = nd.cur.p[nd.cur.p.length - 1];
+        if (l && Math.abs(q[0] - l[0]) < 0.0012 && Math.abs(q[1] - l[1]) < 0.0012) continue;
+        nd.cur.p.push(q);
+      }
+      resize();
+    };
+    const end = () => {
+      if (!nd.cur) return;
+      nd.strokes.push(nd.cur); nd.cur = null;
+      n.strokes = nd.strokes; n.ts = Date.now(); ZS.save();
+      $('#noteSum').textContent = noteSummary(n);
+      resize();
+    };
     cv.onpointerup = end; cv.onpointercancel = end; cv.onpointerleave = end;
-    ZS.toast('手写已开启：直接在虚线框里写');
+    noteToolSync();
+    if (!silent) ZS.toast('手写板已打开：在虚线框里写');
+  }
+  function noteToolSync() {
+    const dt = $('#drawTools'); if (!dt || !nd) return;
+    ['pen', 'eraser'].forEach(m => {
+      const b = dt.querySelector('[data-n="' + m + '"]');
+      if (b) b.classList.toggle('on', nd.mode === m);
+    });
   }
 
   /* ---------- 搜索 ---------- */
   function bigrams(t) { t = (t || '').replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, ''); const s = []; for (let i = 0; i < t.length - 1; i++) s.push(t.slice(i, i + 2)); return s; }
   async function renderSearch() {
+    showQNav(false);
     await needLect();
     shell(`<div id="searchbox"><input id="sq" placeholder="搜索题目 / 解析 / 讲义 / 笔记" value="${esc(S.searchQ)}">
       <button class="btn main" onclick="ZS_DOSEARCH()">搜索</button></div>
@@ -455,6 +603,7 @@
 
   /* ---------- 我的 ---------- */
   function renderMe() {
+    showQNav(false);
     const all = S.qs.map(q => q.id), st = statOf(all);
     const cfg = ZS.cfg();
     const sz = (JSON.stringify(ZS.data).length / 1024).toFixed(0);
@@ -563,13 +712,57 @@
   window.ZS_NOTEOPEN = id => openNote(id);
   window.ZS_GONOTE = id => {
     const box = $('#noteBox');
-    if (!box || box.style.display === 'none') openNote(id);
+    if (!box || !box.innerHTML.trim()) openNote(id, true);
     setTimeout(() => { const a = document.getElementById('notearea'); if (a) a.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 80);
   };
-  window.ZS_NOTESAVE = id => { const n = ZS.data.notes[id]; n.ts = Date.now(); ZS.save(true); ZS.toast('笔记已保存 ✓'); };
-  window.ZS_NOTEDRAW = id => { const w = $('#noteCv'); if (w.style.display === 'none') noteDrawOn(id); else { w.style.display = 'none'; if (noteCvState) { const n = ZS.data.notes[id]; n.strokes = noteCvState.strokes; n.ts = Date.now(); ZS.save(); } } };
-  window.ZS_NOTEDEL = id => { if (!confirm('删除本题笔记？')) return; delete ZS.data.notes[id]; ZS.save(); renderNote(id); };
-  window.ZS_PICDEL = (id, i) => { const n = ZS.data.notes[id]; n.pics.splice(i, 1); n.ts = Date.now(); ZS.save(); drawPics(id); };
+  window.ZS_NOTESAVE = id => { const n = ZS.data.notes[id] || {}; n.ts = Date.now(); ZS.data.notes[id] = n; ZS.save(true); ZS.toast('笔记已保存 ✓'); };
+  window.ZS_NOTEDRAW = id => {
+    const w = $('#noteCv'); if (!w) return;
+    if (w.style.display === 'none') noteDrawOn(id);
+    else {
+      w.style.display = 'none';
+      const dt = $('#drawTools'); if (dt) dt.style.display = 'none';
+      const bd = $('#btnDraw'); if (bd) bd.classList.remove('on');
+      if (nd) { const n = ZS.data.notes[id]; n.strokes = nd.strokes; n.ts = Date.now(); ZS.save(); }
+    }
+  };
+  window.ZS_NOTETOOL = a => {
+    if (!nd) return;
+    if (a === 'pen') nd.mode = 'pen';
+    else if (a === 'eraser') nd.mode = 'eraser';
+    else if (a === 'thin') { nd.wi = Math.max(0, nd.wi - 1); ZS.toast('笔宽 ' + (nd.wi + 1) + '/5', 900); }
+    else if (a === 'bold') { nd.wi = Math.min(NW.length - 1, nd.wi + 1); ZS.toast('笔宽 ' + (nd.wi + 1) + '/5', 900); }
+    else if (a === 'undo') { if (nd.strokes.length) { nd.strokes.pop(); noteRepaint(); ZS.toast('撤销一笔', 900); } else ZS.toast('没有可撤销的笔画'); }
+    else if (a === 'clear') {
+      if (!nd.strokes.length) return ZS.toast('手写板还没有内容');
+      ZS.confirm('清空本题的手写笔记？', () => {
+        nd.strokes.length = 0;
+        const n = ZS.data.notes[nd.id];
+        if (n) { n.strokes = nd.strokes; n.ts = Date.now(); ZS.save(); $('#noteSum').textContent = noteSummary(n); }
+        noteRepaint(); ZS.toast('已清空');
+      });
+    }
+    noteToolSync();
+  };
+  function noteRepaint() {
+    const wrap = $('#noteCv'); if (!wrap || !nd) return;
+    const cv = wrap.querySelector('canvas');
+    const n = ZS.data.notes[nd.id];
+    if (n) { n.strokes = nd.strokes; n.ts = Date.now(); ZS.save(); }
+    ANNO.paintOn(cv, nd.strokes, wrap.clientWidth, wrap.clientHeight);
+  }
+  window.ZS_NOTEDEL = id => {
+    ZS.confirm('删除本题的全部笔记（文字 + 手写 + 图片）？', () => {
+      delete ZS.data.notes[id];
+      if (nd && nd.id === id) nd = null;
+      ZS.save(true); renderNote(id); ZS.toast('已删除');
+    });
+  };
+  window.ZS_PICDEL = (id, i) => {
+    ZS.confirm('删除这张图片？', () => {
+      const n = ZS.data.notes[id]; n.pics.splice(i, 1); n.ts = Date.now(); ZS.save(); drawPics(id);
+    });
+  };
   window.ZS_DOSEARCH = doSearch;
   window.ZS_PG = (id, kind, d) => {
     const q = S.byId[id];
@@ -593,10 +786,37 @@
   }
   window.ZS_ZOOM = img => {
     let m = document.getElementById('modal');
-    m.innerHTML = `<div class="box" style="background:transparent;border:none;padding:0;text-align:center" onclick="ZS_CFGCLOSE()">
-      <img src="${img.src}" style="max-width:100%;border-radius:8px"></div>`;
+    m.innerHTML = `<div id="zoomBox">
+      <div id="zoomBar">
+        <button class="iconbtn" onclick="ZS_ZOOMSET('fit')">适应宽度</button>
+        <button class="iconbtn" onclick="ZS_ZOOMSET('100')">原始大小</button>
+        <button class="iconbtn" onclick="ZS_ZOOMSET('200')">放大 2×</button>
+        <span style="flex:1"></span>
+        <button class="iconbtn" onclick="ZS_CFGCLOSE()">✕ 关闭</button>
+      </div>
+      <div id="zoomScroll"><img id="zoomImg" src="${img.src}" alt=""></div>
+    </div>`;
     m.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    window.__zoomSrc = img.src;
+    ZS_ZOOMSET(localStorage.getItem('zz720.zoom') || 'fit');
   };
+  window.ZS_ZOOMSRC = src => {
+    let m = document.getElementById('modal');
+    m.innerHTML = `<div id="zoomBox"><div id="zoomBar">
+      <span style="flex:1"></span><button class="iconbtn" onclick="ZS_CFGCLOSE()">✕ 关闭</button></div>
+      <div id="zoomScroll"><img id="zoomImg" src="${src}"></div></div>`;
+    m.classList.add('show');
+    ZS_ZOOMSET('fit');
+  };
+  window.ZS_ZOOMSET = mode => {
+    const im = document.getElementById('zoomImg'); if (!im) return;
+    localStorage.setItem('zz720.zoom', mode);
+    if (mode === 'fit') im.style.width = '100%';
+    else im.style.width = mode === '100' ? im.naturalWidth + 'px' : (im.naturalWidth * 2) + 'px';
+    im.style.maxWidth = 'none';
+  };
+
   window.ZS_SYNC = async () => {
     const c = ZS.cfg();
     if (!c.token) return ZS_CFG();
@@ -620,13 +840,28 @@
     </div>`;
     m.classList.add('show');
   };
-  window.ZS_CFGCLOSE = () => document.getElementById('modal').classList.remove('show');
+  window.ZS_CFGCLOSE = () => {
+    const m = document.getElementById('modal');
+    m.classList.remove('show'); m.innerHTML = '';
+    document.body.style.overflow = '';
+  };
   window.ZS_CFGSAVE = async () => {
     const t = $('#cfgToken').value.trim();
     const rp = $('#cfgRepo').value.split('/');
     ZS.setCfg({ token: t, owner: rp[0] || 'aokid666', repo: rp[1] || 'zhengzhi-720', file: $('#cfgFile').value.trim() || 'data/userdata.json' });
     ZS_CFGCLOSE();
     await ZS.pull(true); await ZS.push(); render();
+  };
+  window.ZS.confirm = (msg, cb) => {
+    const m = document.getElementById('modal');
+    m.innerHTML = `<div class="box" style="max-width:380px">
+      <div style="font-size:15px;line-height:1.75;margin-bottom:16px">${esc(msg)}</div>
+      <div class="acts" style="justify-content:flex-end">
+        <button class="btn" onclick="ZS_CFGCLOSE()">取消</button>
+        <button class="btn main" id="cfmOk">确定</button>
+      </div></div>`;
+    m.classList.add('show');
+    document.getElementById('cfmOk').onclick = () => { ZS_CFGCLOSE(); try { cb(); } catch (e) { } };
   };
   window.ZS_EXPORT = () => {
     const blob = new Blob([JSON.stringify(ZS.data, null, 1)], { type: 'application/json' });

@@ -6,7 +6,7 @@ window.ZS = (function () {
   const OWNER = 'aokid666', REPO = 'zhengzhi-720', BRANCH = 'userdata', FILE = 'userdata.json';
   const K = { data: P + 'data', cfg: P + 'cfg' };
 
-  const blank = () => ({ v: 1, updated: 0, progress: {}, notes: {}, annos: {}, flags: {} });
+  const blank = () => ({ v: 1, updated: 0, progress: {}, notes: {}, annos: {}, flags: {}, edit: {} });
 
   let data = blank();
   let dirty = false, pushTimer = null, syncing = false, lastSync = 0;
@@ -18,6 +18,7 @@ window.ZS = (function () {
     if (!data.notes) data.notes = {};
     if (!data.annos) data.annos = {};
     if (!data.flags) data.flags = {};
+    if (!data.edit) data.edit = {};
     return data;
   }
   function save(now) {
@@ -115,7 +116,7 @@ window.ZS = (function () {
 
   function merge(remote) {
     if (!remote) return;
-    for (const g of ['progress', 'notes', 'annos', 'flags']) {
+    for (const g of ['progress', 'notes', 'annos', 'flags', 'edit']) {
       const r = remote[g] || {}, l = data[g] || {};
       for (const k in r) if (!l[k] || (r[k].ts || 0) > (l[k].ts || 0)) l[k] = r[k];
       data[g] = l;

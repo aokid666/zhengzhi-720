@@ -185,3 +185,58 @@ body.annomode #tabbar{display:none}
 .pager{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 .pager .btn{padding:6px 12px;font-size:13px}
 #modal .box img{cursor:zoom-out}
+
+/* ---------- 常驻翻页栏 ---------- */
+#qnav{
+  position:fixed;left:0;right:0;bottom:52px;z-index:65;display:none;
+  padding:7px 12px;gap:10px;align-items:center;justify-content:center;
+  background:rgba(255,253,249,.96);border-top:1px solid var(--line);
+  backdrop-filter:blur(10px);padding-bottom:calc(7px + env(safe-area-inset-bottom,0px)/2);
+}
+#qnav.show{display:flex}
+#qnav #qnavInfo{font-size:12.5px;color:var(--ink3);min-width:64px;text-align:center}
+body.hasqnav .wrap{padding-bottom:150px}
+body.annomode #qnav{display:none}
+
+/* ---------- 笔记区工具 ---------- */
+.notehd{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.notehd b{color:var(--teal)}
+.ntools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.ntools .colors{display:flex;gap:6px}
+.ncanvas{height:260px}
+#noteText.editing,#noteText:focus{border-color:var(--teal);box-shadow:0 0 0 2px rgba(12,81,78,.08)}
+
+/* ---------- 可编辑文字 ---------- */
+.txt.editing{background:#fffef8;border:1px solid var(--orange);border-radius:10px;padding:10px;outline:none;min-height:80px}
+.edacts{flex-wrap:wrap}
+.edtools{display:flex;gap:6px;flex-wrap:wrap}
+.edtools .btn{padding:6px 11px;font-size:13px}
+
+/* ---------- 图片查看器 ---------- */
+#zoomBox{position:absolute;inset:0;display:flex;flex-direction:column;background:rgba(15,25,24,.96)}
+#zoomBar{display:flex;gap:8px;align-items:center;padding:8px 12px;padding-top:calc(8px + env(safe-area-inset-top,0px));
+  background:rgba(255,255,255,.06);flex-wrap:wrap}
+#zoomBar .iconbtn{background:rgba(255,255,255,.14);color:#fff;border-color:transparent}
+#zoomScroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;text-align:center;padding:8px}
+#zoomScroll img{display:block;margin:0 auto;border-radius:6px}
+
+/* ---------- 平板 / 宽屏：笔记区固定右侧 ---------- */
+@media (min-width:820px){
+  .wrap{max-width:1180px;padding-right:404px}
+  body.hasqnav .wrap{padding-bottom:110px}
+  #noteSection{
+    position:fixed;right:16px;top:60px;width:374px;
+    max-height:calc(100vh - 130px);overflow-y:auto;
+    z-index:40;margin:0!important;
+  }
+  #noteSection .card{margin-top:0!important}
+  #noteSection #notearea .nbd{padding:10px}
+  #noteText{min-height:180px;font-size:15px}
+  .ncanvas{height:320px}
+  #annobar{left:auto;right:16px;width:374px;bottom:96px;border-radius:14px;border:1px solid var(--line)}
+  #qnav{left:0;right:404px}
+  .hero h1{font-size:24px}
+}
+@media (min-width:820px) and (orientation:portrait){
+  .wrap{max-width:900px}
+}
