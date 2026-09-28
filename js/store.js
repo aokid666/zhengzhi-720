@@ -2,7 +2,7 @@
    云端：GitHub Contents API 读写 data/userdata.json（token 只存在本机 localStorage） */
 window.ZS = (function () {
   const P = 'zz720.v1.';
-  const OWNER = 'aokid666', REPO = 'zhengzhi-720', BRANCH = 'main', FILE = 'data/userdata.json';
+  const OWNER = 'aokid666', REPO = 'zhengzhi-720', BRANCH = 'userdata', FILE = 'userdata.json';
   const K = {
     data: P + 'data',      // 主数据
     cfg: P + 'cfg',        // {token, auto, owner, repo, file, branch}
@@ -28,7 +28,7 @@ window.ZS = (function () {
     dirty = true;
     if (now) return push(); 
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(push, 2500);
+    pushTimer = setTimeout(() => push(true), 12000);
   }
   function cfg() {
     try { return Object.assign({ owner: OWNER, repo: REPO, branch: BRANCH, file: FILE, auto: true }, JSON.parse(localStorage.getItem(K.cfg) || '{}')); }
