@@ -374,7 +374,7 @@
       const nn = String(n).padStart(4, '0');
       const off = PAGE_OFF[kind] || 0;
       return `<div class="pgwrap" data-tgt="${kind}-img" data-id="${id}">
-        <img loading="lazy" src="img/${kind}/${nn}.jpg" alt="${label} 第${n}页" onclick="ZS_ZOOM(this)">
+        <img loading="lazy" src="img/${kind}/${nn}.webp" alt="${label} 第${n}页" onclick="ZS_ZOOM(this)">
         <span class="pgno">${PAGE_NAME[kind] || ''} P${n - off}</span>
       </div>`;
     }).join('') + `<div class="pager">
