@@ -220,26 +220,8 @@ body.annomode #qnav{display:none}
 #zoomScroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;text-align:center;padding:8px}
 #zoomScroll img{display:block;margin:0 auto;border-radius:6px}
 
-/* ---------- 平板 / 宽屏：笔记区固定右侧 ---------- */
-@media (min-width:820px){
-  .wrap{max-width:1180px;padding-right:404px}
-  body.hasqnav .wrap{padding-bottom:110px}
-  #noteSection{
-    position:fixed;right:16px;top:60px;width:374px;
-    max-height:calc(100vh - 130px);overflow-y:auto;
-    z-index:40;margin:0!important;
-  }
-  #noteSection .card{margin-top:0!important}
-  #noteSection #notearea .nbd{padding:10px}
-  #noteText{min-height:180px;font-size:15px}
-  .ncanvas{height:320px}
-  #annobar{left:auto;right:16px;width:374px;bottom:96px;border-radius:14px;border:1px solid var(--line)}
-  #qnav{left:0;right:404px}
-  .hero h1{font-size:24px}
-}
-@media (min-width:820px) and (orientation:portrait){
-  .wrap{max-width:900px}
-}
+/* 宽屏仅放宽正文，不再改成双栏（笔记区仍在正文内，随题目展开） */
+@media (min-width:900px){ .wrap{max-width:860px} }
 
 /* ---------- PDF 跳转 ---------- */
 .pdflink{display:inline-flex;align-items:center;gap:6px;text-decoration:none;background:#f4f8f7;border-color:#cfe0dd;color:var(--teal)}
