@@ -80,6 +80,13 @@ const DATA_VER = 42;
   /* 错题 / 已订正 */
   const isWrongNow = id => { const p = P(id); return !!(p && p.s === 'wrong'); };
   const isFixed = id => { const p = P(id); return !!(p && p.s === 'right' && (p.tries || 0) > (p.rights || 0)); };
+  /* 「错题&蒙对」复习时是否把「已订正」也带上 */
+  const incFix = () => localStorage.getItem('zz720.incfix') === '1';
+  window.ZS_INCFIX = () => {
+    localStorage.setItem('zz720.incfix', incFix() ? '0' : '1');
+    ZS.toast(incFix() ? '本次复习会带上「已订正」' : '本次复习只看「错题 & 蒙对」');
+    route();
+  };
   /* 做错自动收藏 */
   const autoStar = () => localStorage.getItem('zz720.autostar') === '1';
   window.ZS_AUTOSTAR = () => {
@@ -168,6 +175,8 @@ const DATA_VER = 42;
     const wrongIds = all.filter(isWrongNow);
     const fixedIds = all.filter(isFixed);
     const guessIds = all.filter(id => flag(id, 'guess'));
+    const wgIds = all.filter(id => isWrongNow(id) || flag(id, 'guess'));
+    const wgShowIds = all.filter(id => isWrongNow(id) || flag(id, 'guess') || (incFix() && isFixed(id)));
     const starIds = all.filter(id => flag(id, 'star'));
     const doneIds = all.filter(id => isDone(id));
     const dueAll = doneIds.filter(dueNow);
@@ -193,17 +202,20 @@ const DATA_VER = 42;
         <button class="btn" onclick="ZS_GO('s')">🔍 搜索</button>
       </div>
       <div class="acts">
-        <button class="btn warn" onclick="ZS_RUN('wrong')">❌ 错题 (${wrongIds.length})</button>
-        <button class="btn" onclick="ZS_RUN('fixed')">✅ 已订正 (${fixedIds.length})</button>
-        <button class="btn guess" onclick="ZS_RUN('guess')">蒙对复习 (${guessIds.length})</button>
-        <button class="btn" onclick="ZS_RUN('star')">收藏 (${starIds.length})</button>
+        <button class="btn warn" onclick="ZS_RUN('wg')">❌ 错题 &amp; 蒙对 (${wgShowIds.length})</button>
+        <button class="btn" onclick="ZS_RUN('star')">★ 收藏 (${starIds.length})</button>
+        <button class="btn ${incFix() ? 'main' : ''}" onclick="ZS_INCFIX()">${incFix() ? '☑' : '☐'} 含已订正 (${fixedIds.length})</button>
       </div>
       <div class="sec-title">🔄 艾宾浩斯复习</div>
       <div class="card pad">
         <div class="tiny muted" style="margin-bottom:6px">答对：复习间隔按 1 / 2 / 4 / 7 / 15 / 30 天递增；答错：回到第 1 档，半天后再来。</div>
         <div class="ebrow"><span class="ebl">全部题目</span><span class="ebc">待复习 <b>${dueAll.length}</b> / 已练 ${doneIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_all')">开始复习</button></div>
-        <div class="ebrow"><span class="ebl">错题</span><span class="ebc">待复习 <b>${dueWrong.length}</b> / 错题 ${wrongIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_wrong')">开始复习</button></div>
-        <div class="ebrow"><span class="ebl">已订正</span><span class="ebc">待复习 <b>${dueFixed.length}</b> / 曾错已改对 ${fixedIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_fixed')">开始复习</button></div>
+        <div class="ebrow"><span class="ebl">错题 &amp; 蒙对</span><span class="ebc">待复习 <b>${dueWrong.length}</b> / 共 ${wrongIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_wgr')">开始复习</button></div>
+        <div class="ebsub">
+          <button class="chk ${incFix() ? 'on' : ''}" onclick="ZS_INCFIX()">${incFix() ? '✓' : ''}</button>
+          <span>本次也把 <b>已订正</b>（${fixedIds.length} 题）一起做</span>
+          <span class="tiny muted">待复习 ${dueFixed.length}</span>
+        </div>
         <div class="ebrow"><span class="ebl">收藏</span><span class="ebc">待复习 <b>${dueStar.length}</b> / 收藏 ${starIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_star')">开始复习</button></div>
       </div>
       <div class="sec-title">分模块练习</div>`;
@@ -916,6 +928,8 @@ const DATA_VER = 42;
     if (f === 'due_all') list = list.filter(q => isDone(q.id) && dueNow(q.id));
     if (f === 'due_wrong') list = list.filter(q => isWrongNow(q.id) && dueNow(q.id));
     if (f === 'due_fixed') list = list.filter(q => isFixed(q.id) && dueNow(q.id));
+    if (f === 'wg') list = list.filter(q => isWrongNow(q.id) || flag(q.id, 'guess') || (incFix() && isFixed(q.id)));
+    if (f === 'due_wgr') list = list.filter(q => (isWrongNow(q.id) || flag(q.id, 'guess') || (incFix() && isFixed(q.id))) && dueNow(q.id));
     if (f === 'due_star') list = list.filter(q => flag(q.id, 'star') && dueNow(q.id));
     if (f.startsWith('due_')) list = list.slice().sort((a, b) => ((P(a.id) || {}).due || 0) - ((P(b.id) || {}).due || 0));
     if (!list.length) return ZS.toast('没有符合条件的题目');
