@@ -436,6 +436,7 @@ const DATA_VER = 42;
   const PAGE_OFF = { a: 4, k: 8, s: 9, q: 6 };
   const PAGE_NAME = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
   const PDFFILE = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
+  const IMGEXT = { a: 'webp', k: 'webp', s: 'jpg' };
   const PDFCHUNK = { a: 20, k: 10, q: 0, s: 0 };     // 0 = 不分卷
   const PDFTOTAL = { a: 460, k: 326, q: 164, s: 197 };
   const pad3 = n => String(n).padStart(3, '0');
@@ -504,8 +505,9 @@ const DATA_VER = 42;
     return pages.map(n => {
       const nn = String(n).padStart(4, '0');
       const off = PAGE_OFF[kind] || 0;
+      const ext = IMGEXT[kind] || 'webp';
       return `<div class="pgwrap" data-tgt="${kind}-img" data-id="${id}">
-        <img loading="lazy" src="img/${kind}/${nn}.webp" alt="${label} 第${n}页" onclick="ZS_ZOOM(this)">
+        <img loading="lazy" src="img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" onclick="ZS_ZOOM(this)">
         <span class="pgno">${PAGE_NAME[kind] || ''} P${n - off}</span>
       </div>`;
     }).join('') + `<div class="pager">
