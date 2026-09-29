@@ -8,6 +8,20 @@ const DATA_VER = 42;
   const S = { qs: [], byId: {}, lk: {}, ls: {}, route: '', cur: null, searchQ: '', lastPos: {} };
 
   /* ---------- 数据 ---------- */
+  /* 兼容老数据：以前「蒙对」存在 progress[id].guess，统一搬到 flags */
+  function migrateGuess() {
+    let m = 0;
+    Object.keys(ZS.data.progress || {}).forEach(id => {
+      if (ZS.data.progress[id] && ZS.data.progress[id].guess) {
+        const f = ZS.data.flags[id] = ZS.data.flags[id] || { ts: 0 };
+        if (!f.guess) { f.guess = true; f.ts = Date.now(); m++; }
+        delete ZS.data.progress[id].guess;
+      }
+    });
+    if (m) { ZS.save(); console.log('已迁移 %d 条蒙对标记', m); }
+    return m;
+  }
+
   async function boot() {
     try {
       const r = await fetch('data/questions.json?v=' + DATA_VER);
@@ -15,6 +29,7 @@ const DATA_VER = 42;
     } catch (e) { document.body.innerHTML = '<div class="empty">题库加载失败：' + esc(e.message) + '</div>'; return; }
     S.qs.forEach(q => S.byId[q.id] = q);
     ZS.load();
+    migrateGuess();
     window.addEventListener('hashchange', route);
     route();
     if (ZS.cfg().token) { ZS.pull(true).then(() => render()); }
@@ -92,7 +107,7 @@ const DATA_VER = 42;
   }
   function statOf(ids) {
     let done = 0, right = 0, guess = 0;
-    ids.forEach(id => { const p = P(id); if (p && p.s) { done++; if (p.s === 'right') right++; if (p.guess) guess++; } });
+    ids.forEach(id => { const p = P(id); if (p && p.s) { done++; if (p.s === 'right') right++; } if (flag(id, 'guess')) guess++; });
     return { done, right, wrong: done - right, guess, total: ids.length };
   }
   function renderHome() {
@@ -177,7 +192,7 @@ const DATA_VER = 42;
       const p = P(q.id);
       const cls = !p || !p.s ? '' : (p.s === 'right' ? 'ok' : 'bad');
       h += `<span class="chip ${p && p.s ? cls : ''}" style="min-width:38px;text-align:center;cursor:pointer;padding:6px 9px;font-size:13.5px"
-        onclick="ZS_GO('q/${q.id}')">${q.no}${flag(q.id, 'star') ? '★' : ''}${p && p.guess ? '蒙' : ''}</span>`;
+        onclick="ZS_GO('q/${q.id}')">${q.no}${flag(q.id, 'star') ? '★' : ''}${flag(q.id, 'guess') ? '蒙' : ''}</span>`;
     });
     h += `</div></div>`;
     shell(h);
@@ -235,11 +250,17 @@ const DATA_VER = 42;
         <button class="btn" onclick="ZS_REVEAL('${id}')">直接看答案</button>
         <button class="btn" onclick="ZS_CLR('${id}')">清除选择</button>
       </div>`;
-    } else {
+    } else if (p && p.s) {
       const right = p.s === 'right';
       h += `<div class="res ${right ? 'ok' : 'bad'}">${right ? '✔ 做对了' : '✘ 做错了'} —— 正确答案：${esc(q.answer)}${sel.length ? '，你选了 ' + esc(sel.join('')) : ''}</div>
         <div class="acts">
-          <button class="btn guess ${p.guess ? 'on' : ''}" onclick="ZS_GUESS('${id}')">${p.guess ? '已标记：蒙对的' : '标记为「蒙对」'}</button>
+          <button class="btn guess ${flag(id, 'guess') ? 'on' : ''}" onclick="ZS_GUESS('${id}')">${flag(id, 'guess') ? '已标记：蒙对的' : '标记为「蒙对」'}</button>
+          <button class="btn" onclick="ZS_REDO('${id}')">重做本题</button>
+        </div>`;
+    } else {
+      h += `<div class="res" style="background:#f2f6f5;color:#45605d">本题未计入记录（直接看了答案）。这题其实是蒙的？标记一下，首页可专门复习。</div>
+        <div class="acts">
+          <button class="btn guess ${flag(id, 'guess') ? 'on' : ''}" onclick="ZS_GUESS('${id}')">${flag(id, 'guess') ? '已标记：蒙对的' : '标记为「蒙对」'}</button>
           <button class="btn" onclick="ZS_REDO('${id}')">重做本题</button>
         </div>`;
     }
@@ -749,8 +770,8 @@ const DATA_VER = 42;
     if (r) setTimeout(() => r.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
   };
   window.ZS_REVEAL = id => { S['rev_' + id] = true; renderQuestion(id); };
-  window.ZS_REDO = id => { delete ZS.data.progress[id]; delete S['rev_' + id]; ZS.save(); S['sel_' + id] = []; renderQuestion(id); };
-  window.ZS_GUESS = id => { const p = P(id); if (p) { p.guess = !p.guess; p.ts = Date.now(); ZS.save(); } renderQuestion(id); };
+  window.ZS_REDO = id => { delete ZS.data.progress[id]; delete S['rev_' + id]; if ((ZS.data.flags[id] || {}).guess) { ZS.data.flags[id].guess = false; } ZS.save(); S['sel_' + id] = []; renderQuestion(id); };
+  window.ZS_GUESS = id => { toggleFlag(id, 'guess'); renderQuestion(id); };
   window.ZS_FLAG = (id, k) => { toggleFlag(id, k); renderQuestion(id); };
   window.ZS_LIST = (key, f) => {
     const [mi, ch] = key.split('-');
