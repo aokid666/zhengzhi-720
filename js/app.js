@@ -46,9 +46,27 @@ const DATA_VER = 42;
   /* ---------- 进度 ---------- */
   const P = id => ZS.data.progress[id] || null;
   const isDone = id => { const p = P(id); return !!(p && p.s); };
+  /* 艾宾浩斯复习间隔（天）：答对进下一档，答错回到第 1 档 */
+  const EB = [1, 2, 4, 7, 15, 30];
+  const DAY = 86400000;
   function setProg(id, right, guess) {
-    ZS.data.progress[id] = { s: right ? 'right' : 'wrong', guess: !!guess, ts: Date.now() };
+    const p = ZS.data.progress[id] = ZS.data.progress[id] || { tries: 0, rights: 0, rv: 0 };
+    p.tries = (p.tries || 0) + 1;
+    if (right) p.rights = (p.rights || 0) + 1;
+    p.s = right ? 'right' : 'wrong';
+    p.guess = !!guess;
+    p.ts = Date.now();
+    if (right && !p.guess) { p.rv = Math.min((p.rv || 0) + 1, EB.length); p.due = Date.now() + EB[p.rv - 1] * DAY; }
+    else if (right) { p.due = Date.now() + EB[0] * DAY; }
+    else { p.rv = 0; p.due = Date.now() + DAY / 2; }
+    delete S['redo_' + id];
     ZS.save();
+  }
+  const dueNow = id => { const p = P(id); return !p || !p.due || p.due <= Date.now(); };
+  function dueText(p) {
+    if (!p || !p.due) return '';
+    const d = Math.ceil((p.due - Date.now()) / DAY);
+    return d > 0 ? ` · 下次复习 ${d} 天后` : ' · 现在可复习';
   }
   function toggleFlag(id, k) {
     const f = ZS.data.flags[id] = ZS.data.flags[id] || { ts: 0 };
@@ -85,6 +103,8 @@ const DATA_VER = 42;
     const pv = document.getElementById('qnavPrev'), nx = document.getElementById('qnavNext');
     if (pv) pv.disabled = !on || idx <= 0;
     if (nx) nx.disabled = !on || idx >= S.qs.length - 1;
+    const rd = document.getElementById('qnavRedo');
+    if (rd) rd.disabled = !on;
   }
   window.ZS_QNAV = d => {
     const i = qIndexOf(S.curId);
@@ -118,6 +138,10 @@ const DATA_VER = 42;
     const wrongIds = all.filter(id => { const p = P(id); return p && p.s === 'wrong'; });
     const guessIds = all.filter(id => flag(id, 'guess'));
     const starIds = all.filter(id => flag(id, 'star'));
+    const doneIds = all.filter(id => isDone(id));
+    const dueAll = doneIds.filter(dueNow);
+    const dueWrong = wrongIds.filter(dueNow);
+    const dueStar = starIds.filter(dueNow);
     const last = localStorage.getItem('zz720.last');
     let h = `
       <div class="hero">
@@ -140,6 +164,13 @@ const DATA_VER = 42;
         <button class="btn warn" onclick="ZS_RUN('wrong')">错题重做 (${wrongIds.length})</button>
         <button class="btn guess" onclick="ZS_RUN('guess')">蒙对复习 (${guessIds.length})</button>
         <button class="btn" onclick="ZS_RUN('star')">收藏 (${starIds.length})</button>
+      </div>
+      <div class="sec-title">🔄 艾宾浩斯复习</div>
+      <div class="card pad">
+        <div class="tiny muted" style="margin-bottom:6px">答对：复习间隔按 1 / 2 / 4 / 7 / 15 / 30 天递增；答错：回到第 1 档，半天后再来。</div>
+        <div class="ebrow"><span class="ebl">全部题目</span><span class="ebc">待复习 <b>${dueAll.length}</b> / 已练 ${doneIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_all')">开始复习</button></div>
+        <div class="ebrow"><span class="ebl">错题</span><span class="ebc">待复习 <b>${dueWrong.length}</b> / 错题 ${wrongIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_wrong')">开始复习</button></div>
+        <div class="ebrow"><span class="ebl">收藏</span><span class="ebc">待复习 <b>${dueStar.length}</b> / 收藏 ${starIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_star')">开始复习</button></div>
       </div>
       <div class="sec-title">分模块练习</div>`;
     const mods = new Map();
@@ -208,7 +239,8 @@ const DATA_VER = 42;
     localStorage.setItem('zz720.last', id);
     showQNav(true, qIndexOf(id));
     const p = P(id);
-    const revealed = !!(p && p.s) || !!S['rev_' + id];
+    const answered = !!(p && p.s) && !S['redo_' + id];
+    const revealed = answered || !!S['rev_' + id];
     if (revealed) { needLect().then(() => { if (S.cur === q && !q._lectDone) { q._lectDone = 1; paintLect(q); } }); }
     const sel = S['sel_' + id] || [];
     const idx = qIndexOf(id);
@@ -250,15 +282,17 @@ const DATA_VER = 42;
         <button class="btn" onclick="ZS_REVEAL('${id}')">直接看答案</button>
         <button class="btn" onclick="ZS_CLR('${id}')">清除选择</button>
       </div>`;
-    } else if (p && p.s) {
+    } else if (answered) {
       const right = p.s === 'right';
       h += `<div class="res ${right ? 'ok' : 'bad'}">${right ? '✔ 做对了' : '✘ 做错了'} —— 正确答案：${esc(q.answer)}${sel.length ? '，你选了 ' + esc(sel.join('')) : ''}</div>
+        <div class="tiny muted" style="margin:8px 2px 0">📊 这题已做 <b>${p.tries || 1}</b> 次，做对 <b>${p.rights || 0}</b> 次${dueText(p)}</div>
         <div class="acts">
           <button class="btn guess ${flag(id, 'guess') ? 'on' : ''}" onclick="ZS_GUESS('${id}')">${flag(id, 'guess') ? '已标记：蒙对的' : '标记为「蒙对」'}</button>
           <button class="btn" onclick="ZS_REDO('${id}')">重做本题</button>
         </div>`;
     } else {
       h += `<div class="res" style="background:#f2f6f5;color:#45605d">本题未计入记录（直接看了答案）。这题其实是蒙的？标记一下，首页可专门复习。</div>
+        ${p && p.tries ? `<div class="tiny muted" style="margin:8px 2px 0">📊 这题已做 <b>${p.tries}</b> 次，做对 <b>${p.rights || 0}</b> 次${dueText(p)}</div>` : ''}
         <div class="acts">
           <button class="btn guess ${flag(id, 'guess') ? 'on' : ''}" onclick="ZS_GUESS('${id}')">${flag(id, 'guess') ? '已标记：蒙对的' : '标记为「蒙对」'}</button>
           <button class="btn" onclick="ZS_REDO('${id}')">重做本题</button>
@@ -708,7 +742,8 @@ const DATA_VER = 42;
           <div style="background:#f1f5f4"><b>${st.right}</b><span>做对</span></div>
           <div style="background:#f1f5f4"><b>${st.wrong}</b><span>做错</span></div>
         </div>
-        <div class="tiny muted" style="margin-top:10px">正确率 ${st.done ? (st.right / st.done * 100).toFixed(1) : '—'}%　蒙对 ${st.guess} 题　收藏 ${all.filter(id => flag(id, 'star')).length} 题</div>
+        <div class="tiny muted" style="margin-top:10px">正确率 ${st.done ? (st.right / st.done * 100).toFixed(1) : '—'}%　蒙对 ${st.guess} 题　收藏 ${all.filter(id => flag(id, 'star')).length} 题<br>
+          累计作答 <b>${all.reduce((a, id) => a + (((P(id) || {}).tries) || 0), 0)}</b> 次　今日待复习 <b>${all.filter(id => isDone(id) && dueNow(id)).length}</b> 题</div>
       </div>
       <div class="sec-title">云端同步</div>
       <div class="card pad">
@@ -770,7 +805,14 @@ const DATA_VER = 42;
     if (r) setTimeout(() => r.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
   };
   window.ZS_REVEAL = id => { S['rev_' + id] = true; renderQuestion(id); };
-  window.ZS_REDO = id => { delete ZS.data.progress[id]; delete S['rev_' + id]; if ((ZS.data.flags[id] || {}).guess) { ZS.data.flags[id].guess = false; } ZS.save(); S['sel_' + id] = []; renderQuestion(id); };
+  /* 重做：保留历史次数与复习进度，只把本题切回「待作答」状态 */
+  window.ZS_REDO = id => {
+    S['redo_' + id] = true; delete S['rev_' + id]; S['sel_' + id] = [];
+    if ((ZS.data.flags[id] || {}).guess) { ZS.data.flags[id].guess = false; ZS.save(); }
+    renderQuestion(id);
+    ZS.toast('已重置本题，可以重做（历史次数保留）');
+  };
+  window.ZS_QNAVREDO = () => { if (S.curId) ZS_REDO(S.curId); };
   window.ZS_GUESS = id => { toggleFlag(id, 'guess'); renderQuestion(id); };
   window.ZS_FLAG = (id, k) => { toggleFlag(id, k); renderQuestion(id); };
   window.ZS_LIST = (key, f) => {
@@ -786,6 +828,10 @@ const DATA_VER = 42;
     if (f === 'wrong') list = list.filter(q => { const p = P(q.id); return p && p.s === 'wrong'; });
     if (f === 'guess') list = list.filter(q => flag(q.id, 'guess'));
     if (f === 'star') list = list.filter(q => flag(q.id, 'star'));
+    if (f === 'due_all') list = list.filter(q => isDone(q.id) && dueNow(q.id));
+    if (f === 'due_wrong') list = list.filter(q => { const p = P(q.id); return p && p.s === 'wrong' && dueNow(q.id); });
+    if (f === 'due_star') list = list.filter(q => flag(q.id, 'star') && dueNow(q.id));
+    if (f.startsWith('due_')) list = list.slice().sort((a, b) => ((P(a.id) || {}).due || 0) - ((P(b.id) || {}).due || 0));
     if (!list.length) return ZS.toast('没有符合条件的题目');
     go('q/' + list[0].id);
   };

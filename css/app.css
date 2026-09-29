@@ -238,3 +238,11 @@ body.annomode #qnav{display:none}
   padding:3px 4px;background:#fff;color:#14403c;-moz-appearance:textfield}
 .pdfjump input::-webkit-outer-spin-button,.pdfjump input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .pdfjump .btn{padding:4px 10px;font-size:12px}
+
+/* ---------- 艾宾浩斯复习 ---------- */
+.ebrow{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #eef2f1}
+.ebrow:last-child{border-bottom:none}
+.ebrow .ebl{font-weight:600;font-size:14.5px;min-width:72px}
+.ebrow .ebc{flex:1;font-size:12.5px;color:#5a6b69}
+.ebrow .ebc b{color:#0c514e;font-size:15.5px}
+#qnav #qnavRedo{font-size:12px;padding:6px 8px}
