@@ -19,7 +19,20 @@ const DATA_VER = 42;
       }
     });
     if (m) { ZS.save(); console.log('已迁移 %d 条蒙对标记', m); }
-    return m;
+    /* 老数据补艾宾浩斯计划：以前只存了 s/ts，没有 due */
+    let b = 0;
+    Object.keys(ZS.data.progress || {}).forEach(id => {
+      const p = ZS.data.progress[id];
+      if (p && p.s && !p.due) {
+        p.tries = p.tries || 1;
+        p.rights = p.rights || (p.s === 'right' ? 1 : 0);
+        p.rv = p.s === 'right' ? 1 : 0;
+        p.due = (p.ts || Date.now()) + DAY;
+        b++;
+      }
+    });
+    if (b) { ZS.save(); console.log('已为 %d 道老题补上复习计划', b); }
+    return m + b;
   }
 
   async function boot() {
