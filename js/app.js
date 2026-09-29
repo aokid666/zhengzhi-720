@@ -342,7 +342,7 @@ const DATA_VER = 42;
   const PAGE_OFF = { a: 4, k: 8, s: 9, q: 6 };
   const PAGE_NAME = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
   const PDFFILE = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
-  const PDFCHUNK = { a: 40, k: 40, q: 40, s: 40 };     // 0 = 不分卷
+  const PDFCHUNK = { a: 20, k: 10, q: 0, s: 0 };     // 0 = 不分卷
   const PDFTOTAL = { a: 460, k: 326, q: 164, s: 197 };
   const pad3 = n => String(n).padStart(3, '0');
   function chunkOf(kind, page) {
@@ -365,8 +365,26 @@ const DATA_VER = 42;
       list.push(seen[c.file]);
     });
     return list.map(c => `<a class="btn pdflink" target="_blank" rel="noopener"
-      href="pdf/${encodeURIComponent(c.file)}#page=${c.page}&zoom=page-width">📄 ${label}${c.cnt > 1 ? ' +' : ''}<span class="tiny muted">（第 ${c.first - off} 页）</span></a>`).join('');
+      href="pdf/${encodeURIComponent(c.file)}#page=${c.page}&zoom=page-width">📄 ${label}${c.cnt > 1 ? ' +' : ''}<span class="tiny muted">（第 ${c.first - off} 页）</span></a>`).join('') + jumpBox(kind);
   }
+
+  /* 跳页：输入书上的页码 → 自动选对分卷并打开 */
+  function jumpBox(kind) {
+    const off = PAGE_OFF[kind] || 0, max = PDFTOTAL[kind] - off;
+    return `<span class="pdfjump">跳到第
+      <input type="number" inputmode="numeric" min="1" max="${max}" placeholder="__">
+      页<button class="btn tiny" onclick="ZS_PDFJ('${kind}', this.previousElementSibling, ${max})">开</button></span>`;
+  }
+  window.ZS_PDFJ = function (kind, el, max) {
+    const n = parseInt((el.value || '').trim(), 10);
+    if (!n || n < 1 || n > max) return ZS.toast('请输入 1–' + max + ' 之间的书页码');
+    const c = chunkOf(kind, n + (PAGE_OFF[kind] || 0));
+    const a = document.createElement('a');
+    a.href = 'pdf/' + encodeURIComponent(c.file) + '#page=' + c.page + '&zoom=page-width';
+    a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    ZS.toast('已打开《' + PDFFILE[kind] + '》第 ' + n + ' 页');
+  };
   /* 解析区：直接显示「按本题裁切」的高清解析图 */
   function aBoxHtml(q) {
     const has = (q.aCrops || []).length;

@@ -230,3 +230,11 @@ body.annomode #qnav{display:none}
 /* ---------- 解析裁切图 ---------- */
 .pgwrap.crop{border:none;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(20,40,38,.06)}
 .pgwrap.crop img{width:100%}
+
+/* ---------- PDF 跳页 ---------- */
+.pdfjump{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:#5a6b69;
+  background:#f2f6f5;border:1px solid #dbe4e2;border-radius:9px;padding:6px 10px;margin:4px 6px 4px 0}
+.pdfjump input{width:52px;text-align:center;font-size:16px;border:1px solid #cbd8d5;border-radius:6px;
+  padding:3px 4px;background:#fff;color:#14403c;-moz-appearance:textfield}
+.pdfjump input::-webkit-outer-spin-button,.pdfjump input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.pdfjump .btn{padding:4px 10px;font-size:12px}
