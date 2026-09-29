@@ -5,7 +5,19 @@ const DATA_VER = 42;
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const S = { qs: [], byId: {}, lk: {}, ls: {}, route: '', cur: null, searchQ: '', lastPos: {} };
+  const S = { qs: [], byId: {}, lk: {}, ls: {}, route: '', cur: null, searchQ: '', lastPos: {}, q: null, sb: null };
+  /* 复习/重做会话（跨刷新保留）：S.q = {ids,i,title,mode}；mode = view 复习 / redo 原题重做 / sb 重做区 */
+  function saveSession() {
+    try { localStorage.setItem('zz720.session', JSON.stringify({ q: S.q, sb: S.sb })); } catch (e) { }
+  }
+  function loadSession() {
+    try {
+      const o = JSON.parse(localStorage.getItem('zz720.session') || 'null');
+      if (o) { S.q = o.q || null; S.sb = o.sb || null; }
+    } catch (e) { }
+  }
+  const inQ = id => !!(S.q && S.q.ids && S.q.ids.indexOf(id) >= 0);
+  const inSb = id => !!(S.q && S.q.mode === 'sb' && inQ(id));
 
   /* ---------- 数据 ---------- */
   /* 兼容老数据：以前「蒙对」存在 progress[id].guess，统一搬到 flags */
@@ -42,6 +54,7 @@ const DATA_VER = 42;
     } catch (e) { document.body.innerHTML = '<div class="empty">题库加载失败：' + esc(e.message) + '</div>'; return; }
     S.qs.forEach(q => S.byId[q.id] = q);
     ZS.load();
+    loadSession();
     migrateGuess();
     window.addEventListener('hashchange', route);
     route();
@@ -130,20 +143,32 @@ const DATA_VER = 42;
     bar.classList.toggle('show', !!on);
     document.body.classList.toggle('hasqnav', !!on);
     const info = document.getElementById('qnavInfo');
-    if (info) info.textContent = on ? (idx + 1) + ' / ' + S.qs.length : '';
+    const Q = S.q;
+    const qk = Q ? Q.ids.indexOf(S.curId) : -1;
+    if (info) info.textContent = on ? (qk >= 0 ? (qk + 1) + ' / ' + Q.ids.length : (idx + 1) + ' / ' + S.qs.length) : '';
     const pv = document.getElementById('qnavPrev'), nx = document.getElementById('qnavNext');
-    if (pv) pv.disabled = !on || idx <= 0;
-    if (nx) nx.disabled = !on || idx >= S.qs.length - 1;
+    const atFirst = qk >= 0 ? qk <= 0 : idx <= 0;
+    const atLast = qk >= 0 ? qk >= Q.ids.length - 1 : idx >= S.qs.length - 1;
+    if (pv) pv.disabled = !on || atFirst;
+    if (nx) nx.disabled = !on || atLast;
     const rd = document.getElementById('qnavRedo');
     if (rd) rd.disabled = !on;
     /* 右侧悬浮翻页球 */
     const fab = document.getElementById('qfab');
     if (fab) fab.classList.toggle('show', !!on);
     const fp = document.getElementById('qfabPrev'), fn = document.getElementById('qfabNext');
-    if (fp) fp.disabled = !on || idx <= 0;
-    if (fn) fn.disabled = !on || idx >= S.qs.length - 1;
+    if (fp) fp.disabled = !on || atFirst;
+    if (fn) fn.disabled = !on || atLast;
   }
   window.ZS_QNAV = d => {
+    if (S.q) {
+      const k = S.q.ids.indexOf(S.curId);
+      const m = (k < 0 ? 0 : k) + d;
+      if (m < 0) return ZS.toast('这是本队列的第一题');
+      if (m >= S.q.ids.length) return ZS.toast('这是本队列的最后一题');
+      go('q/' + S.q.ids[m]);
+      return;
+    }
     const i = qIndexOf(S.curId);
     if (i < 0) return;
     const n = i + d;
@@ -202,21 +227,21 @@ const DATA_VER = 42;
         <button class="btn" onclick="ZS_GO('s')">🔍 搜索</button>
       </div>
       <div class="acts">
-        <button class="btn warn" onclick="ZS_RUN('wg')">❌ 错题 &amp; 蒙对 (${wgShowIds.length})</button>
-        <button class="btn" onclick="ZS_RUN('star')">★ 收藏 (${starIds.length})</button>
+        <button class="btn warn" onclick="ZS_PICK('wg','错题 & 蒙对')">❌ 错题 &amp; 蒙对 (${wgShowIds.length})</button>
+        <button class="btn" onclick="ZS_PICK('star','收藏')">★ 收藏 (${starIds.length})</button>
         <button class="btn ${incFix() ? 'main' : ''}" onclick="ZS_INCFIX()">${incFix() ? '☑' : '☐'} 含已订正 (${fixedIds.length})</button>
       </div>
       <div class="sec-title">🔄 艾宾浩斯复习</div>
       <div class="card pad">
         <div class="tiny muted" style="margin-bottom:6px">答对：复习间隔按 1 / 2 / 4 / 7 / 15 / 30 天递增；答错：回到第 1 档，半天后再来。</div>
-        <div class="ebrow"><span class="ebl">全部题目</span><span class="ebc">待复习 <b>${dueAll.length}</b> / 已练 ${doneIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_all')">开始复习</button></div>
-        <div class="ebrow"><span class="ebl">错题 &amp; 蒙对</span><span class="ebc">待复习 <b>${dueWrong.length}</b> / 共 ${wrongIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_wgr')">开始复习</button></div>
+        <div class="ebrow"><span class="ebl">全部题目</span><span class="ebc">待复习 <b>${dueAll.length}</b> / 已练 ${doneIds.length}</span><button class="btn tiny" onclick="ZS_PICK('due_all','全部题目 · 今日待复习')">开始复习</button></div>
+        <div class="ebrow"><span class="ebl">错题 &amp; 蒙对</span><span class="ebc">待复习 <b>${dueWrong.length}</b> / 共 ${wrongIds.length}</span><button class="btn tiny" onclick="ZS_PICK('due_wgr','错题 & 蒙对 · 今日待复习')">开始复习</button></div>
         <div class="ebsub">
           <button class="chk ${incFix() ? 'on' : ''}" onclick="ZS_INCFIX()">${incFix() ? '✓' : ''}</button>
           <span>本次也把 <b>已订正</b>（${fixedIds.length} 题）一起做</span>
           <span class="tiny muted">待复习 ${dueFixed.length}</span>
         </div>
-        <div class="ebrow"><span class="ebl">收藏</span><span class="ebc">待复习 <b>${dueStar.length}</b> / 收藏 ${starIds.length}</span><button class="btn tiny" onclick="ZS_RUN('due_star')">开始复习</button></div>
+        <div class="ebrow"><span class="ebl">收藏</span><span class="ebc">待复习 <b>${dueStar.length}</b> / 收藏 ${starIds.length}</span><button class="btn tiny" onclick="ZS_PICK('due_star','收藏 · 今日待复习')">开始复习</button></div>
       </div>
       <div class="sec-title">分模块练习</div>`;
     const mods = new Map();
@@ -290,16 +315,18 @@ const DATA_VER = 42;
     localStorage.setItem('zz720.last', id);
     showQNav(true, qIndexOf(id));
     const p = P(id);
-    const answered = !!(p && p.s) && !S['redo_' + id];
+    const sbRec = inSb(id) ? (S.sb && S.sb[id]) : null;
+    const answered = inSb(id) ? !!sbRec : (!!(p && p.s) && !S['redo_' + id]);
     const revealed = answered || !!S['rev_' + id];
     if (revealed) { needLect().then(() => { if (S.cur === q && !q._lectDone) { q._lectDone = 1; paintLect(q); } }); }
-    const sel = S['sel_' + id] || [];
+    const sel = (sbRec ? sbRec.sel : (S['sel_' + id] || [])) || [];
     const idx = qIndexOf(id);
     let h = `<div class="card" style="margin-top:12px">
       <div class="qhd">
         <button class="iconbtn" onclick="ZS_GO('l/${q.moduleIdx}-${q.chapter}')">☰</button>
         <span class="idx">${esc(q.chapter)} 第 ${q.no} 题</span>
         <span class="chip">${esc(q.section)}</span>
+        ${S.q ? `<span class="qchip">${S.q.mode === 'sb' ? '🧪 重做区' : (S.q.mode === 'redo' ? '🔄 原题重做' : '📖 复习')} ${S.q.ids.indexOf(id) + 1}/${S.q.ids.length}<button onclick="ZS_QEXIT()" title="结束队列">✕</button></span>` : ''}
         <span class="sp"></span>
         ${revealed ? `<button class="iconbtn" onclick="ZS_GONOTE('${id}')">📝</button>` : ''}
         <button class="iconbtn ${flag(id, 'star') ? 'on' : ''}" onclick="ZS_FLAG('${id}','star')">★</button>
@@ -334,13 +361,23 @@ const DATA_VER = 42;
         <button class="btn" onclick="ZS_CLR('${id}')">清除选择</button>
       </div>`;
     } else if (answered) {
-      const right = p.s === 'right';
-      h += `<div class="res ${right ? 'ok' : 'bad'}">${right ? '✔ 做对了' : '✘ 做错了'} —— 正确答案：${esc(q.answer)}${sel.length ? '，你选了 ' + esc(sel.join('')) : ''}</div>
-        <div class="tiny muted" style="margin:8px 2px 0">📊 这题已做 <b>${p.tries || 1}</b> 次，做对 <b>${p.rights || 0}</b> 次${dueText(p)}</div>
-        <div class="acts">
-          <button class="btn guess ${flag(id, 'guess') ? 'on' : ''}" onclick="ZS_GUESS('${id}')">${flag(id, 'guess') ? '已标记：蒙对的' : '标记为「蒙对」'}</button>
-          <button class="btn" onclick="ZS_REDO('${id}')">重做本题</button>
-        </div>`;
+      const right = sbRec ? !!sbRec.right : (p && p.s === 'right');
+      if (sbRec) {
+        const left = S.q.ids.length - S.q.ids.indexOf(id) - 1;
+        h += `<div class="res ${right ? 'ok' : 'bad'}">${right ? '✔ 做对了' : '✘ 做错了'} —— 正确答案：${esc(q.answer)}${sel.length ? '，你选了 ' + esc(sel.join('')) : ''}</div>
+          <div class="tiny muted" style="margin:8px 2px 0">🧪 这是重做区的作答，<b>暂未</b>写入原记录；本队列还剩 ${left} 题</div>
+          <div class="acts">
+            <button class="btn main" onclick="ZS_SB_NEXT()">${left ? '下一题 ▸' : '完成并处理'}</button>
+            <button class="btn" onclick="ZS_SB_END()">结束并处理</button>
+          </div>`;
+      } else {
+        h += `<div class="res ${right ? 'ok' : 'bad'}">${right ? '✔ 做对了' : '✘ 做错了'} —— 正确答案：${esc(q.answer)}${sel.length ? '，你选了 ' + esc(sel.join('')) : ''}</div>
+          <div class="tiny muted" style="margin:8px 2px 0">📊 这题已做 <b>${p.tries || 1}</b> 次，做对 <b>${p.rights || 0}</b> 次${dueText(p)}</div>
+          <div class="acts">
+            <button class="btn guess ${flag(id, 'guess') ? 'on' : ''}" onclick="ZS_GUESS('${id}')">${flag(id, 'guess') ? '已标记：蒙对的' : '标记为「蒙对」'}</button>
+            <button class="btn" onclick="ZS_REDO('${id}')">重做本题</button>
+          </div>`;
+      }
     } else {
       h += `<div class="res" style="background:#f2f6f5;color:#45605d">本题未计入记录（直接看了答案）。这题其实是蒙的？标记一下，首页可专门复习。</div>
         ${p && p.tries ? `<div class="tiny muted" style="margin:8px 2px 0">📊 这题已做 <b>${p.tries}</b> 次，做对 <b>${p.rights || 0}</b> 次${dueText(p)}</div>` : ''}
@@ -860,6 +897,12 @@ const DATA_VER = 42;
     const q = S.byId[id], sel = S['sel_' + id] || [];
     if (!sel.length) return ZS.toast('先选一个答案');
     const ok = sel.slice().sort().join('') === q.answer.split('').sort().join('');
+    if (inSb(id)) {
+      S.sb = S.sb || {}; S.sb[id] = { sel: sel.slice(), right: ok };
+      saveSession(); renderQuestion(id);
+      ZS.toast(ok ? '✔ 做对了（重做区，未写入原记录）' : '✘ 答案：' + q.answer);
+      return;
+    }
     setProg(id, ok, false);
     renderQuestion(id);
     ZS.toast(ok ? '✔ 做对了' : '✘ 答案：' + q.answer);
@@ -875,6 +918,10 @@ const DATA_VER = 42;
     ZS.toast('已重置本题，可以重做（累计次数保留）');
   }
   window.ZS_REDO = id => {
+    if (inSb(id)) {
+      delete S.sb[id]; delete S['sel_' + id]; saveSession();
+      return renderQuestion(id);
+    }
     const p = P(id);
     const msg = p && p.s
       ? '确定重做本题吗？\n（会清掉本题这次的作答结果，累计做了几次/对几次仍然保留）'
@@ -919,7 +966,7 @@ const DATA_VER = 42;
     if (!list.length) return ZS.toast('没有符合条件的题目');
     go('q/' + list[0].id);
   };
-  window.ZS_RUN = f => {
+  function pickList(f) {
     let list = S.qs;
     if (f === 'wrong') list = list.filter(q => isWrongNow(q.id));
     if (f === 'fixed') list = list.filter(q => isFixed(q.id));
@@ -932,8 +979,96 @@ const DATA_VER = 42;
     if (f === 'due_wgr') list = list.filter(q => (isWrongNow(q.id) || flag(q.id, 'guess') || (incFix() && isFixed(q.id))) && dueNow(q.id));
     if (f === 'due_star') list = list.filter(q => flag(q.id, 'star') && dueNow(q.id));
     if (f.startsWith('due_')) list = list.slice().sort((a, b) => ((P(a.id) || {}).due || 0) - ((P(b.id) || {}).due || 0));
+    return list;
+  }
+  window.ZS_RUN = f => {
+    const list = pickList(f);
     if (!list.length) return ZS.toast('没有符合条件的题目');
     go('q/' + list[0].id);
+  };
+
+  const PICK_TITLE = {
+    wg: '错题 & 蒙对', due_wgr: '错题 & 蒙对 · 今日待复习', wrong: '错题', fixed: '已订正',
+    guess: '蒙对', star: '收藏', due_all: '全部题目 · 今日待复习', due_wrong: '错题 · 今日待复习',
+    due_fixed: '已订正 · 今日待复习', due_star: '收藏 · 今日待复习'
+  };
+
+  /* 选择复习方式：复习 / 原题重做 / 重做区 */
+  window.ZS_PICK = (scope, title) => {
+    const list = pickList(scope);
+    const t = title || PICK_TITLE[scope] || '复习';
+    if (!list.length) return ZS.toast('「' + t + '」目前没有题目');
+    if (S.q) return ZS.toast('请先结束当前队列（题目卡片右上角的 ✕）');
+    const m = document.getElementById('modal');
+    m.innerHTML = `<div class="box" style="max-width:430px">
+      <h3>${esc(t)} · 共 ${list.length} 题</h3>
+      <div class="tiny muted" style="margin-bottom:12px">选择一种方式</div>
+      <div class="acts" style="flex-direction:column;align-items:stretch;gap:9px">
+        <button class="btn" style="text-align:left;padding:12px 14px" onclick="ZS_SESSION('${scope}','view')">📖 <b>复习</b><br><span class="tiny muted">逐题看题目与解析，不改动任何记录</span></button>
+        <button class="btn" style="text-align:left;padding:12px 14px" onclick="ZS_SESSION('${scope}','redo')">🔄 <b>原题重做</b><br><span class="tiny muted">就在原题上重做，做对会覆盖本题这次结果</span></button>
+        <button class="btn main" style="text-align:left;padding:12px 14px" onclick="ZS_SESSION('${scope}','sb')">🧪 <b>重做区</b><br><span class="tiny muted">在新区域作答，不影响原记录，做完再选是否同步</span></button>
+      </div>
+      <div class="acts" style="justify-content:flex-end;margin-top:8px"><button class="btn" onclick="ZS_CFGCLOSE()">取消</button></div>
+    </div>`;
+    m.classList.add('show');
+  };
+
+  window.ZS_SESSION = (scope, mode) => {
+    ZS_CFGCLOSE();
+    const list = pickList(scope);
+    if (!list.length) return ZS.toast('没有题目');
+    S.q = { ids: list.map(q => q.id), title: PICK_TITLE[scope] || '复习', mode: mode };
+    if (mode === 'sb') S.sb = {};
+    if (mode === 'redo') list.forEach(q => { S['redo_' + q.id] = true; S['sel_' + q.id] = []; });
+    saveSession();
+    go('q/' + S.q.ids[0]);
+    ZS.toast(mode === 'sb' ? '已进入重做区：作答不影响原记录'
+      : (mode === 'redo' ? '已进入原题重做：逐题重做即可' : '已进入复习：向后翻题即可'), 2600);
+  };
+
+  window.ZS_QEXIT = () => {
+    const sb = S.sb ? Object.keys(S.sb).length : 0;
+    const msg = sb ? '重做区里已经做了 ' + sb + ' 题，还没同步。确定退出吗？\n（退出后这些作答会丢弃，原记录不变）'
+                   : '确定结束当前队列吗？';
+    ZS.confirm(msg, () => {
+      S.q = null; S.sb = null; saveSession(); route();
+      ZS.toast('已退出队列');
+    });
+  };
+
+  /* 重做区：结算 */
+  window.ZS_SB_END = () => {
+    const ids = S.sb ? Object.keys(S.sb) : [];
+    if (!ids.length) { S.q = null; S.sb = null; saveSession(); return route(); }
+    const right = ids.filter(id => S.sb[id].right).length;
+    const m = document.getElementById('modal');
+    m.innerHTML = `<div class="box" style="max-width:430px">
+      <h3>本次重做区结果</h3>
+      <div style="font-size:15px;line-height:1.9;margin-bottom:14px">
+        共做 <b>${ids.length}</b> 题，做对 <b style="color:var(--ok)">${right}</b> 题，做错 <b style="color:#c0392b">${ids.length - right}</b> 题。
+      </div>
+      <div class="tiny muted" style="margin-bottom:12px">同步会把这次的作答计入原题的做题次数与艾宾浩斯复习计划。</div>
+      <div class="acts" style="flex-direction:column;align-items:stretch;gap:9px">
+        <button class="btn main" onclick="ZS_SB_APPLY(1)">✅ 同步到原题（${ids.length} 题）</button>
+        <button class="btn" onclick="ZS_SB_APPLY(0)">🗑 丢弃本次结果，不同步</button>
+        <button class="btn" onclick="ZS_CFGCLOSE()">继续做（返回）</button>
+      </div>
+    </div>`;
+    m.classList.add('show');
+  };
+  window.ZS_SB_APPLY = apply => {
+    ZS_CFGCLOSE();
+    const ids = S.sb ? Object.keys(S.sb) : [];
+    if (apply) ids.forEach(id => setProg(id, S.sb[id].right, false));
+    S.q = null; S.sb = null; saveSession();
+    ZS.toast(apply ? '已把 ' + ids.length + ' 题的结果同步到原题' : '已丢弃本次结果', 2600);
+    go('');
+  };
+  window.ZS_SB_NEXT = () => {
+    const k = S.q ? S.q.ids.indexOf(S.curId) : -1;
+    if (!S.q || k < 0) return;
+    if (k >= S.q.ids.length - 1) return ZS_SB_END();
+    go('q/' + S.q.ids[k + 1]);
   };
   window.ZS_ANNO = (id, tgt) => {
     const key = id + '|' + tgt;

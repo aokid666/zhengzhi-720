@@ -276,3 +276,10 @@ body.annomode #qfab{display:none}
   font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;
   color:var(--teal);padding:0}
 .ebsub .chk.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+
+/* ---------- 队列标记（复习/原题重做/重做区） ---------- */
+.qchip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:3px 4px 3px 8px;border-radius:20px;
+  background:#eef4f3;color:var(--teal);border:1px solid #dbe6e4;white-space:nowrap}
+.qchip button{border:none;background:rgba(12,81,78,.10);color:var(--teal);width:17px;height:17px;border-radius:50%;
+  font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+#modal .acts button b{font-size:14.5px;color:var(--teal)}
