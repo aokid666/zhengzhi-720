@@ -129,6 +129,12 @@ const DATA_VER = 42;
     if (nx) nx.disabled = !on || idx >= S.qs.length - 1;
     const rd = document.getElementById('qnavRedo');
     if (rd) rd.disabled = !on;
+    /* 右侧悬浮翻页球 */
+    const fab = document.getElementById('qfab');
+    if (fab) fab.classList.toggle('show', !!on);
+    const fp = document.getElementById('qfabPrev'), fn = document.getElementById('qfabNext');
+    if (fp) fp.disabled = !on || idx <= 0;
+    if (fn) fn.disabled = !on || idx >= S.qs.length - 1;
   }
   window.ZS_QNAV = d => {
     const i = qIndexOf(S.curId);

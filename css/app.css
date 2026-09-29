@@ -250,3 +250,20 @@ body.annomode #qnav{display:none}
 .ebrow .ebc{flex:1;font-size:12.5px;color:#5a6b69}
 .ebrow .ebc b{color:#0c514e;font-size:15.5px}
 #qnav #qnavRedo{font-size:12px;padding:6px 8px}
+
+/* ---------- 右侧悬浮翻页球 ---------- */
+#qfab{position:fixed;right:11px;top:50%;transform:translateY(-50%);z-index:71;
+  display:none;flex-direction:column;gap:11px}
+#qfab.show{display:flex}
+#qfab button{
+  width:44px;height:44px;border-radius:50%;border:1px solid var(--line);
+  background:rgba(255,253,249,.93);backdrop-filter:blur(8px);
+  box-shadow:0 2px 12px rgba(20,40,38,.16);
+  font-size:21px;line-height:1;color:var(--teal);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0 0 2px;
+  -webkit-tap-highlight-color:transparent;transition:transform .12s,opacity .2s;
+}
+#qfab button:active{transform:scale(.92);background:var(--teal);color:#fff}
+#qfab button:disabled{opacity:.28;pointer-events:none}
+body.annomode #qfab{display:none}
+@media print{#qfab{display:none!important}}
