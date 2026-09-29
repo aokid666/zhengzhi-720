@@ -124,6 +124,8 @@ const DATA_VER = 42;
     try { h = decodeURIComponent(h); } catch (e) { }
     S.route = h;
     const [p, a] = h.split('/');
+    /* 离开题目页时，复习/原题重做队列自动结束，省得老是拦着不让开新队列 */
+    if (p !== 'q' && S.q && S.q.mode !== 'sb') { S.q = null; saveSession(); }
     if (p === 'l' && a) return renderChapter(a);
     if (p === 'q' && a) return renderQuestion(a);
     if (p === 's') return renderSearch();
@@ -209,6 +211,7 @@ const DATA_VER = 42;
     const dueFixed = fixedIds.filter(dueNow);
     const dueStar = starIds.filter(dueNow);
     const last = localStorage.getItem('zz720.last');
+    const lastQ = last ? S.byId[last] : null;
     let h = `
       <div class="hero">
         <div class="ring"></div>
@@ -221,8 +224,9 @@ const DATA_VER = 42;
         </div>
         <div class="bar"><i style="width:${(st.done / st.total * 100).toFixed(1)}%"></i></div>
       </div>
+      ${lastQ ? `<div class="tiny muted" style="margin:14px 4px -6px">上次做到：<b style="color:var(--teal)">${esc(lastQ.module)}</b> · ${esc(lastQ.chapter)} 第 ${lastQ.no} 题</div>` : ''}
       <div class="acts">
-        ${last ? `<button class="btn main" onclick="ZS_GO('q/${last}')">继续上次 (${last.replace('q', '')})</button>` : ''}
+        ${lastQ ? `<button class="btn main" onclick="ZS_GO('q/${last}')">继续上次</button>` : ''}
         <button class="btn" onclick="ZS_GO('l/first')">从头开始</button>
         <button class="btn" onclick="ZS_GO('s')">🔍 搜索</button>
       </div>
@@ -993,37 +997,101 @@ const DATA_VER = 42;
     due_fixed: '已订正 · 今日待复习', due_star: '收藏 · 今日待复习'
   };
 
-  /* 选择复习方式：复习 / 原题重做 / 重做区 */
+  /* 选择复习方式：先按 模块 > 章节 勾选范围，再选 复习 / 原题重做 / 重做区 */
+  let PICK = null;   // { scope, title, list }
+  const pickKey = q => q.moduleIdx + '|' + q.chapter;
+
+  function buildPickTree() {
+    const mods = new Map();
+    PICK.list.forEach(q => {
+      if (!mods.has(q.moduleIdx)) mods.set(q.moduleIdx, { name: q.module, chs: new Map() });
+      const m = mods.get(q.moduleIdx);
+      if (!m.chs.has(q.chapter)) m.chs.set(q.chapter, 0);
+      m.chs.set(q.chapter, m.chs.get(q.chapter) + 1);
+    });
+    return Array.from(mods).map(([mi, m]) => `
+      <div class="pkgrp">
+        <label class="pk mod"><input type="checkbox" class="pkmi" data-mi="${mi}" checked onchange="ZS_PK_MOD(this)">
+          <b>${esc(m.name)}</b><span class="tiny muted">${Array.from(m.chs.values()).reduce((a, b) => a + b, 0)} 题</span></label>
+        ${Array.from(m.chs).map(([ch, c]) => `<label class="pk ch"><input type="checkbox" class="pkch" data-mi="${mi}" data-ch="${esc(ch)}" checked onchange="ZS_PK_CH(this)">
+          <span>${esc(ch)}</span><span class="tiny muted">${c}</span></label>`).join('')}
+      </div>`).join('');
+  }
+  function pickedCount() {
+    const set = new Set(Array.from(document.querySelectorAll('#modal .pkch:checked')).map(c => c.getAttribute('data-mi') + '|' + c.getAttribute('data-ch')));
+    return PICK.list.filter(q => set.has(pickKey(q))).length;
+  }
+  function refreshPicked() {
+    const el = document.getElementById('pkCount');
+    if (el && PICK) el.textContent = pickedCount();
+    document.querySelectorAll('#modal .pkmi').forEach(mi => {
+      const own = Array.from(document.querySelectorAll('#modal .pkch[data-mi="' + mi.getAttribute('data-mi') + '"]'));
+      mi.checked = own.every(c => c.checked);
+      mi.indeterminate = !mi.checked && own.some(c => c.checked);
+    });
+  }
+  window.ZS_PK_MOD = el => {
+    document.querySelectorAll('#modal .pkch[data-mi="' + el.getAttribute('data-mi') + '"]').forEach(c => c.checked = el.checked);
+    refreshPicked();
+  };
+  window.ZS_PK_CH = () => refreshPicked();
+  window.ZS_PK_ALL = v => {
+    document.querySelectorAll('#modal .pkch').forEach(c => c.checked = v);
+    document.querySelectorAll('#modal .pkmi').forEach(m => { m.checked = v; m.indeterminate = false; });
+    refreshPicked();
+  };
+  window.ZS_PK_COUNT = () => 0;
+
   window.ZS_PICK = (scope, title) => {
     const list = pickList(scope);
     const t = title || PICK_TITLE[scope] || '复习';
     if (!list.length) return ZS.toast('「' + t + '」目前没有题目');
-    if (S.q) return ZS.toast('请先结束当前队列（题目卡片右上角的 ✕）');
+    /* 已有队列不再拦人：重做区里有没同步的才问一句 */
+    if (S.q) {
+      const sb = S.sb ? Object.keys(S.sb).length : 0;
+      if (sb) return ZS.confirm('重做区里还有 ' + sb + ' 题没同步。\n确定＝丢弃它们并开始新的队列；取消＝回去先处理。', () => {
+        S.q = null; S.sb = null; saveSession(); ZS_PICK(scope, title);
+      });
+      S.q = null; S.sb = null; saveSession();
+    }
+    PICK = { scope: scope, title: t, list: list };
     const m = document.getElementById('modal');
-    m.innerHTML = `<div class="box" style="max-width:430px">
+    m.innerHTML = `<div class="box" style="max-width:460px">
       <h3>${esc(t)} · 共 ${list.length} 题</h3>
-      <div class="tiny muted" style="margin-bottom:12px">选择一种方式</div>
+      <div class="tiny muted" style="margin-bottom:8px">勾选这次要处理的模块 / 章节</div>
+      <div class="acts" style="gap:6px;margin-bottom:8px">
+        <button class="btn tiny" onclick="ZS_PK_ALL(1)">全选</button>
+        <button class="btn tiny" onclick="ZS_PK_ALL(0)">全不选</button>
+        <span class="tiny muted" style="align-self:center">已选 <b id="pkCount">${list.length}</b> 题</span>
+      </div>
+      <div class="pktree">${buildPickTree()}</div>
+      <div class="tiny muted" style="margin:12px 0 8px">选一种方式</div>
       <div class="acts" style="flex-direction:column;align-items:stretch;gap:9px">
-        <button class="btn" style="text-align:left;padding:12px 14px" onclick="ZS_SESSION('${scope}','view')">📖 <b>复习</b><br><span class="tiny muted">逐题看题目与解析，不改动任何记录</span></button>
-        <button class="btn" style="text-align:left;padding:12px 14px" onclick="ZS_SESSION('${scope}','redo')">🔄 <b>原题重做</b><br><span class="tiny muted">就在原题上重做，做对会覆盖本题这次结果</span></button>
-        <button class="btn main" style="text-align:left;padding:12px 14px" onclick="ZS_SESSION('${scope}','sb')">🧪 <b>重做区</b><br><span class="tiny muted">在新区域作答，不影响原记录，做完再选是否同步</span></button>
+        <button class="btn" style="text-align:left;padding:12px 14px" onclick="ZS_SESSION('view')">📖 <b>复习</b><br><span class="tiny muted">逐题看题目与解析，不改动任何记录</span></button>
+        <button class="btn" style="text-align:left;padding:12px 14px" onclick="ZS_SESSION('redo')">🔄 <b>原题重做</b><br><span class="tiny muted">就在原题上重做，做对会覆盖本题这次结果</span></button>
+        <button class="btn main" style="text-align:left;padding:12px 14px" onclick="ZS_SESSION('sb')">🧪 <b>重做区</b><br><span class="tiny muted">在新区域作答，不影响原记录，做完再选是否同步</span></button>
       </div>
       <div class="acts" style="justify-content:flex-end;margin-top:8px"><button class="btn" onclick="ZS_CFGCLOSE()">取消</button></div>
     </div>`;
     m.classList.add('show');
+    refreshPicked();
   };
 
-  window.ZS_SESSION = (scope, mode) => {
+  window.ZS_SESSION = mode => {
+    if (!PICK) return;
+    const scope = PICK.scope;
+    const set = new Set(Array.from(document.querySelectorAll('#modal .pkch:checked')).map(c => c.getAttribute('data-mi') + '|' + c.getAttribute('data-ch')));
+    const list = PICK.list.filter(q => set.has(pickKey(q)));
     ZS_CFGCLOSE();
-    const list = pickList(scope);
-    if (!list.length) return ZS.toast('没有题目');
-    S.q = { ids: list.map(q => q.id), title: PICK_TITLE[scope] || '复习', mode: mode };
+    if (!list.length) return ZS.toast('至少要勾选一个章节');
+    S.q = { ids: list.map(q => q.id), title: PICK.title, mode: mode };
     if (mode === 'sb') S.sb = {};
     if (mode === 'redo') list.forEach(q => { S['redo_' + q.id] = true; S['sel_' + q.id] = []; });
     saveSession();
     go('q/' + S.q.ids[0]);
-    ZS.toast(mode === 'sb' ? '已进入重做区：作答不影响原记录'
-      : (mode === 'redo' ? '已进入原题重做：逐题重做即可' : '已进入复习：向后翻题即可'), 2600);
+    ZS.toast(mode === 'sb' ? ('已进入重做区：' + list.length + ' 题，作答不影响原记录')
+      : (mode === 'redo' ? ('已进入原题重做：共 ' + list.length + ' 题') : ('已进入复习：共 ' + list.length + ' 题')), 2600);
+    PICK = null;
   };
 
   window.ZS_QEXIT = () => {
