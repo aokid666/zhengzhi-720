@@ -640,10 +640,10 @@ const DATA_VER = 43;
   function pagesHtml(pages, kind, id, label) {
     if (!pages || !pages.length) return '<div class="tiny muted">未匹配到对应页</div>';
     const cur = S['pg_' + kind + '_' + id];
+    const off = PAGE_OFF[kind] || 0;
     if (cur && pages.indexOf(cur) < 0) pages = pages.concat([cur]).sort((x, y) => x - y);
     return pages.map(n => {
       const nn = String(n).padStart(4, '0');
-      const off = PAGE_OFF[kind] || 0;
       const ext = IMGEXT[kind] || 'webp';
       const pn = n - off;
       const lb = (PAGE_NAME[kind] || label) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + n + ' 页');
