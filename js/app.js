@@ -434,7 +434,7 @@ const DATA_VER = 43;
         if (isRight) cls += ' right';
         else if (chose) cls += ' wrong';
       }
-      h += `<div class="${cls}" onclick="ZS_SEL('${id}','${k}')">
+      h += `<div class="${cls}"${revealed ? '' : ` onclick="ZS_SEL('${id}','${k}')"`}>
         <span class="k">${k}</span><span class="v">${esc(v)}</span>
         ${revealed ? `<span class="mk" style="color:${q.answer.includes(k) ? 'var(--ok)' : '#bbb'}">${q.answer.includes(k) ? '✔' : ''}</span>` : ''}
       </div>`;
@@ -1291,6 +1291,13 @@ const DATA_VER = 43;
     $('#lectS').style.display = t === 's' ? '' : 'none';
   };
   window.ZS_SEL = (id, k) => {
+    /* 已经作答 / 已经看过答案的题，不允许再改选项，以免改掉「你选了 X」的记录 */
+    if (inSb(id)) {
+      if (S.sb && S.sb[id]) return ZS.toast('本题已在重做区作答，点「重做本题」可重做');
+    } else {
+      const pp = P(id);
+      if ((pp && pp.s && !S['redo_' + id]) || S['rev_' + id]) return ZS.toast('本题已作答，点「重做本题」可以重做');
+    }
     const q = S.byId[id]; const sel = S['sel_' + id] = S['sel_' + id] || [];
     const i = sel.indexOf(k);
     if (i >= 0) sel.splice(i, 1);
