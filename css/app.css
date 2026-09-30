@@ -317,3 +317,16 @@ body.annomode #qfab{display:none}
 #zoomTitle{color:#fff;opacity:.9;font-size:12.5px;max-width:42vw;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;padding:0 6px}
 #zoomBar .iconbtn[disabled]{opacity:.3;pointer-events:none}
+
+/* ---------- 浏览整本：工具条 + 目录 ---------- */
+.lectbar{position:sticky;top:46px;z-index:6;margin-top:10px;
+  box-shadow:0 3px 14px rgba(20,40,38,.08);border:1px solid var(--line);background:#fffefb}
+.lectbar input{width:62px;text-align:center;font-size:16px;border:1px solid #cbd8d5;border-radius:8px;padding:4px 5px;background:#fff}
+.lectbar input::-webkit-outer-spin-button,.lectbar input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.tocbox{max-height:44vh;overflow:auto;margin-top:10px;border-top:1px solid var(--line);padding-top:6px}
+.tocrow{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f2f6f5;cursor:pointer;font-size:13.5px}
+.tocrow:last-child{border-bottom:none}
+.tocrow b{color:var(--teal);flex:0 0 auto;min-width:64px}
+.tocrow span{color:#3e5250;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tocrow em{color:var(--ink3);font-style:normal;font-size:12px;flex:0 0 auto}
+.tocrow:active{background:#f2f7f6}

@@ -202,7 +202,7 @@ const DATA_VER = 42;
     if (p === 's') return renderSearch();
     if (p === 'me') return renderMe();
     if (p === 'queue') return renderQueues();
-    if (p === 'lect' && a) return renderLectAll(a, location.hash.split('/')[2]);
+    if (p === 'lect' && a) return renderLectAll(a, h.split('/')[2]);
     if (p === 'stat') return renderStat();
     if (p === 'notes') return renderNotes();
     return renderHome();
@@ -1083,31 +1083,85 @@ const DATA_VER = 42;
     }
   };
 
-  function renderLectAll(kind, startPage) {
+  let TOC = null;
+  async function needToc() {
+    if (TOC) return TOC;
+    try { TOC = await (await fetch('data/toc.json?v=' + DATA_VER)).json(); }
+    catch (e) { TOC = { k: [], s: [] }; }
+    return TOC;
+  }
+
+  /* 浏览整本讲义：页内滚动跳转 + 目录 */
+  async function renderLectAll(kind, startPage) {
     showQNav(false);
     const name = PAGE_NAME[kind] || kind;
     const ext = IMGEXT[kind] || 'webp';
     const total = { k: 326, s: 197 }[kind] || 0;
     const off = PAGE_OFF[kind] || 0;
+    const lastP = total - off;
+    const toc = (await needToc())[kind] || [];
     let h = `<div class="sec-title">📚 ${esc(name)} · 全 ${total} 页</div>
-      <div class="acts" style="gap:6px;margin-bottom:8px">
-        <span class="tiny muted" style="align-self:center">快速跳转</span>
-        ${[1, 41, 81, 121, 161, 201, 241, 281, 321].filter(p => p <= total).map(p =>
-          `<button class="btn tiny" onclick="location.hash='#/lect/${kind}/${p}';location.reload()">P${p - off >= 1 ? p - off : p}</button>`).join('')}
+      <div class="card pad lectbar">
+        <div class="acts" style="gap:7px;align-items:center;margin:0;flex-wrap:wrap">
+          <button class="btn tiny" onclick="ZS_TOC()">📑 目录（${toc.length}）</button>
+          <span class="tiny" style="display:inline-flex;align-items:center;gap:5px">跳到第
+            <input id="lpIn" type="number" inputmode="numeric" min="1" max="${lastP}" placeholder="__"
+              onkeydown="if(event.key==='Enter')ZS_LPJUMP('${kind}')">页
+            <button class="btn tiny main" onclick="ZS_LPJUMP('${kind}')">跳转</button></span>
+          <span style="flex:1"></span>
+          <button class="btn tiny" onclick="ZS_THUMB()">${thumbMode() ? '📖 直读整页' : '🔳 缩略图'}</button>
+        </div>
+        <div id="tocBox" class="tocbox" style="display:none">
+          ${toc.length ? toc.map(t => `<div class="tocrow" onclick="ZS_LPJUMP('${kind}',${t.page})">
+            <b>${esc(t.label)}</b><span>${esc(t.title)}</span><em>P${t.page}</em></div>`).join('')
+            : '<div class="tiny muted" style="padding:8px">这本没有目录数据</div>'}
+        </div>
       </div>
       <div class="pages">` +
       Array.from({ length: total }, (_, i) => i + 1).map(pg => {
+        const pn = pg - off;
         const nn = String(pg).padStart(4, '0');
+        const lb = esc(name) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + pg + ' 页');
         return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" id="lp${pg}">
-          <img loading="lazy" style="aspect-ratio:${kind === 's' ? '2068/2924' : '2552/3438'}" src="img/${kind}/${nn}.${ext}" data-label="${esc(name)}${pg - off >= 1 ? ' 第 ' + (pg - off) + ' 页' : ' PDF 第 ' + pg + ' 页'}" onclick="ZS_ZOOM(this)">
-          <span class="pgno">${esc(name)} P${pg - off >= 1 ? pg - off : pg}</span></div>`;
+          <img loading="lazy" style="aspect-ratio:${kind === 's' ? '2068/2924' : '2552/3438'}"
+            src="img/${kind}/${nn}.${ext}" data-label="${lb}" onclick="ZS_ZOOM(this)">
+          <span class="pgno">${esc(name)} P${pn >= 1 ? pn : pg}</span></div>`;
       }).join('') + `</div>`;
     shell(h);
     if (startPage) {
-      const jump = () => { const el = document.getElementById('lp' + startPage); if (el) el.scrollIntoView({ block: 'start' }); };
-      setTimeout(jump, 350); setTimeout(jump, 1500); setTimeout(jump, 3000);
+      /* 图片是懒加载的，页面高度会边加载边变，得多定位几次 */
+      const sp = Number(startPage);
+      let tries = 0;
+      const jump = () => {
+        tries++;
+        const el = document.getElementById('lp' + sp);
+        if (el) {
+          const top = el.getBoundingClientRect().top;
+          if (Math.abs(top - 60) > 12) el.scrollIntoView({ block: 'start' });
+        }
+        if (tries < 14) setTimeout(jump, 400);
+      };
+      setTimeout(jump, 250);
     }
   }
+
+  window.ZS_TOC = () => {
+    const b = document.getElementById('tocBox');
+    if (!b) return;
+    b.style.display = b.style.display === 'none' ? 'block' : 'none';
+  };
+  window.ZS_LPJUMP = (kind, v) => {
+    const off = PAGE_OFF[kind] || 0;
+    const inp = document.getElementById('lpIn');
+    let n = (v === undefined) ? parseInt((inp && inp.value) || '', 10) : Number(v);
+    if (!n || n < 1) return ZS.toast('请输入页码');
+    const el = document.getElementById('lp' + (n + off));
+    if (!el) return ZS.toast('没有第 ' + n + ' 页');
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    const b = document.getElementById('tocBox'); if (b) b.style.display = 'none';
+    const pg = el.querySelector('.pgno');
+    if (pg) ZS.toast('已跳到 ' + pg.textContent, 1400);
+  };
 
   function renderQueues() {
     showQNav(false);
