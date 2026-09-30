@@ -93,6 +93,26 @@ const DATA_VER = 43;
     return m + b;
   }
 
+  /* 老标注是按「题|区域」存的，多张图共用一份 → 迁到具体第一张的 key */
+  function migrateAnnoKeys() {
+    const A = ZS.data.annos || {};
+    let m = 0;
+    Object.keys(A).forEach(k => {
+      const mm = /^(q\d+)\|(a-img|k-img|s-img)$/.exec(k);
+      if (!mm) return;
+      const q = S.byId[mm[1]];
+      let sfx = '0';
+      if (q) {
+        if (mm[2] === 'k-img' && q.kPages && q.kPages.length) sfx = String(q.kPages[0]);
+        if (mm[2] === 's-img' && q.sPages && q.sPages.length) sfx = String(q.sPages[0]);
+      }
+      A[k + '-' + sfx] = A[k];
+      delete A[k];
+      m++;
+    });
+    if (m) { ZS.save(); console.log('已迁移 %d 条截图标注到单张 key', m); }
+  }
+
   async function boot() {
     try {
       const r = await fetch('data/questions.json?v=' + DATA_VER);
@@ -102,6 +122,7 @@ const DATA_VER = 43;
     ZS.load();
     loadSession();
     migrateGuess();
+    migrateAnnoKeys();
     window.addEventListener('hashchange', route);
     route();
     if (ZS.cfg().token) { ZS.pull(true).then(() => render()); }
@@ -483,7 +504,7 @@ const DATA_VER = 43;
         <div class="hd" onclick="ZS_ACC(this)">📖 解析（对应解析册原页）<span class="arw">›</span></div>
         <div class="bd">
           <div class="pages" id="aPages">${aBoxHtml(q)}</div>
-          <div class="acts"><button class="btn" onclick="ZS_ANNO('${id}','a-img')">✍️ 在解析截图上做笔记</button>
+          <div class="acts"><button class="btn" onclick="ZS_ANNO('${id}','a-img-0')">✍️ 在解析截图上做笔记</button>
           <button class="btn" onclick="ZS_ANNO('${id}','a-txt')">✍️ 在解析文字上做笔记</button>
           ${pdfLink('a', S['pg_a_' + id] ? shiftList(q.aPages, S['pg_a_' + id]) : q.aPages, '打开《解析册》PDF')}</div>
           <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">解析文字（点开查看 · 可编辑）<span class="arw">›</span></div>
@@ -626,8 +647,9 @@ const DATA_VER = 43;
       return `<div class="hint" style="padding:14px">本题解析图尚未生成，可点下方「解析册 PDF」查看。</div>`;
     }
     const inner = q.aCrops.map((src, i) =>
-      `<div class="pgwrap crop${thumbMode() ? ' thumb' : ''}" data-tgt="a-img" data-id="${q.id}" data-anno="${q.id}|a-img">
+      `<div class="pgwrap crop${thumbMode() ? ' thumb' : ''}" data-tgt="a-img" data-id="${q.id}" data-anno="${q.id}|a-img-${i}">
         <img loading="lazy" src="img/ac/${src}" alt="本题解析 ${i + 1}" data-label="解析册 第 ${q.aPages[i] - PAGE_OFF.a} 页（本题裁切 ${i + 1}/${q.aCrops.length}）" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
+        <button class="annobtn" onclick="ZS_ANNO('${q.id}','a-img-${i}')" title="在这一张上做笔记">✍️</button>
       </div>`).join('');
     const more = q.aCrops.length > 1
       ? `<span class="tiny muted" style="align-self:center">本题解析共 ${q.aCrops.length} 张（跨页）</span>` : '';
@@ -647,9 +669,10 @@ const DATA_VER = 43;
       const ext = IMGEXT[kind] || 'webp';
       const pn = n - off;
       const lb = (PAGE_NAME[kind] || label) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + n + ' 页');
-      return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="${kind}-img" data-id="${id}" data-anno="${id}|${kind}-img">
+      return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="${kind}-img" data-id="${id}" data-anno="${id}|${kind}-img-${n}">
         <img loading="lazy" src="img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" data-label="${esc(lb)}" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
         <span class="pgno">${PAGE_NAME[kind] || ''} P${n - off >= 1 ? n - off : n}</span>
+        <button class="annobtn" onclick="ZS_ANNO('${id}','${kind}-img-${n}')" title="在这一页上做笔记">✍️</button>
       </div>`;
     }).join('') + `<div class="pager">
       <button class="btn tiny" onclick="ZS_PG('${id}','${kind}',-1)">◀ 上一页</button>
@@ -669,7 +692,7 @@ const DATA_VER = 43;
       let txt = (pages || []).map(n => dict[n] || '').join('\n').trim();
       if (!txt) txt = '（未检索到对应讲义文字，请以截图为准）';
       box.innerHTML = `<div class="pages">${pagesHtml(pages, t, q.id, t === 'k' ? '知识清单' : '速成班讲义')}</div>
-        <div class="acts"><button class="btn" onclick="ZS_ANNO('${q.id}','${t}-img')">✍️ 在讲义截图上做笔记</button>
+        <div class="acts"><button class="btn" onclick="ZS_ANNO('${q.id}','${t}-img-${(t === 'k' ? q.kPages : q.sPages)[0]}')">✍️ 在讲义截图上做笔记</button>
         <button class="btn" onclick="ZS_ANNO('${q.id}','${t}-txt')">✍️ 在讲义文字上做笔记</button>
         ${pdfLink(t, S['pg_' + t + '_' + q.id] ? shiftList(pages, S['pg_' + t + '_' + q.id]) : pages, '打开《' + (t === 'k' ? '知识清单' : '速成班讲义') + '》PDF')}</div>
         <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">讲义文字（点开查看 · 可编辑）<span class="arw">›</span></div>
