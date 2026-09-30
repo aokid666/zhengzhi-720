@@ -848,6 +848,15 @@ const DATA_VER = 42;
           <span class="ebc">清空所有做题记录，重新来过（笔记与手写标注保留）</span>
           <button class="btn tiny" onclick="ZS_REDO_SET('all')">重置</button></div>
       </div>
+      <div class="sec-title">数据备份</div>
+      <div class="card pad">
+        <div class="tiny muted" style="line-height:1.8;margin-bottom:10px">做题记录、笔记、手写标注<b>只存在本机浏览器里</b>。清理浏览器数据或换设备都会丢，建议定期导出一份。</div>
+        <div class="acts">
+          <button class="btn main" onclick="ZS_EXPORT()">⬇️ 导出备份文件</button>
+          <button class="btn" onclick="ZS_IMPORTBOX()">⬆️ 从备份恢复</button>
+          <button class="btn" onclick="ZS_COPY()">📋 复制到剪贴板</button>
+        </div>
+      </div>
       <div class="sec-title">云端同步</div>
       <div class="card pad">
         <div class="tiny muted">数据仓库：${esc(cfg.owner)}/${esc(cfg.repo)} · 文件 ${esc(cfg.file)}<br>
@@ -855,7 +864,7 @@ const DATA_VER = 42;
         <div class="acts">
           <button class="btn main" onclick="ZS_SYNC()">☁️ 立即同步</button>
           <button class="btn" onclick="ZS_CFG()">设置令牌</button>
-          <button class="btn" onclick="ZS_EXPORT()">导出备份</button>
+
         </div>
       </div>
       <div class="sec-title">使用帮助</div>
@@ -1321,8 +1330,61 @@ const DATA_VER = 42;
   window.ZS_EXPORT = () => {
     const blob = new Blob([JSON.stringify(ZS.data, null, 1)], { type: 'application/json' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'zhengzhi720-backup-' + new Date().toISOString().slice(0, 10) + '.json';
-    a.click();
+    a.href = URL.createObjectURL(blob);
+    a.download = 'zhengzhi720-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    ZS.toast('已导出备份文件', 2200);
+  };
+  window.ZS_COPY = async () => {
+    const data = JSON.stringify(ZS.data);
+    try {
+      await navigator.clipboard.writeText(data);
+      ZS.toast('已复制备份内容到剪贴板（' + (data.length / 1024).toFixed(0) + ' KB）', 2600);
+    } catch (e) {
+      document.getElementById('modal').innerHTML = '<div class="box" style="max-width:520px"><h3>备份内容（请手动全选复制）</h3><textarea rows="8" style="width:100%;font-size:11px">' + esc(data) + '</textarea><div class="acts" style="justify-content:flex-end;margin-top:10px"><button class="btn" onclick="ZS_CFGCLOSE()">关闭</button></div></div>';
+      document.getElementById('modal').classList.add('show');
+    }
+  };
+  window.ZS_IMPORTBOX = () => {
+    const m = document.getElementById('modal');
+    m.innerHTML = `<div class="box" style="max-width:540px">
+      <h3>从备份恢复</h3>
+      <div class="tiny muted" style="margin-bottom:10px;line-height:1.8">选择之前导出的备份文件，或把备份 JSON 粘到下面。<br>恢复会<b>覆盖</b>本机现有的做题记录、笔记与手写标注。</div>
+      <div class="fld"><label>① 选择备份文件</label><input type="file" id="impFile" accept=".json,application/json,text/plain"></div>
+      <div class="fld"><label>② 或粘贴备份内容</label><textarea id="impText" rows="5" placeholder="在此粘贴备份 JSON…"></textarea></div>
+      <div class="acts" style="justify-content:flex-end">
+        <button class="btn" onclick="ZS_CFGCLOSE()">取消</button>
+        <button class="btn main" onclick="ZS_DOIMPORT()">恢复</button>
+      </div></div>`;
+    m.classList.add('show');
+    const f = document.getElementById('impFile');
+    f.onchange = () => {
+      const file = f.files && f.files[0];
+      if (!file) return;
+      const fr = new FileReader();
+      fr.onload = () => { document.getElementById('impText').value = fr.result; ZS.toast('已读取文件：' + file.name, 2000); };
+      fr.readAsText(file);
+    };
+  };
+  window.ZS_DOIMPORT = () => {
+    const t = (document.getElementById('impText').value || '').trim();
+    if (!t) return ZS.toast('请先选择文件或粘贴备份内容');
+    let d;
+    try { d = JSON.parse(t); } catch (e) { return ZS.toast('备份内容无法解析，请检查是否完整'); }
+    if (!d || typeof d !== 'object' || (!d.progress && !d.notes && !d.annos && !d.flags)) return ZS.toast('这似乎不是本题库的备份');
+    const np = Object.keys(d.progress || {}).length, nn = Object.keys(d.notes || {}).length, na = Object.keys(d.annos || {}).length;
+    ZS.confirm('确定恢复这份备份吗？\n（做题记录 ' + np + ' 题 · 笔记 ' + nn + ' 条 · 手写标注 ' + na + ' 处）\n会覆盖本机现有数据。', () => {
+      ZS.data.progress = d.progress || {};
+      ZS.data.notes = d.notes || {};
+      ZS.data.annos = d.annos || {};
+      ZS.data.flags = d.flags || {};
+      ZS.data.edit = d.edit || {};
+      ZS.save();
+      ZS_CFGCLOSE();
+      ZS.toast('已恢复备份：做题记录 ' + np + ' 题', 2600);
+      route();
+    });
   };
 
     window.ZS_ANNOVIS = () => {
