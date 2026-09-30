@@ -655,7 +655,7 @@ const DATA_VER = 42;
       <button class="btn tiny" onclick="ZS_PG('${id}','${kind}',-1)">◀ 上一页</button>
       <button class="btn tiny" onclick="ZS_PG('${id}','${kind}',1)">下一页 ▶</button>
       <button class="btn tiny" onclick="ZS_THUMB()">${thumbMode() ? '📖 直读整页' : '🔳 缩略图预览'}</button>
-      <button class="btn tiny" onclick="ZS_GO('lect/${kind}/${pages[0]}')">📚 浏览整本</button>
+      <button class="btn tiny" onclick="ZS_GO('lect/${kind}/${Math.max(1, pages[0] - off)}')">📚 浏览整本</button>
       <span class="tiny muted" style="align-self:center">共 ${pages.length} 页 · 可翻页找相邻内容</span>
     </div>`;
   }
@@ -1129,8 +1129,8 @@ const DATA_VER = 42;
       }).join('') + `</div>`;
     shell(h);
     if (startPage) {
-      /* 图片是懒加载的，页面高度会边加载边变，得多定位几次 */
-      const sp = Number(startPage);
+      /* 图片是懒加载的，页面高度会边加载边变，得多定位几次。参数用「书页码」 */
+      const sp = Number(startPage) + off;
       let tries = 0;
       const jump = () => {
         tries++;
