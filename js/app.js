@@ -705,7 +705,7 @@ const DATA_VER = 43;
 
   /* ---------- 笔记区 ---------- */
   const NC = ['#1f6feb', '#d0342c', '#1f8a5b', '#111111', '#d89055', '#8e44ad'];
-  const NW = [1.2, 1.6, 2.1, 2.8, 3.8, 5.1, 6.8, 9.1];   // 同 ANNO.WIDTHS
+  const NW = [0.18, 0.25, 0.34, 0.45, 0.6, 0.8, 1.05, 1.4];   // 同 ANNO.WIDTHS
   let nd = null;                       // 笔记手写状态
 
   function renderNote(id) {
@@ -809,7 +809,7 @@ const DATA_VER = 43;
     const bd = $('#btnDraw'); if (bd) bd.classList.add('on');
     const cv = wrap.querySelector('canvas');
     const n = ZS.data.notes[id];
-    nd = nd && nd.id === id ? nd : { id: id, wi: 0, color: NC[0], mode: 'pen', scroll: false, cur: null, dirty: false };
+    nd = nd && nd.id === id ? nd : { id: id, wi: 3, color: NC[0], mode: 'pen', scroll: false, cur: null, dirty: false };
     nd.strokes = n.strokes;
 
     cv.style.pointerEvents = nd.scroll ? 'none' : 'auto';

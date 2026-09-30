@@ -5,10 +5,10 @@
 window.ANNO = (function () {
   const COLORS = ['#d0342c', '#1f6feb', '#1f8a5b', '#111111', '#d89055', '#8e44ad'];
   const HL = '#ffd640';
-  const WIDTHS = [1.2, 1.6, 2.1, 2.8, 3.8, 5.1, 6.8, 9.1];   // 8 档：1 档 = 旧 4 档的粗细（1.2），整体上移 3 档
+  const WIDTHS = [0.18, 0.25, 0.34, 0.45, 0.6, 0.8, 1.05, 1.4];   // 8 档：第 4 档 = 原来的 1 档粗细（0.45，默认）
 
   const st = {
-    on: false, color: COLORS[0], wi: 0, mode: 'pen', scroll: false,
+    on: false, color: COLORS[0], wi: 3, mode: 'pen', scroll: false,
     host: null, key: null, strokes: [], cv: null, drawing: false, cur: null, dirty: false
   };
   const seen = new WeakSet();
