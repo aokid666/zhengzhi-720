@@ -5,17 +5,63 @@ const DATA_VER = 42;
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const S = { qs: [], byId: {}, lk: {}, ls: {}, route: '', cur: null, searchQ: '', lastPos: {}, q: null, sb: null };
-  /* 复习/重做会话（跨刷新保留）：S.q = {ids,i,title,mode}；mode = view 复习 / redo 原题重做 / sb 重做区 */
+  const S = { qs: [], byId: {}, lk: {}, ls: {}, route: '', cur: null, searchQ: '', lastPos: {},
+              q: null, sb: null, qlist: [], back: [] };
+  /* 队列：可同时保存多个。S.qlist = [{id,mode,title,ids,i,sb,ts}]，S.q 指向"当前活动"的那个 */
+  const QMODES = { view: '📖 复习', redo: '🔄 原题重做', sb: '🧪 重做区', mock: '🎯 模拟考试' };
   function saveSession() {
-    try { localStorage.setItem('zz720.session', JSON.stringify({ q: S.q, sb: S.sb })); } catch (e) { }
+    if (S.q) { S.q.sb = S.sb || S.q.sb || null; S.q.ts = Date.now(); }
+    try {
+      localStorage.setItem('zz720.session', JSON.stringify({ list: S.qlist || [], cur: S.q ? S.q.id : null }));
+    } catch (e) { }
   }
   function loadSession() {
     try {
       const o = JSON.parse(localStorage.getItem('zz720.session') || 'null');
-      if (o) { S.q = o.q || null; S.sb = o.sb || null; }
+      if (o && Array.isArray(o.list)) {
+        S.qlist = o.list;
+        const cur = o.list.filter(x => x.id === o.cur)[0] || null;
+        S.q = cur; S.sb = cur ? (cur.sb || null) : null;
+      }
     } catch (e) { }
+    updateQBadge();
   }
+  function updateQBadge() {
+    const b = document.getElementById('qbadge');
+    if (!b) return;
+    const n = (S.qlist || []).length;
+    b.textContent = n ? String(n) : '';
+    b.style.display = n ? 'block' : 'none';
+  }
+  function parkQ() {
+    if (S.q) { S.q.sb = S.sb || S.q.sb; if (S.curId) { const k = S.q.ids.indexOf(S.curId); if (k >= 0) S.q.i = k; } }
+    S.q = null; S.sb = null; saveSession(); updateQBadge();
+  }
+  window.ZS_QGO = id => {
+    const q = (S.qlist || []).filter(x => x.id === id)[0];
+    if (!q) return;
+    if (S.q && S.q.id !== id) parkQ();
+    S.q = q; S.sb = q.sb || null; saveSession(); updateQBadge();
+    go('q/' + q.ids[Math.min(q.i || 0, q.ids.length - 1)]);
+  };
+  window.ZS_QDEL = id => {
+    const q = (S.qlist || []).filter(x => x.id === id)[0];
+    if (!q) return;
+    const done = q.sb ? Object.keys(q.sb).length : 0;
+    ZS.confirm('结束这个队列吗？\n「' + q.title + '」共 ' + q.ids.length + ' 题'
+      + (done ? '\n重做区里还有 ' + done + ' 题未同步，结束后会丢弃。' : ''), () => {
+      S.qlist = S.qlist.filter(x => x.id !== id);
+      if (S.q && S.q.id === id) { S.q = null; S.sb = null; }
+      saveSession(); updateQBadge();
+      ZS.toast('已结束该队列');
+      if (S.route === 'queue') renderQueues(); else route();
+    });
+  };
+  /* 返回上一页（页内历史栈） */
+  window.ZS_BACK = () => {
+    if (S.back.length > 1) { S.back.pop(); go(S.back[S.back.length - 1]); }
+    else ZS.toast('已经是最开始了');
+  };
   const inQ = id => !!(S.q && S.q.ids && S.q.ids.indexOf(id) >= 0);
   const inSb = id => !!(S.q && S.q.mode === 'sb' && inQ(id));
 
@@ -75,7 +121,12 @@ const DATA_VER = 42;
   /* 艾宾浩斯复习间隔（天）：答对进下一档，答错回到第 1 档 */
   const EB = [1, 2, 4, 7, 15, 30];
   const DAY = 86400000;
-  function setProg(id, right, guess) {
+  const fmtDur = ms => {
+    const s2 = Math.floor(ms / 1000);
+    return Math.floor(s2 / 60) + ' 分 ' + String(s2 % 60).padStart(2, '0') + ' 秒';
+  };
+  const dayKey = ts => { const d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  function setProg(id, right, guess, sel) {
     const p = ZS.data.progress[id] = ZS.data.progress[id] || { tries: 0, rights: 0, rv: 0 };
     p.tries = (p.tries || 0) + 1;
     if (right) p.rights = (p.rights || 0) + 1;
@@ -87,6 +138,16 @@ const DATA_VER = 42;
     else { p.rv = 0; p.due = Date.now() + DAY / 2; }
     if (!right && autoStar()) { const f = ZS.data.flags[id] = ZS.data.flags[id] || { ts: 0 }; f.star = true; f.ts = Date.now(); }
     delete S['redo_' + id];
+    /* 每日做题量（打卡用） */
+    const dl = ZS.data.daily = ZS.data.daily || {};
+    const dk = dayKey(Date.now());
+    const de = dl[dk] = dl[dk] || { n: 0, r: 0 };
+    de.n++; if (right) de.r++;
+    /* 作答历史 */
+    const H = ZS.data.hist = ZS.data.hist || {};
+    const arr = H[id] = H[id] || [];
+    arr.push({ t: Date.now(), r: right ? 1 : 0, s: (sel || []).join('') });
+    if (arr.length > 30) arr.splice(0, arr.length - 30);
     ZS.save();
   }
   const dueNow = id => { const p = P(id); return !p || !p.due || p.due <= Date.now(); };
@@ -124,12 +185,18 @@ const DATA_VER = 42;
     try { h = decodeURIComponent(h); } catch (e) { }
     S.route = h;
     const [p, a] = h.split('/');
-    /* 离开题目页时，复习/原题重做队列自动结束，省得老是拦着不让开新队列 */
-    if (p !== 'q' && S.q && S.q.mode !== 'sb') { S.q = null; saveSession(); }
+    /* 页面历史栈（供返回按钮用） */
+    if (S.back[S.back.length - 1] !== h) S.back.push(h);
+    if (S.back.length > 40) S.back.splice(0, S.back.length - 40);
+    /* 离开题目页 → 队列「暂存」，可随时从「队列」页继续 */
+    if (p !== 'q') parkQ();
     if (p === 'l' && a) return renderChapter(a);
     if (p === 'q' && a) return renderQuestion(a);
     if (p === 's') return renderSearch();
     if (p === 'me') return renderMe();
+    if (p === 'queue') return renderQueues();
+    if (p === 'stat') return renderStat();
+    if (p === 'notes') return renderNotes();
     return renderHome();
   }
   const go = h => { location.hash = '#/' + h; };
@@ -324,13 +391,24 @@ const DATA_VER = 42;
     const revealed = answered || !!S['rev_' + id];
     if (revealed) { needLect().then(() => { if (S.cur === q && !q._lectDone) { q._lectDone = 1; paintLect(q); } }); }
     const sel = (sbRec ? sbRec.sel : (S['sel_' + id] || [])) || [];
+    /* 模拟考计时器 */
+    clearInterval(S._mt);
+    if (S.q && S.q.mode === 'mock' && S.q.start) {
+      const tick = () => {
+        const el = document.getElementById('mockTime');
+        if (!el) { clearInterval(S._mt); return; }
+        const s2 = Math.floor((Date.now() - S.q.start) / 1000);
+        el.textContent = String(Math.floor(s2 / 60)).padStart(2, '0') + ':' + String(s2 % 60).padStart(2, '0');
+      };
+      tick(); S._mt = setInterval(tick, 1000);
+    }
     const idx = qIndexOf(id);
     let h = `<div class="card" style="margin-top:12px">
       <div class="qhd">
         <button class="iconbtn" onclick="ZS_GO('l/${q.moduleIdx}-${q.chapter}')">☰</button>
         <span class="idx">${esc(q.chapter)} 第 ${q.no} 题</span>
         <span class="chip">${esc(q.section)}</span>
-        ${S.q ? `<span class="qchip">${S.q.mode === 'sb' ? '🧪 重做区' : (S.q.mode === 'redo' ? '🔄 原题重做' : '📖 复习')} ${S.q.ids.indexOf(id) + 1}/${S.q.ids.length}<button onclick="ZS_QEXIT()" title="结束队列">✕</button></span>` : ''}
+        ${S.q ? `<span class="qchip">${QMODES[S.q.mode] || '📖 复习'} ${S.q.ids.indexOf(id) + 1}/${S.q.ids.length}${S.q.mode === 'mock' ? ' · <b id="mockTime">00:00</b>' : ''}<button onclick="ZS_QEXIT()" title="离开队列（可在底部「队列」继续）">✕</button></span>` : ''}
         <span class="sp"></span>
         ${revealed ? `<button class="iconbtn" onclick="ZS_GONOTE('${id}')">📝</button>` : ''}
         <button class="iconbtn ${flag(id, 'star') ? 'on' : ''}" onclick="ZS_FLAG('${id}','star')">★</button>
@@ -774,8 +852,23 @@ const DATA_VER = 42;
   async function renderSearch() {
     showQNav(false);
     await needLect();
+    const mi = S.searchMi === undefined ? '' : S.searchMi;
+    const sc = S.searchScope || 'all';
     shell(`<div id="searchbox"><input id="sq" placeholder="搜索题目 / 解析 / 讲义 / 笔记" value="${esc(S.searchQ)}">
       <button class="btn main" onclick="ZS_DOSEARCH()">搜索</button></div>
+      <div class="acts" style="gap:6px;margin:8px 2px 2px">
+        ${['all:全部', 'q:题干选项', 'a:解析', 'l:讲义', 'n:我的笔记'].map(x => {
+          const k = x.split(':')[0];
+          return `<button class="btn tiny ${sc === k ? 'main' : ''}" onclick="ZS_SEARCHSET('scope','${k}')">${x.split(':')[1]}</button>`;
+        }).join('')}
+      </div>
+      <div class="acts" style="gap:6px;margin:6px 2px 2px">
+        <button class="btn tiny ${mi === '' ? 'main' : ''}" onclick="ZS_SEARCHSET('mi','')">全部模块</button>
+        ${Array.from(new Set(S.qs.map(q => q.moduleIdx))).map(m => {
+          const nm = (S.qs.filter(q => q.moduleIdx == m)[0] || {}).module || '';
+          return `<button class="btn tiny ${String(mi) === String(m) ? 'main' : ''}" onclick="ZS_SEARCHSET('mi','${m}')">${esc(nm.slice(0, 6))}</button>`;
+        }).join('')}
+      </div>
       <div id="sres"></div>`);
     const inp = $('#sq');
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
@@ -792,17 +885,28 @@ const DATA_VER = 42;
     if (k.length < 1) { res.innerHTML = ''; return; }
     const out = [];
     const push = (q, src, text, field) => out.push({ q: q, src: src, text: text, field: field });
+    const SC = S.searchScope || 'all', MI = (S.searchMi === undefined ? '' : S.searchMi);
+    const want = f => SC === 'all' || SC === f;
     S.qs.forEach(q => {
-      const parts = [];
-      if (q.stem.includes(k)) parts.push(['题干', q.stem]);
-      ['A','B','C','D'].forEach(x => { if ((q.options[x] || '').includes(k)) parts.push(['选项' + x, q.options[x]]); });
-      parts.forEach(p => push(q, p[0], highlight(p[1], k), 'q'));
-      const aRaw = q.analysisRaw || '';
-      if (aRaw.includes(k)) push(q, '解析', highlight(cut(aRaw, k), k), 'a');
-      (q.kPages || []).forEach(n => { const t = S.lk[n]; if (t && t.includes(k)) push(q, '知识清单 P' + n, highlight(cut(t, k), k), 'k:' + n); });
-      (q.sPages || []).forEach(n => { const t = S.ls[n]; if (t && t.includes(k)) push(q, '速成班 P' + n, highlight(cut(t, k), k), 's:' + n); });
-      const nt = ZS.data.notes[q.id];
-      if (nt && stripTags(nt.text || '').includes(k)) push(q, '我的笔记', highlight(cut(stripTags(nt.text), k), k), 'n');
+      if (MI !== '' && String(q.moduleIdx) !== String(MI)) return;
+      if (want('q')) {
+        const parts = [];
+        if (q.stem.includes(k)) parts.push(['题干', q.stem]);
+        ['A','B','C','D'].forEach(x => { if ((q.options[x] || '').includes(k)) parts.push(['选项' + x, q.options[x]]); });
+        parts.forEach(p => push(q, p[0], highlight(p[1], k), 'q'));
+      }
+      if (want('a')) {
+        const aRaw = q.analysisRaw || '';
+        if (aRaw.includes(k)) push(q, '解析', highlight(cut(aRaw, k), k), 'a');
+      }
+      if (want('l')) {
+        (q.kPages || []).forEach(n => { const t = S.lk[n]; if (t && t.includes(k)) push(q, '知识清单 P' + n, highlight(cut(t, k), k), 'k:' + n); });
+        (q.sPages || []).forEach(n => { const t = S.ls[n]; if (t && t.includes(k)) push(q, '速成班 P' + n, highlight(cut(t, k), k), 's:' + n); });
+      }
+      if (want('n')) {
+        const nt = ZS.data.notes[q.id];
+        if (nt && stripTags(nt.text || '').includes(k)) push(q, '我的笔记', highlight(cut(stripTags(nt.text), k), k), 'n');
+      }
     });
     // 去重：同题同来源只留第一条
     const seen = new Set(), list = [];
@@ -824,6 +928,202 @@ const DATA_VER = 42;
   }
 
   /* ---------- 我的 ---------- */
+  function renderStat() {
+    showQNav(false);
+    const all = S.qs.map(q => q.id), st = statOf(all);
+    const chs = chapters().map(c => {
+      const done = c.ids.filter(isDone).length;
+      const right = c.ids.filter(id => { const p = P(id); return p && p.s === 'right'; }).length;
+      const wrong = c.ids.filter(isWrongNow).length;
+      return { ...c, done: done, right: right, wrong: wrong,
+               acc: done ? right / done : -1,
+               tries: c.ids.reduce((a, id) => a + (((P(id) || {}).tries) || 0), 0) };
+    });
+    const weak = chs.filter(c => c.done >= 2 && c.acc < 1).sort((a, b) => a.acc - b.acc).slice(0, 10);
+    const daily = ZS.data.daily || {};
+    const days = Object.keys(daily).sort();
+    let streak = 0;
+    for (let i = 0; i < 400; i++) {
+      const k = dayKey(Date.now() - i * 86400000);
+      if (daily[k]) streak++; else if (i > 0) break;
+    }
+    const last30 = Array.from({ length: 30 }, (_, i) => {
+      const ts = Date.now() - (29 - i) * 86400000, k = dayKey(ts);
+      const e = daily[k] || { n: 0, r: 0 };
+      return { k: k, n: e.n, r: e.r };
+    });
+    const mx = Math.max(1, ...last30.map(d => d.n));
+    const today = daily[dayKey(Date.now())] || { n: 0, r: 0 };
+    let h = `<div class="sec-title">📊 学习统计</div>
+      <div class="card pad">
+        <div class="prog" style="color:var(--ink)">
+          <div style="background:#f1f5f4"><b>${st.done}</b><span>已做</span></div>
+          <div style="background:#f1f5f4"><b>${st.right}</b><span>做对</span></div>
+          <div style="background:#f1f5f4"><b>${st.wrong}</b><span>做错</span></div>
+        </div>
+        <div class="tiny muted" style="margin-top:10px">正确率 <b>${st.done ? (st.right / st.done * 100).toFixed(1) : '—'}%</b>　
+          累计作答 <b>${all.reduce((a, id) => a + (((P(id) || {}).tries) || 0), 0)}</b> 次<br>
+          今天做了 <b>${today.n}</b> 题（对 ${today.r}）　连续打卡 <b>${streak}</b> 天</div>
+      </div>
+      <div class="sec-title">📅 最近 30 天</div>
+      <div class="card pad"><div class="bars">${last30.map(d =>
+        `<div class="bar" title="${d.k}：${d.n} 题"><i style="height:${Math.round(d.n / mx * 100)}%"></i><em></em></div>`).join('')}</div>
+        <div class="tiny muted" style="margin-top:6px">峰值 ${mx} 题/天　柱子越高做得越多</div></div>`;
+    if (weak.length) {
+      h += `<div class="sec-title">🎯 最该补的章节（正确率最低）</div><div class="card pad">` +
+        weak.map(c => `<div class="ebrow">
+          <span class="ebl" style="min-width:0;flex:1">${esc(c.ch)} <span class="tiny muted">${esc(c.mod)}</span></span>
+          <span class="ebc">正确率 <b style="color:#c0392b">${(c.acc * 100).toFixed(0)}%</b><br>做过 ${c.done}/${c.ids.length} · 错题 ${c.wrong}</span>
+          <button class="btn tiny main" onclick="ZS_GO('l/${c.mi}-${encodeURIComponent(c.ch)}')">去看</button>
+        </div>`).join('') + `</div>`;
+    }
+    const mods = new Map();
+    chs.forEach(c => { if (!mods.has(c.mi)) mods.set(c.mi, []); mods.get(c.mi).push(c); });
+    h += `<div class="sec-title">📚 全部章节进度</div>`;
+    mods.forEach((list, mi) => {
+      const tot = list.reduce((a, c) => a + c.ids.length, 0);
+      const dn = list.reduce((a, c) => a + c.done, 0);
+      h += `<div class="card pad" style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <b style="color:var(--teal);font-size:15px">${esc(list[0].mod)}</b>
+          <span class="sp" style="flex:1"></span>
+          <span class="tiny muted">${dn}/${tot}</span></div>` +
+        list.map(c => `<div class="ch-row" onclick="ZS_GO('l/${c.mi}-${encodeURIComponent(c.ch)}')">
+          <span class="cn">${esc(c.ch)}</span>
+          <span class="cbar"><i style="width:${c.ids.length ? Math.round(c.done / c.ids.length * 100) : 0}%"></i></span>
+          <span class="tiny muted" style="min-width:76px;text-align:right">${c.done}/${c.ids.length}${
+            c.wrong ? ` · 错<b style="color:#c0392b">${c.wrong}</b>` : ''}${c.acc >= 0 ? ` · ${(c.acc * 100).toFixed(0)}%` : ''}</span>
+        </div>`).join('') + `</div>`;
+    });
+    shell(h);
+  }
+
+  function renderNotes() {
+    showQNav(false);
+    const anBy = {};
+    Object.keys(ZS.data.annos || {}).forEach(k => {
+      const qid = k.split('|')[0];
+      anBy[qid] = (anBy[qid] || 0) + (((ZS.data.annos[k] || {}).strokes) || []).length;
+    });
+    const rows = [];
+    S.qs.forEach(q => {
+      const nt = ZS.data.notes[q.id] || {};
+      const txt = stripTags(nt.text || '').trim();
+      const strokes = (nt.strokes || []).length;
+      const pics = (nt.pics || []).length;
+      const an = anBy[q.id] || 0;
+      if (txt || strokes || pics || an) rows.push({ q: q, txt: txt, an: an, strokes: strokes, pics: pics });
+    });
+    let h = `<div class="sec-title">📝 笔记总览（${rows.length} 题）</div>`;
+    if (!rows.length) h += `<div class="card pad"><div class="tiny muted">还没有笔记。在题目里点「✍️ 在题目与选项上做笔记」「📝 本题笔记区」或解析/讲义上的「✍️ 做笔记」都可以。</div></div>`;
+    else h += `<div class="card pad">` + rows.map(r => `<div class="ebrow" style="cursor:pointer" onclick="ZS_GO('q/${r.q.id}')">
+      <span class="ebl" style="min-width:0;flex:1">${esc(r.q.chapter)} 第 ${r.q.no} 题<br>
+        <span class="tiny muted" style="font-weight:400">${esc(r.txt.slice(0, 34))}${r.txt.length > 34 ? '…' : ''}</span></span>
+      <span class="ebc" style="flex:0 0 auto">${r.an ? `✍️${r.an} ` : ''}${r.strokes ? `🖊${r.strokes} ` : ''}${r.pics ? `🖼${r.pics}` : ''}</span>
+    </div>`).join('') + `</div>`;
+    h += `<div class="sec-title">🖨 错题本</div>
+      <div class="card pad"><div class="tiny muted" style="line-height:1.8;margin-bottom:10px">把当前所有错题整理成一份可打印 / 存 PDF 的清单。</div>
+        <div class="acts"><button class="btn main" onclick="ZS_PRINT()">生成错题本</button></div></div>`;
+    shell(h);
+  }
+
+  /* 错题本：打开可打印的清单 */
+  window.ZS_PRINT = () => {
+    const list = S.qs.filter(q => isWrongNow(q.id));
+    if (!list.length) return ZS.toast('目前没有错题');
+    const grp = new Map();
+    list.forEach(q => {
+      const k = q.module + ' ／ ' + q.chapter;
+      if (!grp.has(k)) grp.set(k, []);
+      grp.get(k).push(q);
+    });
+    let body = `<h1>考研政治 错题本</h1><div class="sub">共 ${list.length} 题 · 导出于 ${new Date().toLocaleString('zh-CN')}</div>`;
+    grp.forEach((qs, k) => {
+      body += `<h2>${esc(k)}</h2>`;
+      qs.forEach(q => {
+        const p = P(q.id) || {};
+        body += `<div class="q"><div class="stem">${esc(q.no)}. ${esc(q.stem)}</div>
+          <div class="opts">${['A', 'B', 'C', 'D'].map(x => q.options[x] ? `<div>${x}. ${esc(q.options[x])}</div>` : '').join('')}</div>
+          <div class="ans">正确答案：<b>${esc(q.answer)}</b>　（做过 ${p.tries || 0} 次，对 ${p.rights || 0} 次）</div>
+          <div class="an">${esc((q.analysisRaw || '').slice(0, 260))}</div></div>`;
+      });
+    });
+    const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>考研政治 错题本（${list.length} 题）</title>
+      <style>body{font:15px/1.85 -apple-system,"PingFang SC",sans-serif;max-width:820px;margin:0 auto;padding:22px;color:#1d2b2a}
+      h1{font-size:22px;color:#0c514e;margin:0 0 4px}.sub{color:#6b7c7a;font-size:13px;margin-bottom:18px}
+      h2{font-size:16px;color:#0c514e;border-left:4px solid #0c514e;padding-left:8px;margin:24px 0 10px}
+      .q{margin-bottom:18px;padding-bottom:14px;border-bottom:1px dashed #dbe4e2;page-break-inside:avoid}
+      .stem{font-weight:600}.opts{margin:6px 0 6px 14px;color:#33454a;font-size:14px}
+      .ans{color:#0c514e;font-size:13.5px}.an{color:#5a6b69;font-size:13px;margin-top:5px;white-space:pre-wrap}
+      @media print{body{padding:0}h2{page-break-after:avoid}}</style></head><body>${body}
+      <div style="margin-top:26px;text-align:center"><button onclick="window.print()" style="font-size:16px;padding:10px 22px;border-radius:10px;border:1px solid #0c514e;background:#0c514e;color:#fff">🖨 打印 / 存为 PDF</button></div>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+    else {
+      const blob = new Blob([html], { type: 'text/html' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = '错题本-' + dayKey(Date.now()) + '.html';
+      document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 3000);
+      ZS.toast('已生成错题本文件');
+    }
+  };
+
+  function renderQueues() {
+    showQNav(false);
+    const list = S.qlist || [];
+    let h = `<div class="sec-title">🗂 我的队列</div>`;
+    if (!list.length) {
+      h += `<div class="card pad"><div class="tiny muted" style="line-height:1.9">还没有进行中的队列。<br>
+        从首页的「错题 & 蒙对」「艾宾浩斯复习」按钮开始，或在下方开一场模拟考试 —— 中途离开也不会丢，随时能回来继续。</div></div>`;
+    } else {
+      h += `<div class="card pad">` + list.map(q => {
+        const done = q.sb ? Object.keys(q.sb).length : 0;
+        const cur = S.q && S.q.id === q.id;
+        const at = Math.min((q.i || 0) + 1, q.ids.length);
+        return `<div class="ebrow">
+          <span class="ebl">${QMODES[q.mode] || '队列'}</span>
+          <span class="ebc">${esc(q.title)}<br>第 ${at} / ${q.ids.length} 题${done ? ` · 重做区已做 <b>${done}</b>` : ''}${cur ? ' · <b style="color:var(--teal)">进行中</b>' : ''}</span>
+          <button class="btn tiny ${cur ? '' : 'main'}" onclick="ZS_QGO('${q.id}')">${cur ? '回到' : '继续'}</button>
+          <button class="btn tiny" onclick="ZS_QDEL('${q.id}')">结束</button>
+        </div>`;
+      }).join('') + `</div>`;
+    }
+    h += `<div class="sec-title">🎯 模拟考试</div>
+      <div class="card pad">
+        <div class="tiny muted" style="line-height:1.8;margin-bottom:10px">随机抽题、计时作答，交卷后统一给分。作答只记在重做区，交卷时再决定是否同步到原题。</div>
+        <div class="acts">
+          <button class="btn main" onclick="ZS_MOCK(33)">33 题（真题题量）</button>
+          <button class="btn" onclick="ZS_MOCK(16)">16 题快测</button>
+          <button class="btn" onclick="ZS_MOCK(50)">50 题</button>
+        </div>
+      </div>
+      <div class="sec-title">快捷入口</div>
+      <div class="card pad"><div class="acts">
+        <button class="btn" onclick="ZS_GO('stat')">📊 学习统计 / 薄弱章节</button>
+        <button class="btn" onclick="ZS_GO('notes')">📝 笔记总览</button>
+      </div></div>`;
+    shell(h);
+  }
+
+  /* 模拟考试：随机抽题 → 重做区队列 */
+  window.ZS_MOCK = n => {
+    const pool = S.qs.filter(q => !isDone(q.id));
+    let src = pool.length >= n ? pool : S.qs;
+    const picked = src.slice().sort(() => Math.random() - 0.5).slice(0, Math.min(n, src.length));
+    if (!picked.length) return ZS.toast('没有可用的题目');
+    if (S.q) parkQ();
+    const nq = { id: 'M' + Date.now().toString(36), mode: 'mock', title: '模拟考试 ' + picked.length + ' 题',
+                 ids: picked.map(q => q.id), i: 0, sb: {}, ts: Date.now(), start: Date.now() };
+    S.qlist = S.qlist || []; S.qlist.unshift(nq);
+    S.q = nq; S.sb = nq.sb;
+    saveSession(); updateQBadge();
+    go('q/' + nq.ids[0]);
+    ZS.toast('模拟考试开始：' + picked.length + ' 题，交卷后统一给分', 3000);
+  };
+
   function renderMe() {
     showQNav(false);
     const all = S.qs.map(q => q.id), st = statOf(all);
@@ -916,7 +1216,7 @@ const DATA_VER = 42;
       ZS.toast(ok ? '✔ 做对了（重做区，未写入原记录）' : '✘ 答案：' + q.answer);
       return;
     }
-    setProg(id, ok, false);
+    setProg(id, ok, false, sel);
     renderQuestion(id);
     ZS.toast(ok ? '✔ 做对了' : '✘ 答案：' + q.answer);
     const r = document.querySelector('#view .res');
@@ -1049,7 +1349,12 @@ const DATA_VER = 42;
     document.querySelectorAll('#modal .pkmi').forEach(m => { m.checked = v; m.indeterminate = false; });
     refreshPicked();
   };
-  window.ZS_PK_COUNT = () => 0;
+  window.ZS_SHUFFLE = () => {
+    S.shuffle = !S.shuffle;
+    const b = Array.from(document.querySelectorAll('#modal .btn.tiny')).find(x => /打乱顺序/.test(x.textContent));
+    if (b) b.className = 'btn tiny' + (S.shuffle ? ' main' : '');
+    ZS.toast(S.shuffle ? '本次会打乱顺序' : '本次按原顺序');
+  };
 
   window.ZS_PICK = (scope, title) => {
     const list = pickList(scope);
@@ -1071,6 +1376,7 @@ const DATA_VER = 42;
       <div class="acts" style="gap:6px;margin-bottom:8px">
         <button class="btn tiny" onclick="ZS_PK_ALL(1)">全选</button>
         <button class="btn tiny" onclick="ZS_PK_ALL(0)">全不选</button>
+        <button class="btn tiny ${S.shuffle ? 'main' : ''}" onclick="ZS_SHUFFLE()">🔀 打乱顺序</button>
         <span class="tiny muted" style="align-self:center">已选 <b id="pkCount">${list.length}</b> 题</span>
       </div>
       <div class="pktree">${buildPickTree()}</div>
@@ -1090,27 +1396,30 @@ const DATA_VER = 42;
     if (!PICK) return;
     const scope = PICK.scope;
     const set = new Set(Array.from(document.querySelectorAll('#modal .pkch:checked')).map(c => c.getAttribute('data-mi') + '|' + c.getAttribute('data-ch')));
-    const list = PICK.list.filter(q => set.has(pickKey(q)));
+    let list = PICK.list.filter(q => set.has(pickKey(q)));
+    if (S.shuffle) list = list.slice().sort(() => Math.random() - 0.5);
     ZS_CFGCLOSE();
     if (!list.length) return ZS.toast('至少要勾选一个章节');
-    S.q = { ids: list.map(q => q.id), title: PICK.title, mode: mode };
-    if (mode === 'sb') S.sb = {};
+    const nq = { id: 'Q' + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36),
+                 mode: mode, title: PICK.title, ids: list.map(x => x.id), i: 0,
+                 sb: mode === 'sb' ? {} : null, ts: Date.now() };
+    S.qlist = S.qlist || [];
+    S.qlist.unshift(nq);
+    S.q = nq; S.sb = nq.sb;
     if (mode === 'redo') list.forEach(q => { S['redo_' + q.id] = true; S['sel_' + q.id] = []; });
-    saveSession();
+    saveSession(); updateQBadge();
     go('q/' + S.q.ids[0]);
     ZS.toast(mode === 'sb' ? ('已进入重做区：' + list.length + ' 题，作答不影响原记录')
       : (mode === 'redo' ? ('已进入原题重做：共 ' + list.length + ' 题') : ('已进入复习：共 ' + list.length + ' 题')), 2600);
     PICK = null;
   };
 
+  /* ✕ = 离开队列（暂存起来，之后可从「队列」页继续），不销毁 */
   window.ZS_QEXIT = () => {
-    const sb = S.sb ? Object.keys(S.sb).length : 0;
-    const msg = sb ? '重做区里已经做了 ' + sb + ' 题，还没同步。确定退出吗？\n（退出后这些作答会丢弃，原记录不变）'
-                   : '确定结束当前队列吗？';
-    ZS.confirm(msg, () => {
-      S.q = null; S.sb = null; saveSession(); route();
-      ZS.toast('已退出队列');
-    });
+    const t = S.q ? S.q.title : '';
+    parkQ();
+    ZS.toast('已离开「' + t + '」，可在底部「队列」里继续', 2600);
+    go('');
   };
 
   /* 重做区：结算 */
@@ -1123,6 +1432,7 @@ const DATA_VER = 42;
       <h3>本次重做区结果</h3>
       <div style="font-size:15px;line-height:1.9;margin-bottom:14px">
         共做 <b>${ids.length}</b> 题，做对 <b style="color:var(--ok)">${right}</b> 题，做错 <b style="color:#c0392b">${ids.length - right}</b> 题。
+        ${S.q && S.q.start ? `<br>用时 <b>${fmtDur(Date.now() - S.q.start)}</b>，得分 <b>${ids.length ? Math.round(right / ids.length * 100) : 0}</b> 分（百分制）` : ''}
       </div>
       <div class="tiny muted" style="margin-bottom:12px">同步会把这次的作答计入原题的做题次数与艾宾浩斯复习计划。</div>
       <div class="acts" style="flex-direction:column;align-items:stretch;gap:9px">
@@ -1136,8 +1446,10 @@ const DATA_VER = 42;
   window.ZS_SB_APPLY = apply => {
     ZS_CFGCLOSE();
     const ids = S.sb ? Object.keys(S.sb) : [];
-    if (apply) ids.forEach(id => setProg(id, S.sb[id].right, false));
-    S.q = null; S.sb = null; saveSession();
+    if (apply) ids.forEach(id => setProg(id, S.sb[id].right, false, S.sb[id].sel));
+    const qid = S.q ? S.q.id : null;
+    S.qlist = (S.qlist || []).filter(x => x.id !== qid);
+    S.q = null; S.sb = null; saveSession(); updateQBadge();
     ZS.toast(apply ? '已把 ' + ids.length + ' 题的结果同步到原题' : '已丢弃本次结果', 2600);
     go('');
   };
@@ -1227,6 +1539,7 @@ const DATA_VER = 42;
     });
   };
   window.ZS_DOSEARCH = doSearch;
+  window.ZS_SEARCHSET = (k, v) => { if (k === 'mi') S.searchMi = v; else S.searchScope = v; renderSearch(); };
   window.ZS_PG = (id, kind, d) => {
     const q = S.byId[id];
     const pages = kind === 'a' ? q.aPages : (kind === 'k' ? q.kPages : q.sPages);
