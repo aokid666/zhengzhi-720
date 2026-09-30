@@ -1,5 +1,5 @@
 /* 720题 主应用 */
-const DATA_VER = 42;
+const DATA_VER = 43;
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
