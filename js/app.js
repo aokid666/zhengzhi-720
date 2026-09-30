@@ -626,8 +626,8 @@ const DATA_VER = 43;
       return `<div class="hint" style="padding:14px">本题解析图尚未生成，可点下方「解析册 PDF」查看。</div>`;
     }
     const inner = q.aCrops.map((src, i) =>
-      `<div class="pgwrap crop${thumbMode() ? ' thumb' : ''}" data-tgt="a-img" data-id="${q.id}">
-        <img loading="lazy" src="img/ac/${src}" alt="本题解析 ${i + 1}" data-label="解析册 第 ${q.aPages[i] - PAGE_OFF.a} 页（本题裁切 ${i + 1}/${q.aCrops.length}）" onclick="ZS_ZOOM(this)">
+      `<div class="pgwrap crop${thumbMode() ? ' thumb' : ''}" data-tgt="a-img" data-id="${q.id}" data-anno="${q.id}|a-img">
+        <img loading="lazy" src="img/ac/${src}" alt="本题解析 ${i + 1}" data-label="解析册 第 ${q.aPages[i] - PAGE_OFF.a} 页（本题裁切 ${i + 1}/${q.aCrops.length}）" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
       </div>`).join('');
     const more = q.aCrops.length > 1
       ? `<span class="tiny muted" style="align-self:center">本题解析共 ${q.aCrops.length} 张（跨页）</span>` : '';
@@ -647,8 +647,8 @@ const DATA_VER = 43;
       const ext = IMGEXT[kind] || 'webp';
       const pn = n - off;
       const lb = (PAGE_NAME[kind] || label) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + n + ' 页');
-      return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="${kind}-img" data-id="${id}">
-        <img loading="lazy" src="img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" data-label="${esc(lb)}" onclick="ZS_ZOOM(this)">
+      return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="${kind}-img" data-id="${id}" data-anno="${id}|${kind}-img">
+        <img loading="lazy" src="img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" data-label="${esc(lb)}" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
         <span class="pgno">${PAGE_NAME[kind] || ''} P${n - off >= 1 ? n - off : n}</span>
       </div>`;
     }).join('') + `<div class="pager">
@@ -1690,6 +1690,12 @@ const DATA_VER = 43;
     if (k < 0 || k >= ZL.length) return;
     openZoom(ZL, k);
   };
+  let _annoT = null;
+  window.ZS_ANNOSYNC = () => {
+    clearTimeout(_annoT);
+    _annoT = setTimeout(() => { try { ANNO.renderScope(); } catch (e) { } }, 140);
+  };
+
   window.ZS_ZOOM = img => {
     const box = img.closest('.pages') || img.parentElement;
     const all = Array.from(box.querySelectorAll('img')).map(x => ({ src: x.getAttribute('src'), label: x.getAttribute('data-label') || '' }));

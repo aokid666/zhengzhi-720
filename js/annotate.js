@@ -104,7 +104,7 @@ window.ANNO = (function () {
     const cv = ensure(host);
     if (!fit(host, cv)) {
       tries = tries || 0;
-      if (tries < 8) setTimeout(() => renderOne(host, tries + 1), 350);
+      if (tries < 24) setTimeout(() => renderOne(host, tries + 1), 350);
       return;
     }
     paint(cv, rec.strokes, host.clientWidth, host.clientHeight);
