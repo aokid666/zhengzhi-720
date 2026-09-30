@@ -155,6 +155,13 @@ const DATA_VER = 42;
   const isWrongNow = id => { const p = P(id); return !!(p && p.s === 'wrong'); };
   const isFixed = id => { const p = P(id); return !!(p && p.s === 'right' && (p.tries || 0) > (p.rights || 0)); };
   /* 「错题&蒙对」复习时是否把「已订正」也带上 */
+  /* 讲义/解析截图：直读整页 还是 缩略图预览 */
+  const thumbMode = () => localStorage.getItem('zz720.thumb') === '1';
+  window.ZS_THUMB = () => {
+    localStorage.setItem('zz720.thumb', thumbMode() ? '0' : '1');
+    ZS.toast(thumbMode() ? '已切到「直读整页」' : '已切到「缩略图预览」（点图放大看原页）');
+    route();
+  };
   const incFix = () => localStorage.getItem('zz720.incfix') === '1';
   window.ZS_INCFIX = () => {
     localStorage.setItem('zz720.incfix', incFix() ? '0' : '1');
@@ -195,6 +202,7 @@ const DATA_VER = 42;
     if (p === 's') return renderSearch();
     if (p === 'me') return renderMe();
     if (p === 'queue') return renderQueues();
+    if (p === 'lect' && a) return renderLectAll(a, location.hash.split('/')[2]);
     if (p === 'stat') return renderStat();
     if (p === 'notes') return renderNotes();
     return renderHome();
@@ -618,8 +626,8 @@ const DATA_VER = 42;
       return `<div class="hint" style="padding:14px">本题解析图尚未生成，可点下方「解析册 PDF」查看。</div>`;
     }
     const inner = q.aCrops.map((src, i) =>
-      `<div class="pgwrap crop" data-tgt="a-img" data-id="${q.id}">
-        <img loading="lazy" src="img/ac/${src}" alt="本题解析 ${i + 1}" onclick="ZS_ZOOM(this)">
+      `<div class="pgwrap crop${thumbMode() ? ' thumb' : ''}" data-tgt="a-img" data-id="${q.id}">
+        <img loading="lazy" src="img/ac/${src}" alt="本题解析 ${i + 1}" data-label="解析册 第 ${q.aPages[i] - PAGE_OFF.a} 页（本题裁切 ${i + 1}/${q.aCrops.length}）" onclick="ZS_ZOOM(this)">
       </div>`).join('');
     const more = q.aCrops.length > 1
       ? `<span class="tiny muted" style="align-self:center">本题解析共 ${q.aCrops.length} 张（跨页）</span>` : '';
@@ -637,13 +645,17 @@ const DATA_VER = 42;
       const nn = String(n).padStart(4, '0');
       const off = PAGE_OFF[kind] || 0;
       const ext = IMGEXT[kind] || 'webp';
-      return `<div class="pgwrap" data-tgt="${kind}-img" data-id="${id}">
-        <img loading="lazy" src="img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" onclick="ZS_ZOOM(this)">
-        <span class="pgno">${PAGE_NAME[kind] || ''} P${n - off}</span>
+      const pn = n - off;
+      const lb = (PAGE_NAME[kind] || label) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + n + ' 页');
+      return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="${kind}-img" data-id="${id}">
+        <img loading="lazy" src="img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" data-label="${esc(lb)}" onclick="ZS_ZOOM(this)">
+        <span class="pgno">${PAGE_NAME[kind] || ''} P${n - off >= 1 ? n - off : n}</span>
       </div>`;
     }).join('') + `<div class="pager">
       <button class="btn tiny" onclick="ZS_PG('${id}','${kind}',-1)">◀ 上一页</button>
       <button class="btn tiny" onclick="ZS_PG('${id}','${kind}',1)">下一页 ▶</button>
+      <button class="btn tiny" onclick="ZS_THUMB()">${thumbMode() ? '📖 直读整页' : '🔳 缩略图预览'}</button>
+      <button class="btn tiny" onclick="ZS_GO('lect/${kind}/${pages[0]}')">📚 浏览整本</button>
       <span class="tiny muted" style="align-self:center">共 ${pages.length} 页 · 可翻页找相邻内容</span>
     </div>`;
   }
@@ -1070,6 +1082,32 @@ const DATA_VER = 42;
       ZS.toast('已生成错题本文件');
     }
   };
+
+  function renderLectAll(kind, startPage) {
+    showQNav(false);
+    const name = PAGE_NAME[kind] || kind;
+    const ext = IMGEXT[kind] || 'webp';
+    const total = { k: 326, s: 197 }[kind] || 0;
+    const off = PAGE_OFF[kind] || 0;
+    let h = `<div class="sec-title">📚 ${esc(name)} · 全 ${total} 页</div>
+      <div class="acts" style="gap:6px;margin-bottom:8px">
+        <span class="tiny muted" style="align-self:center">快速跳转</span>
+        ${[1, 41, 81, 121, 161, 201, 241, 281, 321].filter(p => p <= total).map(p =>
+          `<button class="btn tiny" onclick="location.hash='#/lect/${kind}/${p}';location.reload()">P${p - off >= 1 ? p - off : p}</button>`).join('')}
+      </div>
+      <div class="pages">` +
+      Array.from({ length: total }, (_, i) => i + 1).map(pg => {
+        const nn = String(pg).padStart(4, '0');
+        return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" id="lp${pg}">
+          <img loading="lazy" style="aspect-ratio:${kind === 's' ? '2068/2924' : '2552/3438'}" src="img/${kind}/${nn}.${ext}" data-label="${esc(name)}${pg - off >= 1 ? ' 第 ' + (pg - off) + ' 页' : ' PDF 第 ' + pg + ' 页'}" onclick="ZS_ZOOM(this)">
+          <span class="pgno">${esc(name)} P${pg - off >= 1 ? pg - off : pg}</span></div>`;
+      }).join('') + `</div>`;
+    shell(h);
+    if (startPage) {
+      const jump = () => { const el = document.getElementById('lp' + startPage); if (el) el.scrollIntoView({ block: 'start' }); };
+      setTimeout(jump, 350); setTimeout(jump, 1500); setTimeout(jump, 3000);
+    }
+  }
 
   function renderQueues() {
     showQNav(false);
@@ -1561,31 +1599,44 @@ const DATA_VER = 42;
   function shiftList(pages, n) {
     const s = new Set(pages || []); s.add(n); return Array.from(s).sort((a, b) => a - b);
   }
-  window.ZS_ZOOM = img => {
-    let m = document.getElementById('modal');
+  let ZL = null, ZI = 0;
+  function openZoom(list, i) {
+    ZL = list; ZI = i;
+    const cur = list[i] || { src: '', label: '' };
+    const m = document.getElementById('modal');
     m.innerHTML = `<div id="zoomBox">
       <div id="zoomBar">
-        <button class="iconbtn" onclick="ZS_ZOOMSET('fit')">适应宽度</button>
-        <button class="iconbtn" onclick="ZS_ZOOMSET('100')">原始大小</button>
-        <button class="iconbtn" onclick="ZS_ZOOMSET('200')">放大 2×</button>
+        ${list.length > 1 ? `<button class="iconbtn" onclick="ZS_ZNAV(-1)" ${i <= 0 ? 'disabled' : ''}>‹ 上一页</button>` : ''}
+        <span id="zoomTitle">${esc(cur.label || '')}${list.length > 1 ? `　(${i + 1}/${list.length})` : ''}</span>
         <span style="flex:1"></span>
-        <button class="iconbtn" onclick="ZS_CFGCLOSE()">✕ 关闭</button>
+        <button class="iconbtn" onclick="ZS_ZOOMSET('fit')">适应宽度</button>
+        <button class="iconbtn" onclick="ZS_ZOOMSET('100')">原始</button>
+        <button class="iconbtn" onclick="ZS_ZOOMSET('200')">2×</button>
+        ${list.length > 1 ? `<button class="iconbtn" onclick="ZS_ZNAV(1)" ${i >= list.length - 1 ? 'disabled' : ''}>下一页 ›</button>` : ''}
+        <button class="iconbtn" onclick="ZS_CFGCLOSE()">✕</button>
       </div>
-      <div id="zoomScroll"><img id="zoomImg" src="${img.src}" alt=""></div>
+      <div id="zoomScroll"><img id="zoomImg" src="${cur.src}" alt="" onload="ZS_ZOOMSET(localStorage.getItem('zz720.zoom') || 'fit')"></div>
     </div>`;
     m.classList.add('show');
     document.body.style.overflow = 'hidden';
-    window.__zoomSrc = img.src;
+    window.__zoomSrc = cur.src;
     ZS_ZOOMSET(localStorage.getItem('zz720.zoom') || 'fit');
+    const sc = document.getElementById('zoomScroll'); if (sc) sc.scrollTop = 0;
+  }
+  window.ZS_ZNAV = d => {
+    if (!ZL) return;
+    const k = ZI + d;
+    if (k < 0 || k >= ZL.length) return;
+    openZoom(ZL, k);
   };
-  window.ZS_ZOOMSRC = src => {
-    let m = document.getElementById('modal');
-    m.innerHTML = `<div id="zoomBox"><div id="zoomBar">
-      <span style="flex:1"></span><button class="iconbtn" onclick="ZS_CFGCLOSE()">✕ 关闭</button></div>
-      <div id="zoomScroll"><img id="zoomImg" src="${src}"></div></div>`;
-    m.classList.add('show');
-    ZS_ZOOMSET('fit');
+  window.ZS_ZOOM = img => {
+    const box = img.closest('.pages') || img.parentElement;
+    const all = Array.from(box.querySelectorAll('img')).map(x => ({ src: x.getAttribute('src'), label: x.getAttribute('data-label') || '' }));
+    let i = all.map(o => o.src).indexOf(img.getAttribute('src'));
+    if (i < 0) { all.length = 0; all.push({ src: img.getAttribute('src'), label: img.getAttribute('data-label') || '' }); i = 0; }
+    openZoom(all, i);
   };
+  window.ZS_ZOOMSRC = src => { openZoom([{ src: src, label: '' }], 0); };
   window.ZS_ZOOMSET = mode => {
     const im = document.getElementById('zoomImg'); if (!im) return;
     localStorage.setItem('zz720.zoom', mode);

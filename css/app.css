@@ -306,3 +306,14 @@ body.annomode #qfab{display:none}
 .ch-row .cn{flex:0 0 auto;min-width:96px;color:#33454a}
 .ch-row .cbar{flex:1;height:7px;background:#eef3f2;border-radius:4px;overflow:hidden}
 .ch-row .cbar i{display:block;height:100%;background:var(--teal);border-radius:4px}
+
+/* ---------- 缩略图预览模式 ---------- */
+.pgwrap.thumb{max-height:168px;overflow:hidden;position:relative;cursor:zoom-in}
+.pgwrap.thumb img{width:100%;display:block}
+.pgwrap.thumb::after{content:"👁 点击放大查看原页";position:absolute;left:0;right:0;bottom:0;
+  padding:30px 10px 9px;text-align:center;font-size:12.5px;color:#fff;letter-spacing:.5px;
+  background:linear-gradient(transparent,rgba(12,81,78,.86))}
+.pgwrap.thumb .pgno{bottom:auto;top:6px}
+#zoomTitle{color:#fff;opacity:.9;font-size:12.5px;max-width:42vw;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;padding:0 6px}
+#zoomBar .iconbtn[disabled]{opacity:.3;pointer-events:none}
