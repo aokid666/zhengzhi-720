@@ -599,7 +599,10 @@ const DATA_VER = 43;
   const IMGEXT = { a: 'webp', k: 'webp', s: 'jpg' };
   /* 图片 / PDF 放在独立仓库（各自 1GB 额度），同源 aokid666.github.io，可直接引用 */
   const IMGBASE = 'https://aokid666.github.io/zz-img/';
+  const ACBASE  = 'https://aokid666.github.io/zz-ac/';    // 解析裁切图 · 原格式 JPEG
   const PDFBASE = 'https://aokid666.github.io/zz-pdf/';
+  /* 解析裁切图已改为原格式 JPEG（不做格式转码），数据里的文件名仍带 .webp，这里替换扩展名 */
+  const acSrc = f => String(f).replace(/\.webp$/i, '.jpg');
   const PDFCHUNK = { a: 20, k: 10, q: 0, s: 0 };     // 0 = 不分卷
   const PDFTOTAL = { a: 460, k: 326, q: 164, s: 197 };
   const pad3 = n => String(n).padStart(3, '0');
@@ -651,7 +654,7 @@ const DATA_VER = 43;
     }
     const inner = q.aCrops.map((src, i) =>
       `<div class="pgwrap crop${thumbMode() ? ' thumb' : ''}" data-tgt="a-img" data-id="${q.id}" data-anno="${q.id}|a-img-${i}">
-        <img loading="lazy" src="${IMGBASE}img/ac/${src}" alt="本题解析 ${i + 1}" data-label="解析册 第 ${q.aPages[i] - PAGE_OFF.a} 页（本题裁切 ${i + 1}/${q.aCrops.length}）" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
+        <img loading="lazy" src="${ACBASE}img/ac/${acSrc(src)}" alt="本题解析 ${i + 1}" data-label="解析册 第 ${q.aPages[i] - PAGE_OFF.a} 页（本题裁切 ${i + 1}/${q.aCrops.length}）" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
         <button class="annobtn" onclick="ZS_ANNO('${q.id}','a-img-${i}')" title="在这一张上做笔记">✍️</button>
       </div>`).join('');
     const more = q.aCrops.length > 1
