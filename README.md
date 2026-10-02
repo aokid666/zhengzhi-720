@@ -28,15 +28,27 @@ index.html          单页应用入口
 css/app.css
 js/store.js         本地存储 + GitHub 云同步
 js/annotate.js      手写标注引擎（编辑态 / 只读态）
-js/app.js           路由与业务逻辑
+js/app.js           路由与业务逻辑（图片/PDF 指向独立资源仓库）
 data/questions.json 题库（题干、选项、答案、解析、讲义页码）
 data/lecture-k.json 知识清单逐页 OCR 文字
 data/lecture-s.json 速成班讲义逐页文字
-img/a/*.jpg         解析册 460 页
-img/k/*.jpg         知识清单 326 页
-img/s/*.jpg         速成班讲义 197 页
 使用说明.md
 ```
+
+### 资源仓库（2026-10-02 拆分）
+
+为避开 GitHub Pages 单站点 1 GB 上限，**图片与 PDF 已迁到两个独立仓库**，本仓库只剩程序与数据（约 3.6 MB）：
+
+| 仓库 | 网址 | 内容 | 体积 |
+|---|---|---|---|
+| `zz-img` | https://aokid666.github.io/zz-img/ | `img/`（s 速成班 / k 知识清单 / ac 解析裁切图） | 654 MB |
+| `zz-pdf` | https://aokid666.github.io/zz-pdf/ | `pdf/` 58 个分卷 PDF | 224 MB |
+
+- 三者同属 `aokid666.github.io`，**同源**，`<img>` 直接引用即可，画布不会被污染（笔记导出正常）。
+- 代码里对应 `js/app.js` 顶部的 `IMGBASE` / `PDFBASE` 两个常量，改路径只改这两行。
+- ⚠️ 以后**不要**给其中一个站绑自定义域名或换第三方 CDN，否则跨源会导致笔记导出报 `SecurityError`。
+- 更新资源时要往对应仓库单独推送。
+
 
 ## 版权
 
