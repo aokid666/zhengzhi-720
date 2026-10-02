@@ -597,6 +597,9 @@ const DATA_VER = 43;
   const PAGE_NAME = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
   const PDFFILE = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
   const IMGEXT = { a: 'webp', k: 'webp', s: 'jpg' };
+  /* 图片 / PDF 放在独立仓库（各自 1GB 额度），同源 aokid666.github.io，可直接引用 */
+  const IMGBASE = 'https://aokid666.github.io/zz-img/';
+  const PDFBASE = 'https://aokid666.github.io/zz-pdf/';
   const PDFCHUNK = { a: 20, k: 10, q: 0, s: 0 };     // 0 = 不分卷
   const PDFTOTAL = { a: 460, k: 326, q: 164, s: 197 };
   const pad3 = n => String(n).padStart(3, '0');
@@ -620,7 +623,7 @@ const DATA_VER = 43;
       list.push(seen[c.file]);
     });
     return list.map(c => `<a class="btn pdflink" target="_blank" rel="noopener"
-      href="pdf/${encodeURIComponent(c.file)}#page=${c.page}&zoom=page-width">📄 ${label}${c.cnt > 1 ? ' +' : ''}<span class="tiny muted">（第 ${c.first - off} 页）</span></a>`).join('') + jumpBox(kind);
+      href="${PDFBASE}pdf/${encodeURIComponent(c.file)}#page=${c.page}&zoom=page-width">📄 ${label}${c.cnt > 1 ? ' +' : ''}<span class="tiny muted">（第 ${c.first - off} 页）</span></a>`).join('') + jumpBox(kind);
   }
 
   /* 跳页：输入书上的页码 → 自动选对分卷并打开 */
@@ -635,7 +638,7 @@ const DATA_VER = 43;
     if (!n || n < 1 || n > max) return ZS.toast('请输入 1–' + max + ' 之间的书页码');
     const c = chunkOf(kind, n + (PAGE_OFF[kind] || 0));
     const a = document.createElement('a');
-    a.href = 'pdf/' + encodeURIComponent(c.file) + '#page=' + c.page + '&zoom=page-width';
+    a.href = PDFBASE + 'pdf/' + encodeURIComponent(c.file) + '#page=' + c.page + '&zoom=page-width';
     a.target = '_blank'; a.rel = 'noopener';
     document.body.appendChild(a); a.click(); a.remove();
     ZS.toast('已打开《' + PDFFILE[kind] + '》第 ' + n + ' 页');
@@ -648,7 +651,7 @@ const DATA_VER = 43;
     }
     const inner = q.aCrops.map((src, i) =>
       `<div class="pgwrap crop${thumbMode() ? ' thumb' : ''}" data-tgt="a-img" data-id="${q.id}" data-anno="${q.id}|a-img-${i}">
-        <img loading="lazy" src="img/ac/${src}" alt="本题解析 ${i + 1}" data-label="解析册 第 ${q.aPages[i] - PAGE_OFF.a} 页（本题裁切 ${i + 1}/${q.aCrops.length}）" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
+        <img loading="lazy" src="${IMGBASE}img/ac/${src}" alt="本题解析 ${i + 1}" data-label="解析册 第 ${q.aPages[i] - PAGE_OFF.a} 页（本题裁切 ${i + 1}/${q.aCrops.length}）" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
         <button class="annobtn" onclick="ZS_ANNO('${q.id}','a-img-${i}')" title="在这一张上做笔记">✍️</button>
       </div>`).join('');
     const more = q.aCrops.length > 1
@@ -670,7 +673,7 @@ const DATA_VER = 43;
       const pn = n - off;
       const lb = (PAGE_NAME[kind] || label) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + n + ' 页');
       return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="${kind}-img" data-id="${id}" data-anno="${id}|${kind}-img-${n}">
-        <img loading="lazy" src="img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" data-label="${esc(lb)}" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
+        <img loading="lazy" src="${IMGBASE}img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" data-label="${esc(lb)}" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
         <span class="pgno">${PAGE_NAME[kind] || ''} P${n - off >= 1 ? n - off : n}</span>
         <button class="annobtn" onclick="ZS_ANNO('${id}','${kind}-img-${n}')" title="在这一页上做笔记">✍️</button>
       </div>`;
@@ -1147,7 +1150,7 @@ const DATA_VER = 43;
         const lb = esc(name) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + pg + ' 页');
         return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" id="lp${pg}">
           <img loading="lazy" style="aspect-ratio:${kind === 's' ? '2068/2924' : '2552/3438'}"
-            src="img/${kind}/${nn}.${ext}" data-label="${lb}" onclick="ZS_ZOOM(this)">
+            src="${IMGBASE}img/${kind}/${nn}.${ext}" data-label="${lb}" onclick="ZS_ZOOM(this)">
           <span class="pgno">${esc(name)} P${pn >= 1 ? pn : pg}</span></div>`;
       }).join('') + `</div>`;
     shell(h);
