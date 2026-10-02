@@ -596,11 +596,13 @@ const DATA_VER = 43;
   const PAGE_OFF = { a: 4, k: 8, s: 9, q: 6 };
   const PAGE_NAME = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
   const PDFFILE = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
-  const IMGEXT = { a: 'webp', k: 'webp', s: 'jpg' };
+  const IMGEXT = { a: 'webp', k: 'jpg', s: 'jpg' };
   /* 图片 / PDF 放在独立仓库（各自 1GB 额度），同源 aokid666.github.io，可直接引用 */
-  const IMGBASE = 'https://aokid666.github.io/zz-img/';
+  const IMGBASE = 'https://aokid666.github.io/zz-img/';   // 速成班讲义 s（原 JPG）
+  const KBASE   = 'https://aokid666.github.io/zz-k/';     // 知识清单 k · 原格式 JPEG
   const ACBASE  = 'https://aokid666.github.io/zz-ac/';    // 解析裁切图 · 原格式 JPEG
   const PDFBASE = 'https://aokid666.github.io/zz-pdf/';
+  const KINDBASE = { s: IMGBASE, k: KBASE };
   /* 解析裁切图已改为原格式 JPEG（不做格式转码），数据里的文件名仍带 .webp，这里替换扩展名 */
   const acSrc = f => String(f).replace(/\.webp$/i, '.jpg');
   const PDFCHUNK = { a: 20, k: 10, q: 0, s: 0 };     // 0 = 不分卷
@@ -676,7 +678,7 @@ const DATA_VER = 43;
       const pn = n - off;
       const lb = (PAGE_NAME[kind] || label) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + n + ' 页');
       return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="${kind}-img" data-id="${id}" data-anno="${id}|${kind}-img-${n}">
-        <img loading="lazy" src="${IMGBASE}img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" data-label="${esc(lb)}" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
+        <img loading="lazy" src="${KINDBASE[kind] || IMGBASE}img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" data-label="${esc(lb)}" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
         <span class="pgno">${PAGE_NAME[kind] || ''} P${n - off >= 1 ? n - off : n}</span>
         <button class="annobtn" onclick="ZS_ANNO('${id}','${kind}-img-${n}')" title="在这一页上做笔记">✍️</button>
       </div>`;
@@ -1153,7 +1155,7 @@ const DATA_VER = 43;
         const lb = esc(name) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + pg + ' 页');
         return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" id="lp${pg}">
           <img loading="lazy" style="aspect-ratio:${kind === 's' ? '2068/2924' : '2552/3438'}"
-            src="${IMGBASE}img/${kind}/${nn}.${ext}" data-label="${lb}" onclick="ZS_ZOOM(this)">
+            src="${KINDBASE[kind] || IMGBASE}img/${kind}/${nn}.${ext}" data-label="${lb}" onclick="ZS_ZOOM(this)">
           <span class="pgno">${esc(name)} P${pn >= 1 ? pn : pg}</span></div>`;
       }).join('') + `</div>`;
     shell(h);
