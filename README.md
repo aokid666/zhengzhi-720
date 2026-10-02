@@ -41,9 +41,12 @@ data/lecture-s.json 速成班讲义逐页文字
 
 | 仓库 | 网址 | 内容 | 体积 |
 |---|---|---|---|
-| `zz-img` | https://aokid666.github.io/zz-img/ | `img/s` 速成班讲义（原 JPG）、`img/k` 知识清单 | 481 MB |
+| `zz-img` | https://aokid666.github.io/zz-img/ | `img/s` 速成班讲义（**你自己的原 JPG**） | 337 MB |
+| `zz-k` | https://aokid666.github.io/zz-k/ | `img/k` 知识清单 326 页（**原格式 JPEG q95，300dpi**） | 467 MB |
 | `zz-ac` | https://aokid666.github.io/zz-ac/ | `img/ac` 解析裁切图（**原格式 JPEG q95，不转码**） | 434 MB |
 | `zz-pdf` | https://aokid666.github.io/zz-pdf/ | `pdf/` 分卷 PDF | 224 MB |
+
+> 三种图片**都不做格式转码**：`img/s` 是你自己那份 JPG 原件；`img/k`、`img/ac` 由服务器从 PDF 渲染后**直接存 JPEG**（早先的 WebP 版已删除）。
 
 - 三者同属 `aokid666.github.io`，**同源**，`<img>` 直接引用即可，画布不会被污染（笔记导出正常）。
 - 代码里对应 `js/app.js` 顶部的 `IMGBASE` / `ACBASE` / `PDFBASE` 常量。
@@ -53,8 +56,12 @@ data/lecture-s.json 速成班讲义逐页文字
 **服务器端流水线（手机零流量）**：`.github/workflows/` 里的 workflow 在 GitHub 服务器上跑，
 下载 / 渲染 / 裁切 / 转格式都在云端完成，本地只推几 KB 的代码。
 - `zz-ac` 的 `render-crops.yml`：从 `zz-pdf` 的分卷重新渲染《解析册》并裁切，产出原格式 JPEG（约 4 分钟跑完 1137 张）。
+- `zz-k` 的 `render-k.yml`：从 `zz-pdf` 的 33 个分卷渲染《知识清单》326 页，产出原格式 JPEG（约 3 分钟）。
 - `zz-img` / `zz-pdf` 的 `fetch.yml`：给个网址让服务器下载并提交。
 - `zz-img` 的 `pdf2img.yml`：把 PDF 渲染成逐页图片。
+
+> ⚠️ `zz-pdf` 的分卷命名要留意：页码不是整十的末卷会不同（如《知识清单》最后一卷是 `P321-326` 而不是 `P321-330`，
+> 《解析册》正好 20 页整所以规律）。workflow 里下载分卷时别按固定步长硬算。
 
 
 
