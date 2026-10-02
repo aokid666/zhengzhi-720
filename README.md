@@ -37,17 +37,25 @@ data/lecture-s.json 速成班讲义逐页文字
 
 ### 资源仓库（2026-10-02 拆分）
 
-为避开 GitHub Pages 单站点 1 GB 上限，**图片与 PDF 已迁到两个独立仓库**，本仓库只剩程序与数据（约 3.6 MB）：
+为避开 GitHub Pages 单站点 1 GB 上限，**图片与 PDF 已迁到三个独立仓库**，本仓库只剩程序与数据（约 3.6 MB）：
 
 | 仓库 | 网址 | 内容 | 体积 |
 |---|---|---|---|
-| `zz-img` | https://aokid666.github.io/zz-img/ | `img/`（s 速成班 / k 知识清单 / ac 解析裁切图） | 654 MB |
-| `zz-pdf` | https://aokid666.github.io/zz-pdf/ | `pdf/` 58 个分卷 PDF | 224 MB |
+| `zz-img` | https://aokid666.github.io/zz-img/ | `img/s` 速成班讲义（原 JPG）、`img/k` 知识清单 | 481 MB |
+| `zz-ac` | https://aokid666.github.io/zz-ac/ | `img/ac` 解析裁切图（**原格式 JPEG q95，不转码**） | 434 MB |
+| `zz-pdf` | https://aokid666.github.io/zz-pdf/ | `pdf/` 分卷 PDF | 224 MB |
 
 - 三者同属 `aokid666.github.io`，**同源**，`<img>` 直接引用即可，画布不会被污染（笔记导出正常）。
-- 代码里对应 `js/app.js` 顶部的 `IMGBASE` / `PDFBASE` 两个常量，改路径只改这两行。
+- 代码里对应 `js/app.js` 顶部的 `IMGBASE` / `ACBASE` / `PDFBASE` 常量。
 - ⚠️ 以后**不要**给其中一个站绑自定义域名或换第三方 CDN，否则跨源会导致笔记导出报 `SecurityError`。
-- 更新资源时要往对应仓库单独推送。
+- 解析裁切图的数据里文件名仍带 `.webp`（历史数据未重生成），前端用 `acSrc()` 换成 `.jpg`。
+
+**服务器端流水线（手机零流量）**：`.github/workflows/` 里的 workflow 在 GitHub 服务器上跑，
+下载 / 渲染 / 裁切 / 转格式都在云端完成，本地只推几 KB 的代码。
+- `zz-ac` 的 `render-crops.yml`：从 `zz-pdf` 的分卷重新渲染《解析册》并裁切，产出原格式 JPEG（约 4 分钟跑完 1137 张）。
+- `zz-img` / `zz-pdf` 的 `fetch.yml`：给个网址让服务器下载并提交。
+- `zz-img` 的 `pdf2img.yml`：把 PDF 渲染成逐页图片。
+
 
 
 ## 版权
