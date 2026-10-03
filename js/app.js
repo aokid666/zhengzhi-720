@@ -140,6 +140,7 @@ const DATA_VER = 43;
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     const b = document.getElementById('themeBtn');
     if (b) b.textContent = dark ? '☀️' : '🌙';
+    applyInvert();
   }
   window.ZS_THEME = v => {
     if (v) { try { localStorage.setItem('zz720.theme', v); } catch (e) { } }
@@ -151,6 +152,22 @@ const DATA_VER = 43;
   window.ZS_THEMESWAP = () => {
     const cur = document.documentElement.getAttribute('data-theme') === 'dark';
     ZS_THEME(cur ? 'light' : 'dark');
+  };
+
+  /* 截图反转偏好：auto 跟随外观 / on 反转 / off 不反转 */
+  const INVERTS = { auto: '跟随外观', on: '反转', off: '不反转' };
+  const invPref = () => { try { return localStorage.getItem('zz720.invert') || 'auto'; } catch (e) { return 'auto'; } };
+  function applyInvert() {
+    const t = invPref();
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const on = t === 'on' || (t === 'auto' && dark);
+    document.documentElement.setAttribute('data-invert', on ? 'on' : 'off');
+  }
+  window.ZS_INVERT = v => {
+    if (v) { try { localStorage.setItem('zz720.invert', v); } catch (e) { } }
+    applyInvert();
+    if (v) ZS.toast('截图反转：' + INVERTS[v], 1500);
+    if (S.qs.length) route();
   };
 
   /* ---------- 登录门禁 ---------- */
@@ -1446,6 +1463,11 @@ const DATA_VER = 43;
         <div class="acts">
           ${['auto', 'light', 'dark'].map(k => `<button class="btn${themePref() === k ? ' main' : ''}"
             onclick="ZS_THEME('${k}')">${k === 'auto' ? '🌗 跟随系统' : k === 'light' ? '☀️ 浅色' : '🌙 深色'}</button>`).join('')}
+        </div>
+        <div class="tiny muted" style="margin:10px 0 6px">讲义 / 解析截图</div>
+        <div class="acts">
+          ${['auto', 'on', 'off'].map(k => `<button class="btn${invPref() === k ? ' main' : ''}"
+            onclick="ZS_INVERT('${k}')">${k === 'auto' ? '🌗 跟随外观' : k === 'on' ? '🌓 反转成深色' : '📄 保持原样'}</button>`).join('')}
         </div>
       </div>
       <div class="sec-title">云端同步</div>
