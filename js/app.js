@@ -1998,6 +1998,7 @@ const DATA_VER = 43;
     }
     await ZS.pull(true); await ZS.push(); loadSession(); route();
     if (st === 'updated') ZS.toast('✅ 令牌已更新，登录密文也一起更新了', 3200);
+    else if (st === 'old-format') ZS.toast('⚠️ 检测到旧格式的登录密文，换令牌后请到「🔐 设置登录密码」重设一次，以后就能自动更新了', 7000);
     else if (st === 'no-dek') ZS.toast('⚠️ 令牌换了，但登录密文没更新：请到「🔐 设置登录密码」重设一次，否则新设备会解锁出旧令牌', 7000);
     else if (st === 'error') ZS.toast('⚠️ 令牌已保存，但登录密文更新失败，建议去「🔐 设置登录密码」重设一次', 6000);
   };
