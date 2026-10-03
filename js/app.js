@@ -1774,7 +1774,7 @@ const DATA_VER = 43;
   window.ZS_CFGSAVE = async () => {
     const t = $('#cfgToken').value.trim();
     const rp = $('#cfgRepo').value.split('/');
-    ZS.setCfg({ token: t, owner: rp[0] || 'aokid666', repo: rp[1] || 'zhengzhi-720', file: $('#cfgFile').value.trim() || 'data/userdata.json' });
+    ZS.setCfg({ token: t, owner: rp[0] || 'aokid666', repo: rp[1] || 'zhengzhi-720', file: $('#cfgFile').value.trim() || 'userdata.json' });
     ZS_CFGCLOSE();
     await ZS.pull(true); await ZS.push(); render();
   };
