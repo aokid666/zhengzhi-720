@@ -62,38 +62,65 @@ window.ZS = (function () {
       return await r.json();
     } finally { clearTimeout(timer); }
   }
+  /* 双层密钥：密码只用来包裹「数据密钥 DEK」，令牌用 DEK 加密。
+     好处：以后换令牌，只要本机还留着 DEK，不用再输密码就能更新密文。 */
+  const DK = P + 'dek';
+  const getDek = () => { try { const t = localStorage.getItem(DK); return t ? b642ab(t) : null; } catch (e) { return null; } };
+  const setDek = d => { try { localStorage.setItem(DK, ab2b64(d)); } catch (e) { } };
+  function forgetDek() { try { localStorage.removeItem(DK); } catch (e) { } }
+
   async function makeLogin(user, pass, tokenIn) {
     const token = tokenIn || cfg().token;
     if (!token) throw new Error('本机还没有令牌，先设置令牌再设密码');
+    const dek = crypto.getRandomValues(new Uint8Array(32));
     const salt = crypto.getRandomValues(new Uint8Array(16));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const key = await deriveKey(user, pass, salt, ITER);
-    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key,
+    const wiv = crypto.getRandomValues(new Uint8Array(12));
+    const tiv = crypto.getRandomValues(new Uint8Array(12));
+    const kek = await deriveKey(user, pass, salt, ITER);
+    const wrap = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: wiv }, kek, dek);
+    const dk = await crypto.subtle.importKey('raw', dek, { name: 'AES-GCM' }, false, ['encrypt']);
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: tiv }, dk,
                                             new TextEncoder().encode(token));
-    return { v: 1, kdf: 'PBKDF2-SHA256', iter: ITER, salt: ab2b64(salt), iv: ab2b64(iv),
-             ct: ab2b64(ct), hint: user, ts: Date.now() };
+    setDek(dek);
+    return { v: 2, kdf: 'PBKDF2-SHA256', iter: ITER,
+             salt: ab2b64(salt), wiv: ab2b64(wiv), wrap: ab2b64(wrap),
+             tiv: ab2b64(tiv), ct: ab2b64(ct), hint: user, ts: Date.now() };
   }
-  async function saveLogin(blob) {
-    const c = cfg();
-    let sha = null;
-    const g = await api(c, 'contents/' + LOGIN + '?ref=main', { headers: hdr(c) });
-    if (g.ok) sha = (await g.json()).sha;
-    const body = { message: '更新登录密码', branch: 'main',
-                   content: b64enc(JSON.stringify(blob)) };
-    if (sha) body.sha = sha;
-    const p = await api(c, 'contents/' + LOGIN, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!p.ok) { const e = await p.json().catch(() => ({})); throw new Error(e.message || ('HTTP ' + p.status)); }
-    return true;
+
+  /* 换令牌后自动更新密文（用本机 DEK，不需要再输密码）
+     返回 'updated' / 'no-login'（还没设过密码）/ 'no-dek'（本机没有 DEK，要重设密码） */
+  async function refreshLogin(tokenIn) {
+    const token = tokenIn || cfg().token;
+    const dek = getDek();
+    if (!dek) return 'no-dek';
+    if (!token) return 'no-token';
+    let blob = null;
+    try { blob = await fetchLogin(); } catch (e) { return 'error'; }
+    if (!blob || blob.v !== 2) return 'no-login';
+    const tiv = crypto.getRandomValues(new Uint8Array(12));
+    const dk = await crypto.subtle.importKey('raw', dek, { name: 'AES-GCM' }, false, ['encrypt']);
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: tiv }, dk,
+                                            new TextEncoder().encode(token));
+    blob.tiv = ab2b64(tiv); blob.ct = ab2b64(ct); blob.ts = Date.now();
+    await saveLogin(blob);
+    return 'updated';
   }
+
   async function unlock(user, pass) {
     const blob = await fetchLogin();
     if (!blob) throw new Error('云端还没有设置登录密码');
-    const key = await deriveKey(user, pass, b642ab(blob.salt), blob.iter || ITER);
+    const kek = await deriveKey(user, pass, b642ab(blob.salt), blob.iter || ITER);
+    let dekRaw;
+    try {
+      dekRaw = new Uint8Array(await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: b642ab(blob.wiv) }, kek, b642ab(blob.wrap)));
+    } catch (e) { throw new Error('账号或密码不对'); }
+    const dk = await crypto.subtle.importKey('raw', dekRaw, { name: 'AES-GCM' }, false, ['decrypt']);
     let pt;
     try {
-      pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b642ab(blob.iv) }, key, b642ab(blob.ct));
-    } catch (e) { throw new Error('账号或密码不对'); }
+      pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b642ab(blob.tiv) }, dk, b642ab(blob.ct));
+    } catch (e) { throw new Error('密文已损坏，请用令牌进入后重设密码'); }
+    setDek(dekRaw);
     return new TextDecoder().decode(pt);
   }
 
@@ -290,7 +317,7 @@ window.ZS = (function () {
     load, save, cfg, setCfg, pull, push, toast, fmt, ensureBranch,
     forcePush: silent => push(silent, true),   // 跳过合并，直接用本机数据覆盖云端
     history, fetchVersion, restore, summarize,
-    fetchLogin, makeLogin, saveLogin, unlock,
+    fetchLogin, makeLogin, saveLogin, unlock, refreshLogin, forgetDek,
     get data() { return data; },
     get dirty() { return dirty; },
     get lastSync() { return lastSync; },
