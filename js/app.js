@@ -161,6 +161,9 @@ const DATA_VER = 43;
       <div class="acts" style="margin-top:16px;justify-content:center">
         <button class="btn main" id="gGo">进入</button></div>
       <div class="tiny muted" id="gMsg" style="text-align:center;margin-top:10px;min-height:20px"></div>
+      <div style="text-align:center;margin-top:12px">
+        <a href="javascript:void(0)" onclick="ZS_CFG()" style="font-size:12.5px;color:var(--ink3)">忘了密码？改用 GitHub 令牌进入</a>
+      </div>
     </div>`;
     const go = () => ZS_UNLOCK();
     document.getElementById('gGo').onclick = go;
