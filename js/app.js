@@ -1309,6 +1309,7 @@ const DATA_VER = 43;
           <button class="btn main" onclick="ZS_SYNC()">☁️ 立即同步</button>
           <button class="btn" onclick="ZS_CFG()">设置令牌</button>
           <button class="btn" onclick="ZS_FORCE()">⚠️ 以本机覆盖云端</button>
+          <button class="btn" onclick="ZS_HIST()">🕘 历史版本</button>
         </div>
       </div>
       <div class="sec-title">使用帮助</div>
@@ -1766,6 +1767,66 @@ const DATA_VER = 43;
 
   /* 手动拉取后把队列会话重新装配一遍（换设备时用得到） */
   window.ZS_RELOAD = () => { loadSession(); route(); updateQBadge(); };
+  /* ---------- 云端历史版本 ---------- */
+  const snapLine = s => `已做 ${s.progress} 题 · 笔记 ${s.notes} · 批注 ${s.annos} · 收藏 ${s.flags} · 打卡 ${s.daily} 天 · 队列 ${s.queue}`;
+  const ago = t => {
+    const m = Math.floor((Date.now() - t) / 60000);
+    if (m < 1) return '刚刚';
+    if (m < 60) return m + ' 分钟前';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + ' 小时前';
+    return Math.floor(h / 24) + ' 天前';
+  };
+  window.ZS_HIST = async () => {
+    const c = ZS.cfg();
+    if (!c.token) return ZS_CFG();
+    const m = document.getElementById('modal');
+    const box = t => '<div class="box"><h3>🕘 云端历史版本</h3><div class="tiny muted">' + t +
+      '</div><div class="acts"><button class="btn" onclick="ZS_CFGCLOSE()">关闭</button></div></div>';
+    m.innerHTML = box('正在读取…'); m.classList.add('show');
+    let list;
+    try { list = await ZS.history(30); }
+    catch (e) { m.innerHTML = box('读取失败：' + esc(e.message)); return; }
+    if (!list.length) { m.innerHTML = box('还没有历史版本。'); return; }
+    m.innerHTML = `<div class="box">
+      <h3>🕘 云端历史版本</h3>
+      <div class="tiny muted" style="margin-bottom:8px">每次同步都会存一版，共 ${list.length} 版。
+      「恢复」是把那一版**并回**本机（只增不减，不会弄丢现在的数据）。</div>
+      <div style="max-height:52vh;overflow:auto">
+      ${list.map((x, i) => {
+        const t = Date.parse(x.commit.committer.date);
+        return `<div style="padding:9px 0;border-top:1px solid var(--line)">
+          <div><b>${esc(ZS.fmt(t))}</b> <span class="tiny muted">${esc(ago(t))}</span></div>
+          <div class="tiny muted" id="hs${i}" style="margin-top:2px"></div>
+          <div class="acts" style="margin-top:5px">
+            <button class="btn" style="padding:5px 10px;font-size:13px" onclick="ZS_HVIEW('${x.sha}',${i})">查看内容</button>
+            <button class="btn main" style="padding:5px 10px;font-size:13px" onclick="ZS_HRESTORE('${x.sha}',${i})">恢复这一版</button>
+          </div></div>`;
+      }).join('')}
+      </div>
+      <div class="acts"><button class="btn" onclick="ZS_CFGCLOSE()">关闭</button></div></div>`;
+  };
+  window.ZS_HVIEW = async (sha, i) => {
+    const el = document.getElementById('hs' + i);
+    if (!el) return;
+    el.textContent = '读取中…';
+    try { el.textContent = snapLine(ZS.summarize(await ZS.fetchVersion(sha))); }
+    catch (e) { el.textContent = '读取失败：' + e.message; }
+  };
+  window.ZS_HRESTORE = (sha, i) => {
+    ZS.confirm('把这一版合并回本机，并同步到云端？\n\n只会补上本机目前没有的记录，不会删掉任何现有数据。', async () => {
+      ZS.toast('恢复中…');
+      try {
+        const ver = await ZS.fetchVersion(sha);
+        const b = ZS.summarize(ZS.data);
+        const ok = await ZS.restore(ver);
+        const a = ZS.summarize(ZS.data);
+        ZS.toast(ok ? `已恢复：进度 +${a.progress - b.progress}，笔记 +${a.notes - b.notes}，批注 +${a.annos - b.annos}，收藏 +${a.flags - b.flags}` : '恢复失败', 4000);
+        ZS_RELOAD();
+      } catch (e) { ZS.toast('恢复失败：' + e.message, 3600); }
+    });
+  };
+
   window.ZS_SYNC = async () => {
     const c = ZS.cfg();
     if (!c.token) return ZS_CFG();
