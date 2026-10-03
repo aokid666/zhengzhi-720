@@ -399,7 +399,5 @@ input::placeholder,textarea::placeholder{color:var(--ink3);opacity:1}
 html[data-invert="on"] .pgwrap{background:#000}
 html[data-invert="on"] .pgwrap img,
 html[data-invert="on"] .pgwrap.zoomed img{filter:invert(1) hue-rotate(180deg)}
-/* 书写时恢复白底：六色笔里有黑色，反色页上会看不见 */
-html[data-invert="on"] body.annomode .pgwrap{background:#fff}
-html[data-invert="on"] body.annomode .pgwrap img,
-html[data-invert="on"] body.annomode .pgwrap.zoomed img{filter:none}
+/* 书写时页面保持反转，笔色由 annotate.js 的 DMAP 自动换成亮色
+   （黑笔在黑底上看不见，所以黑→白；存储里仍是原色，导出/打印不受影响） */
