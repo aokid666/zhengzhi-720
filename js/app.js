@@ -236,7 +236,7 @@ const DATA_VER = 43;
   };
   window.ZS_LOGOUT = () => {
     ZS.confirm('退出登录？\n\n会清掉这台设备上保存的令牌，之后打开会要求输账号密码。\n本地记录和云端数据都不动。', () => {
-      try { ZS.setCfg({ token: '' }); } catch (e) { }
+      try { ZS.setCfg({ token: '' }); ZS.forgetDek(); } catch (e) { }
       setTimeout(() => location.reload(), 200);
     });
   };
@@ -1987,8 +1987,19 @@ const DATA_VER = 43;
     const rp = $('#cfgRepo').value.split('/');
     ZS.setCfg({ token: t, owner: rp[0] || 'aokid666', repo: rp[1] || 'zhengzhi-720', file: $('#cfgFile').value.trim() || 'userdata.json' });
     ZS_CFGCLOSE();
-    if (document.body.classList.contains('gated')) { location.reload(); return; }
+    /* 换令牌时，若本机还留着数据密钥，顺手把登录密文也更新掉 */
+    let st = '';
+    try { st = await ZS.refreshLogin(); } catch (e) { st = 'error'; }
+    if (document.body.classList.contains('gated')) {
+      ZS.toast(st === 'updated' ? '令牌已更新，登录密文也同步更新了 ✓'
+                              : '令牌已保存，正在载入…', 2600);
+      setTimeout(() => location.reload(), 700);
+      return;
+    }
     await ZS.pull(true); await ZS.push(); loadSession(); route();
+    if (st === 'updated') ZS.toast('✅ 令牌已更新，登录密文也一起更新了', 3200);
+    else if (st === 'no-dek') ZS.toast('⚠️ 令牌换了，但登录密文没更新：请到「🔐 设置登录密码」重设一次，否则新设备会解锁出旧令牌', 7000);
+    else if (st === 'error') ZS.toast('⚠️ 令牌已保存，但登录密文更新失败，建议去「🔐 设置登录密码」重设一次', 6000);
   };
   window.ZS.confirm = (msg, cb) => {
     const m = document.getElementById('modal');
