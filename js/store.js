@@ -129,8 +129,10 @@ window.ZS = (function () {
       /* 老格式（v1）：密码直接加密令牌，没有数据密钥 */
       try {
         const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b642ab(blob.iv) }, kek, b642ab(blob.ct));
-        forgetDek();
-        return new TextDecoder().decode(pt);
+        const token = new TextDecoder().decode(pt);
+        /* 顺手升级成 v2：以后再换令牌就能自动更新密文，不用再输密码 */
+        try { await saveLogin(await makeLogin(user, pass, token)); } catch (e) { }
+        return token;
       } catch (e) { throw new Error('账号或密码不对'); }
     }
     let dekRaw;
