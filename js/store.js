@@ -72,6 +72,14 @@ window.ZS = (function () {
     return p.ok || p.status === 422;
   }
 
+  /* 把云端文本并进本地（只增不减：远端条目更新才覆盖本地） */
+  function applyRemote(txt) {
+    const remote = JSON.parse(txt);
+    merge(remote);
+    localStorage.setItem(K.data, JSON.stringify(data));
+    return remote;
+  }
+
   async function pull(silent) {
     const c = cfg();
     if (!c.token) { if (!silent) toast('还没填 GitHub 令牌'); return null; }
@@ -80,10 +88,7 @@ window.ZS = (function () {
       if (r.status === 404) return null;
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
-      const remote = JSON.parse(b64dec(j.content));
-      merge(remote);
-      localStorage.setItem(K.data, JSON.stringify(data));
-      return remote;
+      return applyRemote(b64dec(j.content));
     } catch (e) { if (!silent) toast('拉取失败：' + e.message); return null; }
   }
 
@@ -95,8 +100,19 @@ window.ZS = (function () {
     try {
       let sha = null;
       const g = await api(c, 'contents/' + c.file + '?ref=' + c.branch, { headers: hdr(c) });
-      if (g.ok) sha = (await g.json()).sha;
-      else if (!(await ensureBranch(c))) throw new Error('无法创建分支 ' + c.branch);
+      if (g.ok) {
+        const j = await g.json();
+        sha = j.sha;
+        /* 关键：上传前先把云端并进来。
+           上传是「全量覆盖」，不先合并的话，本机这份（比如换设备后还没拉到的空数据）
+           会把别的设备的记录整份抹掉。合并只会把云端多出来的条目补进本地，不会删本地任何东西。 */
+        try { applyRemote(b64dec(j.content)); }
+        catch (e) { if (!silent) toast('云端文件异常，已取消上传以保护记录', 3600); syncing = false; return false; }
+      } else if (g.status !== 404) {
+        throw new Error('读取云端失败 HTTP ' + g.status);
+      } else if (!(await ensureBranch(c))) {
+        throw new Error('无法创建分支 ' + c.branch);
+      }
       const body = {
         message: 'sync ' + new Date().toISOString().slice(0, 19),
         branch: c.branch, content: b64enc(JSON.stringify(data)),
