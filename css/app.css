@@ -394,3 +394,12 @@ html[data-theme="dark"] #notearea{border-color:var(--line)}
 
 /* 输入框占位符（深色下别太亮） */
 input::placeholder,textarea::placeholder{color:var(--ink3);opacity:1}
+
+/* ---------- 截图夜间反转（只反转纸面，笔迹在独立画布层不受影响）---------- */
+html[data-invert="on"] .pgwrap{background:#000}
+html[data-invert="on"] .pgwrap img,
+html[data-invert="on"] .pgwrap.zoomed img{filter:invert(1) hue-rotate(180deg)}
+/* 书写时恢复白底：六色笔里有黑色，反色页上会看不见 */
+html[data-invert="on"] body.annomode .pgwrap{background:#fff}
+html[data-invert="on"] body.annomode .pgwrap img,
+html[data-invert="on"] body.annomode .pgwrap.zoomed img{filter:none}
