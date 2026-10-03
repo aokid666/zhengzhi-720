@@ -29,6 +29,71 @@ window.ZS = (function () {
     clearTimeout(pushTimer);
     pushTimer = setTimeout(() => push(true), 12000);
   }
+  /* ---------- 登录密码：用密码加密令牌，密文放仓库里 ----------
+     密文公开无所谓，没有密码解不开；密码不上传、不进代码、不进聊天。 */
+  const LOGIN = 'login.json';
+  const ITER = 310000;
+
+  const ab2b64 = ab => {
+    const b = new Uint8Array(ab); let s = '';
+    for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return btoa(s);
+  };
+  const b642ab = t => {
+    const bin = atob(t); const b = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
+    return b;
+  };
+  async function deriveKey(user, pass, salt, iter) {
+    const base = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(user + '\u0000' + pass), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function fetchLogin() {
+    const c = cfg();
+    const r = await fetch('https://raw.githubusercontent.com/' + c.owner + '/' + c.repo + '/' +
+                          c.branch + '/' + LOGIN + '?t=' + Date.now());
+    if (!r.ok) return null;
+    return await r.json();
+  }
+  async function makeLogin(user, pass, tokenIn) {
+    const token = tokenIn || cfg().token;
+    if (!token) throw new Error('本机还没有令牌，先设置令牌再设密码');
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKey(user, pass, salt, ITER);
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key,
+                                            new TextEncoder().encode(token));
+    return { v: 1, kdf: 'PBKDF2-SHA256', iter: ITER, salt: ab2b64(salt), iv: ab2b64(iv),
+             ct: ab2b64(ct), hint: user, ts: Date.now() };
+  }
+  async function saveLogin(blob) {
+    const c = cfg();
+    let sha = null;
+    const g = await api(c, 'contents/' + LOGIN + '?ref=' + c.branch, { headers: hdr(c) });
+    if (g.ok) sha = (await g.json()).sha;
+    else if (!(await ensureBranch(c))) throw new Error('无法访问分支 ' + c.branch);
+    const body = { message: '更新登录密码', branch: c.branch,
+                   content: b64enc(JSON.stringify(blob)) };
+    if (sha) body.sha = sha;
+    const p = await api(c, 'contents/' + LOGIN, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!p.ok) { const e = await p.json().catch(() => ({})); throw new Error(e.message || ('HTTP ' + p.status)); }
+    return true;
+  }
+  async function unlock(user, pass) {
+    const blob = await fetchLogin();
+    if (!blob) throw new Error('云端还没有设置登录密码');
+    const key = await deriveKey(user, pass, b642ab(blob.salt), blob.iter || ITER);
+    let pt;
+    try {
+      pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b642ab(blob.iv) }, key, b642ab(blob.ct));
+    } catch (e) { throw new Error('账号或密码不对'); }
+    return new TextDecoder().decode(pt);
+  }
+
   function cfg() {
     const def = { owner: OWNER, repo: REPO, branch: BRANCH, file: FILE, auto: true };
     try { return Object.assign(def, JSON.parse(localStorage.getItem(K.cfg) || '{}')); }
@@ -222,6 +287,7 @@ window.ZS = (function () {
     load, save, cfg, setCfg, pull, push, toast, fmt, ensureBranch,
     forcePush: silent => push(silent, true),   // 跳过合并，直接用本机数据覆盖云端
     history, fetchVersion, restore, summarize,
+    fetchLogin, makeLogin, saveLogin, unlock,
     get data() { return data; },
     get dirty() { return dirty; },
     get lastSync() { return lastSync; },
