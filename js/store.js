@@ -174,6 +174,34 @@ window.ZS = (function () {
     data.updated = Math.max(data.updated || 0, remote.updated || 0);
   }
 
+  /* ---------- 云端历史版本（每次同步都是一个 git 提交）---------- */
+  async function history(limit) {
+    const c = cfg();
+    const r = await api(c, 'commits?sha=' + encodeURIComponent(c.branch) +
+                          '&path=' + encodeURIComponent(c.file) + '&per_page=' + (limit || 30));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  }
+  async function fetchVersion(sha) {
+    const c = cfg();
+    const r = await api(c, 'contents/' + c.file + '?ref=' + encodeURIComponent(sha));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    return JSON.parse(b64dec(j.content));
+  }
+  /* 把某一版合并回本地再上传（只增不减，所以不会把现有数据弄丢） */
+  async function restore(ver) {
+    merge(ver);
+    localStorage.setItem(K.data, JSON.stringify(data));
+    return await push(true);
+  }
+  function summarize(v) {
+    const n = o => Object.keys(o || {}).length;
+    return { progress: n(v.progress), notes: n(v.notes), annos: n(v.annos),
+             flags: n(v.flags), hist: n(v.hist), daily: n(v.daily),
+             queue: (v.session && v.session.list) ? v.session.list.length : 0 };
+  }
+
   let toastT = null;
   function toast(msg, ms) {
     if (!msg) return;
@@ -193,6 +221,7 @@ window.ZS = (function () {
   return {
     load, save, cfg, setCfg, pull, push, toast, fmt, ensureBranch,
     forcePush: silent => push(silent, true),   // 跳过合并，直接用本机数据覆盖云端
+    history, fetchVersion, restore, summarize,
     get data() { return data; },
     get dirty() { return dirty; },
     get lastSync() { return lastSync; },
