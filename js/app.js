@@ -181,6 +181,8 @@ const DATA_VER = 43;
     try {
       const token = await ZS.unlock(u, p);
       ZS.setCfg({ token: token });
+      /* 令牌已就位，这时才能把老格式密文升级成 v2 */
+      try { await ZS.upgradeLogin(u, p, token); } catch (e) { }
       msg.textContent = '✅ 成功，正在载入…';
       setTimeout(() => location.reload(), 400);
     } catch (e) { msg.textContent = '❌ ' + e.message; }
