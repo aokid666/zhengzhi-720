@@ -130,7 +130,117 @@ const DATA_VER = 43;
     if (m) { ZS.save(); console.log('已迁移 %d 条截图标注到单张 key', m); }
   }
 
+  /* ---------- 登录门禁 ---------- */
+  const needGate = () => !ZS.cfg().token && ZS.cfg().gate !== '0';
+
+  async function showGate() {
+    const g = document.getElementById('gate');
+    document.body.classList.add('gated');
+    g.classList.add('show');
+    g.innerHTML = '<div class="gatebox"><div class="lock">🔒</div><h3>检查中…</h3></div>';
+    let blob = null;
+    try { blob = await ZS.fetchLogin(); } catch (e) { }
+    if (!blob) {
+      g.innerHTML = `<div class="gatebox">
+        <div class="lock">🔒</div>
+        <h3>这台设备还没配置</h3>
+        <div class="tiny muted" style="text-align:center;line-height:1.8">
+          云端还没有「登录密码」。<br>可以先用 GitHub 令牌进，进后再设置登录密码。</div>
+        <div class="acts" style="margin-top:14px;justify-content:center">
+          <button class="btn main" onclick="ZS_CFG()">用令牌进入</button></div>
+      </div>`;
+      return;
+    }
+    g.innerHTML = `<div class="gatebox">
+      <div class="lock">🔒</div>
+      <h3>请输入账号密码</h3>
+      <div class="fld"><label>账号</label>
+        <input id="gUser" autocapitalize="off" autocorrect="off" autocomplete="username" value="${esc(blob.hint || '')}"></div>
+      <div class="fld"><label>密码</label>
+        <input id="gPass" type="password" autocomplete="current-password"></div>
+      <div class="acts" style="margin-top:16px;justify-content:center">
+        <button class="btn main" id="gGo">进入</button></div>
+      <div class="tiny muted" id="gMsg" style="text-align:center;margin-top:10px;min-height:20px"></div>
+    </div>`;
+    const go = () => ZS_UNLOCK();
+    document.getElementById('gGo').onclick = go;
+    document.getElementById('gPass').onkeydown = e => { if (e.key === 'Enter') go(); };
+    document.getElementById('gUser').onkeydown = e => { if (e.key === 'Enter') go(); };
+  }
+
+  window.ZS_UNLOCK = async () => {
+    const u = document.getElementById('gUser').value.trim();
+    const p = document.getElementById('gPass').value;
+    const msg = document.getElementById('gMsg');
+    if (!u || !p) { msg.textContent = '账号和密码都要填'; return; }
+    if (!window.crypto || !crypto.subtle) { msg.textContent = '此浏览器不支持加密，请用 Safari 打开'; return; }
+    msg.textContent = '正在解锁…';
+    try {
+      const token = await ZS.unlock(u, p);
+      ZS.setCfg({ token: token });
+      msg.textContent = '✅ 成功，正在载入…';
+      setTimeout(() => location.reload(), 400);
+    } catch (e) { msg.textContent = '❌ ' + e.message; }
+  };
+
+  function passVeryWeak(p) { return p.length < 12; }
+  function passScore(p) {
+    let s = 0;
+    if (p.length >= 12) s++;
+    if (p.length >= 16) s++;
+    if (/[a-z]/.test(p) && /[A-Z]/.test(p)) s++;
+    if (/[0-9]/.test(p)) s++;
+    if (/[^A-Za-z0-9]/.test(p)) s++;
+    return s;
+  }
+  window.ZS_SETPASS = () => {
+    const c = ZS.cfg();
+    if (!c.token) return ZS_CFG();
+    const m = document.getElementById('modal');
+    m.innerHTML = `<div class="box">
+      <h3>🔐 设置登录密码</h3>
+      <div class="tiny muted" style="margin-bottom:10px">
+        密码只在本机用来<b>加密令牌</b>，不会上传、我也看不到。<br>
+        之后任何设备输入这个账号密码，就能自动拿到令牌、不用再贴长串令牌。</div>
+      <div class="fld"><label>账号（自己起个名，比如 aokid）</label>
+        <input id="spUser" value="${esc((ZS.data.session && ZS.data.session.user) || 'aokid')}" autocapitalize="off"></div>
+      <div class="fld"><label>密码（至少 12 位，建议大小写+数字+符号）</label>
+        <input id="spPass" type="password"></div>
+      <div class="fld"><label>再输一次</label><input id="spPass2" type="password"></div>
+      <div class="acts"><button class="btn main" onclick="ZS_DOSETPASS()">加密并上传</button>
+      <button class="btn" onclick="ZS_CFGCLOSE()">取消</button></div>
+      <div class="tiny muted" id="spMsg" style="margin-top:8px;min-height:20px"></div>
+    </div>`;
+    m.classList.add('show');
+  };
+  window.ZS_DOSETPASS = async () => {
+    const u = document.getElementById('spUser').value.trim();
+    const p = document.getElementById('spPass').value;
+    const p2 = document.getElementById('spPass2').value;
+    const msg = document.getElementById('spMsg');
+    if (!u) { msg.textContent = '账号不能空'; return; }
+    if (passVeryWeak(p)) { msg.textContent = '❌ 密码太短：至少 12 位（密文是公开的，短密码会被爆破）'; return; }
+    if (passScore(p) < 3) { msg.textContent = '❌ 密码太简单：至少要 3 类字符（大小写 / 数字 / 符号）'; return; }
+    if (p !== p2) { msg.textContent = '❌ 两次输入不一样'; return; }
+    if (!crypto.subtle) { msg.textContent = '此浏览器不支持加密'; return; }
+    msg.textContent = '正在加密并上传…';
+    try {
+      const blob = await ZS.makeLogin(u, p);
+      await ZS.saveLogin(blob);
+      msg.textContent = '✅ 设置成功！以后新设备输这个账号密码就能进。';
+      setTimeout(() => ZS_CFGCLOSE(), 1400);
+    } catch (e) { msg.textContent = '❌ ' + e.message; }
+  };
+  window.ZS_LOGOUT = () => {
+    ZS.confirm('退出登录？\n\n会清掉这台设备上保存的令牌，之后打开会要求输账号密码。\n本地记录和云端数据都不动。', () => {
+      try { ZS.setCfg({ token: '' }); } catch (e) { }
+      setTimeout(() => location.reload(), 200);
+    });
+  };
+
   async function boot() {
+    /* 没登录 → 只显示门禁，不加载任何内容 */
+    if (needGate()) { showGate(); return; }
     try {
       const r = await fetch('data/questions.json?v=' + DATA_VER);
       S.qs = await r.json();
@@ -1310,6 +1420,8 @@ const DATA_VER = 43;
           <button class="btn" onclick="ZS_CFG()">设置令牌</button>
           <button class="btn" onclick="ZS_FORCE()">⚠️ 以本机覆盖云端</button>
           <button class="btn" onclick="ZS_HIST()">🕘 历史版本</button>
+          <button class="btn" onclick="ZS_SETPASS()">🔐 设置登录密码</button>
+          <button class="btn" onclick="ZS_LOGOUT()">🚪 退出登录</button>
         </div>
       </div>
       <div class="sec-title">使用帮助</div>
@@ -1872,6 +1984,7 @@ const DATA_VER = 43;
     const rp = $('#cfgRepo').value.split('/');
     ZS.setCfg({ token: t, owner: rp[0] || 'aokid666', repo: rp[1] || 'zhengzhi-720', file: $('#cfgFile').value.trim() || 'userdata.json' });
     ZS_CFGCLOSE();
+    if (document.body.classList.contains('gated')) { location.reload(); return; }
     await ZS.pull(true); await ZS.push(); loadSession(); route();
   };
   window.ZS.confirm = (msg, cb) => {
