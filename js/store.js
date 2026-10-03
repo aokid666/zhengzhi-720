@@ -51,12 +51,16 @@ window.ZS = (function () {
       { name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' },
       base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
   }
+  /* 密文放在 main 分支的 login.json，由 Pages 同源提供
+     （raw.githubusercontent.com 在国内被墙，不能用） */
   async function fetchLogin() {
-    const c = cfg();
-    const r = await fetch('https://raw.githubusercontent.com/' + c.owner + '/' + c.repo + '/' +
-                          c.branch + '/' + LOGIN + '?t=' + Date.now());
-    if (!r.ok) return null;
-    return await r.json();
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 9000);
+    try {
+      const r = await fetch(LOGIN + '?t=' + Date.now(), { signal: ctl.signal, cache: 'no-store' });
+      if (!r.ok) return null;
+      return await r.json();
+    } finally { clearTimeout(timer); }
   }
   async function makeLogin(user, pass, tokenIn) {
     const token = tokenIn || cfg().token;
@@ -72,10 +76,9 @@ window.ZS = (function () {
   async function saveLogin(blob) {
     const c = cfg();
     let sha = null;
-    const g = await api(c, 'contents/' + LOGIN + '?ref=' + c.branch, { headers: hdr(c) });
+    const g = await api(c, 'contents/' + LOGIN + '?ref=main', { headers: hdr(c) });
     if (g.ok) sha = (await g.json()).sha;
-    else if (!(await ensureBranch(c))) throw new Error('无法访问分支 ' + c.branch);
-    const body = { message: '更新登录密码', branch: c.branch,
+    const body = { message: '更新登录密码', branch: 'main',
                    content: b64enc(JSON.stringify(blob)) };
     if (sha) body.sha = sha;
     const p = await api(c, 'contents/' + LOGIN, {
