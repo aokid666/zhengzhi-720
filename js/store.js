@@ -121,6 +121,17 @@ window.ZS = (function () {
     return true;
   }
 
+  /* 把老格式密文升级成 v2。必须在 setCfg({token}) 之后调用，否则没有鉴权写不上去 */
+  async function upgradeLogin(user, pass, tokenIn) {
+    const token = tokenIn || cfg().token;
+    if (!token || !cfg().token) return false;
+    let blob = null;
+    try { blob = await fetchLogin(); } catch (e) { return false; }
+    if (!blob || blob.v === 2) return false;
+    await saveLogin(await makeLogin(user, pass, token));
+    return true;
+  }
+
   async function unlock(user, pass) {
     const blob = await fetchLogin();
     if (!blob) throw new Error('云端还没有设置登录密码');
@@ -129,10 +140,7 @@ window.ZS = (function () {
       /* 老格式（v1）：密码直接加密令牌，没有数据密钥 */
       try {
         const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b642ab(blob.iv) }, kek, b642ab(blob.ct));
-        const token = new TextDecoder().decode(pt);
-        /* 顺手升级成 v2：以后再换令牌就能自动更新密文，不用再输密码 */
-        try { await saveLogin(await makeLogin(user, pass, token)); } catch (e) { }
-        return token;
+        return new TextDecoder().decode(pt);
       } catch (e) { throw new Error('账号或密码不对'); }
     }
     let dekRaw;
@@ -342,7 +350,7 @@ window.ZS = (function () {
     load, save, cfg, setCfg, pull, push, toast, fmt, ensureBranch,
     forcePush: silent => push(silent, true),   // 跳过合并，直接用本机数据覆盖云端
     history, fetchVersion, restore, summarize,
-    fetchLogin, makeLogin, saveLogin, unlock, refreshLogin, forgetDek,
+    fetchLogin, makeLogin, saveLogin, unlock, upgradeLogin, refreshLogin, forgetDek,
     get data() { return data; },
     get dirty() { return dirty; },
     get lastSync() { return lastSync; },
