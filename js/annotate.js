@@ -62,12 +62,30 @@ window.ANNO = (function () {
     ctx.stroke();
   }
 
+  /* 深色（反转）页面上用的笔色：只影响显示，存储里仍是原色
+     关键是黑笔 → 白笔，否则在黑底上看不见；其余颜色提亮以便识别 */
+  const DMAP = {
+    '#d0342c': '#ff7a6b',   // 红
+    '#1f6feb': '#6cb0ff',   // 蓝
+    '#1f8a5b': '#54d494',   // 绿
+    '#111111': '#f2f6f5',   // 黑 → 白
+    '#d89055': '#f2ad76',   // 橙
+    '#8e44ad': '#cc93f2',   // 紫
+    '#ffd640': '#ffdd5c',   // 荧光笔
+  };
+  function invertedPage(cv) {
+    if (document.documentElement.getAttribute('data-invert') !== 'on') return false;
+    const host = cv && cv.parentElement;
+    return !!(host && host.classList && host.classList.contains('pgwrap'));
+  }
+
   function paint(cv, strokes, w, h) {
     const ctx = cv.getContext('2d');
+    const dm = invertedPage(cv);
     ctx.clearRect(0, 0, w, h);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (const s of strokes) {
-      ctx.strokeStyle = s.c;
+      ctx.strokeStyle = (dm && !s.e) ? (DMAP[s.c] || s.c) : s.c;
       ctx.globalAlpha = s.a == null ? 1 : s.a;
       ctx.globalCompositeOperation = s.e ? 'destination-out' : 'source-over';
       ctx.lineWidth = Math.max(0.8, (s.w / 100) * w);
@@ -327,8 +345,21 @@ window.ANNO = (function () {
     paint(cv, strokes, w, h);
   }
 
+  function repaintAll() {
+    document.querySelectorAll('canvas.anno-cv').forEach(cv => {
+      const host = cv.parentElement;
+      if (!host) return;
+      const key = host.getAttribute('data-anno');
+      if (!key) return;
+      const rec = ZS.data.annos[key];
+      if (!rec || !rec.strokes || !rec.strokes.length) return;
+      if (st.on && st.host === host) return;   // 正在书写的那张由实时绘制负责
+      if (!fit(host, cv)) return;
+      paint(cv, rec.strokes, host.clientWidth, host.clientHeight);
+    });
+  }
   return {
-    open, close, renderScope, renderOne, setVisible, paintOn, WIDTHS,
+    open, close, renderScope, renderOne, setVisible, paintOn, WIDTHS, repaintAll,
     get on() { return st.on; },
     get widthIndex() { return st.wi; },
     get visible() { return visible; },
