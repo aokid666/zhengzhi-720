@@ -106,6 +106,20 @@ window.ZS = (function () {
     return 'updated';
   }
 
+  async function saveLogin(blob) {
+    const c = cfg();
+    let sha = null;
+    const g = await api(c, 'contents/' + LOGIN + '?ref=main', { headers: hdr(c) });
+    if (g.ok) sha = (await g.json()).sha;
+    const body = { message: '更新登录密码', branch: 'main',
+                   content: b64enc(JSON.stringify(blob)) };
+    if (sha) body.sha = sha;
+    const p = await api(c, 'contents/' + LOGIN, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!p.ok) { const e = await p.json().catch(() => ({})); throw new Error(e.message || ('HTTP ' + p.status)); }
+    return true;
+  }
+
   async function unlock(user, pass) {
     const blob = await fetchLogin();
     if (!blob) throw new Error('云端还没有设置登录密码');
