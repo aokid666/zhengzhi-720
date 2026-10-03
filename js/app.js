@@ -162,6 +162,8 @@ const DATA_VER = 43;
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     const on = t === 'on' || (t === 'auto' && dark);
     document.documentElement.setAttribute('data-invert', on ? 'on' : 'off');
+    /* 笔色是按页面明暗换的，切换后要把已画的笔迹重绘一遍 */
+    try { if (window.ANNO && ANNO.repaintAll) ANNO.repaintAll(); } catch (e) { }
   }
   window.ZS_INVERT = v => {
     if (v) { try { localStorage.setItem('zz720.invert', v); } catch (e) { } }
