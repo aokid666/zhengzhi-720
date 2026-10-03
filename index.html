@@ -8,9 +8,11 @@
 <script>/* 首屏前先定好主题，避免闪白 */
 (function(){try{var t=localStorage.getItem('zz720.theme')||'auto';
 var d=t==='dark'||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
-document.documentElement.setAttribute('data-theme',d?'dark':'light');}catch(e){}})();
+document.documentElement.setAttribute('data-theme',d?'dark':'light');
+var iv=localStorage.getItem('zz720.invert')||'auto';
+document.documentElement.setAttribute('data-invert',(iv==='on'||(iv==='auto'&&d))?'on':'off');}catch(e){}})();
 </script>
-<link rel="stylesheet" href="css/app.css?v=91">
+<link rel="stylesheet" href="css/app.css?v=92">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>📕</text></svg>">
 </head>
 <body>
@@ -55,9 +57,9 @@ window.addEventListener('error', e=>{
   document.body.appendChild(d);
 });
 </script>
-<script src="js/store.js?v=91"></script>
-<script src="js/annotate.js?v=91"></script>
-<script src="js/app.js?v=91"></script>
+<script src="js/store.js?v=92"></script>
+<script src="js/annotate.js?v=92"></script>
+<script src="js/app.js?v=92"></script>
 <script>
 document.querySelectorAll('#tabbar button').forEach(b=>b.onclick=()=>ZS_GO(b.dataset.go));
 // 高亮当前 tab
