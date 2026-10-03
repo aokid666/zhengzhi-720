@@ -340,3 +340,19 @@ body.annomode #qfab{display:none}
 .annobtn:active{transform:scale(.92);background:var(--teal)}
 body.annomode .annobtn{display:none}
 @media print{.annobtn{display:none!important}}
+
+/* ---------- 登录门禁 ---------- */
+#gate{position:fixed;inset:0;z-index:900;background:var(--paper);display:none;
+  align-items:center;justify-content:center;padding:24px;overflow:auto}
+#gate.show{display:flex}
+.gatebox{width:100%;max-width:340px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);padding:22px 20px;box-shadow:var(--sh)}
+.gatebox .lock{font-size:34px;text-align:center;margin-bottom:4px}
+.gatebox h3{margin:0 0 10px;text-align:center;font-size:17px}
+.gatebox .fld{margin:11px 0}
+.gatebox .fld label{display:block;font-size:12.5px;color:var(--ink3);margin-bottom:4px}
+.gatebox input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
+  background:#fff;font:inherit;color:var(--ink)}
+body.gated #topbar,body.gated #tabbar,body.gated #qnav,body.gated #qfab,
+body.gated #annoVis,body.gated #annobar{display:none !important}
+body.gated .wrap{display:none}
