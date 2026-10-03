@@ -130,6 +130,29 @@ const DATA_VER = 43;
     if (m) { ZS.save(); console.log('已迁移 %d 条截图标注到单张 key', m); }
   }
 
+  /* ---------- 夜间模式 ---------- */
+  const THEMES = { auto: '跟随系统', light: '浅色', dark: '深色' };
+  const themePref = () => { try { return localStorage.getItem('zz720.theme') || 'auto'; } catch (e) { return 'auto'; } };
+  const systemDark = () => !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  function applyTheme() {
+    const t = themePref();
+    const dark = t === 'dark' || (t === 'auto' && systemDark());
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    const b = document.getElementById('themeBtn');
+    if (b) b.textContent = dark ? '☀️' : '🌙';
+  }
+  window.ZS_THEME = v => {
+    if (v) { try { localStorage.setItem('zz720.theme', v); } catch (e) { } }
+    applyTheme();
+    if (v) ZS.toast('外观：' + THEMES[v], 1500);
+    if (S.qs.length) route();
+  };
+  /* 顶栏那个按钮：浅色↔深色 直接切（想跟随系统去「我的」页选） */
+  window.ZS_THEMESWAP = () => {
+    const cur = document.documentElement.getAttribute('data-theme') === 'dark';
+    ZS_THEME(cur ? 'light' : 'dark');
+  };
+
   /* ---------- 登录门禁 ---------- */
   const needGate = () => !ZS.cfg().token && ZS.cfg().gate !== '0';
 
@@ -245,6 +268,8 @@ const DATA_VER = 43;
 
   async function boot() {
     /* 没登录 → 只显示门禁，不加载任何内容 */
+    applyTheme();
+    if (window.matchMedia) { try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme); } catch (e) { } }
     if (needGate()) { showGate(); return; }
     try {
       const r = await fetch('data/questions.json?v=' + DATA_VER);
@@ -1414,6 +1439,13 @@ const DATA_VER = 43;
           <button class="btn main" onclick="ZS_EXPORT()">⬇️ 导出备份文件</button>
           <button class="btn" onclick="ZS_IMPORTBOX()">⬆️ 从备份恢复</button>
           <button class="btn" onclick="ZS_COPY()">📋 复制到剪贴板</button>
+        </div>
+      </div>
+      <div class="sec-title">外观</div>
+      <div class="card pad">
+        <div class="acts">
+          ${['auto', 'light', 'dark'].map(k => `<button class="btn${themePref() === k ? ' main' : ''}"
+            onclick="ZS_THEME('${k}')">${k === 'auto' ? '🌗 跟随系统' : k === 'light' ? '☀️ 浅色' : '🌙 深色'}</button>`).join('')}
         </div>
       </div>
       <div class="sec-title">云端同步</div>
