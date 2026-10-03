@@ -12,20 +12,37 @@ const DATA_VER = 43;
   function saveSession() {
     if (S.q) { S.q.sb = S.sb || S.q.sb || null; S.q.ts = Date.now(); }
     try {
-      localStorage.setItem('zz720.session', JSON.stringify({ list: S.qlist || [], cur: S.q ? S.q.id : null }));
+      const o = { ts: Date.now(), list: S.qlist || [], cur: S.q ? S.q.id : null,
+                  last: localStorage.getItem('zz720.last') || '' };
+      localStorage.setItem('zz720.session', JSON.stringify(o));
+      ZS.data.session = o;                 // 跟着云端一起同步，换设备能接着上次继续
+      ZS.save();
     } catch (e) { }
   }
   function loadSession() {
     try {
-      const o = JSON.parse(localStorage.getItem('zz720.session') || 'null');
+      /* 优先用云端合并后的会话（最新的那台设备为准），没有才退回本地 */
+      const o = ZS.data.session || JSON.parse(localStorage.getItem('zz720.session') || 'null');
       if (o && Array.isArray(o.list)) {
         S.qlist = o.list;
         const cur = o.list.filter(x => x.id === o.cur)[0] || null;
         S.q = cur; S.sb = cur ? (cur.sb || null) : null;
+        if (o.last) localStorage.setItem('zz720.last', o.last);
+        localStorage.setItem('zz720.session', JSON.stringify(o));
       }
     } catch (e) { }
     updateQBadge();
   }
+  /* 「上次做到哪题」也进同步包 */
+  function setLastQ(id) {
+    try {
+      localStorage.setItem('zz720.last', id);
+      ZS.data.session = Object.assign({}, ZS.data.session || {}, { last: id, ts: Date.now() });
+      ZS.save();
+    } catch (e) { }
+  }
+  const lastQId = () => (ZS.data.session && ZS.data.session.last) ||
+                        (localStorage.getItem('zz720.last') || '');
   function updateQBadge() {
     const b = document.getElementById('qbadge');
     if (!b) return;
@@ -125,9 +142,13 @@ const DATA_VER = 43;
     migrateAnnoKeys();
     window.addEventListener('hashchange', route);
     route();
-    if (ZS.cfg().token) { ZS.pull(true).then(() => render()); }
+    if (ZS.cfg().token) { ZS.pull(true).then(() => { loadSession(); route(); }); }
     document.addEventListener('zs-synced', () => { /* no-op */ });
-    document.addEventListener('visibilitychange', () => { if (document.hidden) ZS.push(true); });
+    /* 切走时推送；切回来时自动拉一次，保证换设备后接着用 */
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { ZS.push(true); return; }
+      if (ZS.cfg().token) ZS.pull(true).then(() => { route(); updateQBadge(); });
+    });
   }
 
   async function needLect() {
@@ -306,7 +327,7 @@ const DATA_VER = 43;
     const dueWrong = wrongIds.filter(dueNow);
     const dueFixed = fixedIds.filter(dueNow);
     const dueStar = starIds.filter(dueNow);
-    const last = localStorage.getItem('zz720.last');
+    const last = lastQId();
     const lastQ = last ? S.byId[last] : null;
     let h = `
       <div class="hero">
@@ -412,7 +433,7 @@ const DATA_VER = 43;
     const q = S.byId[id];
     if (!q) { shell('<div class="empty">题目不存在</div>'); return; }
     S.cur = q; S.curId = id;
-    localStorage.setItem('zz720.last', id);
+    setLastQ(id);
     showQNav(true, qIndexOf(id));
     const p = P(id);
     const sbRec = inSb(id) ? (S.sb && S.sb[id]) : null;
@@ -1287,7 +1308,7 @@ const DATA_VER = 43;
         <div class="acts">
           <button class="btn main" onclick="ZS_SYNC()">☁️ 立即同步</button>
           <button class="btn" onclick="ZS_CFG()">设置令牌</button>
-
+          <button class="btn" onclick="ZS_FORCE()">⚠️ 以本机覆盖云端</button>
         </div>
       </div>
       <div class="sec-title">使用帮助</div>
@@ -1743,12 +1764,26 @@ const DATA_VER = 43;
     im.style.maxWidth = 'none';
   };
 
+  /* 手动拉取后把队列会话重新装配一遍（换设备时用得到） */
+  window.ZS_RELOAD = () => { loadSession(); route(); updateQBadge(); };
   window.ZS_SYNC = async () => {
     const c = ZS.cfg();
     if (!c.token) return ZS_CFG();
     ZS.toast('同步中…');
-    await ZS.pull(true); render();
+    await ZS.pull(true); loadSession(); route();
     await ZS.push();
+  };
+  /* 应急：跳过合并，直接用本机这份把云端覆盖掉。
+     只在你「故意在本机删了东西、想让云端也跟着删」时才用。 */
+  window.ZS_FORCE = () => {
+    const c = ZS.cfg();
+    if (!c.token) return ZS_CFG();
+    ZS.confirm('⚠️ 会用**本机**的数据覆盖云端。\n\n如果另一台设备上有本机没有的记录，那些会被删掉。\n\n平时不要用，只有在你想让「删除」也同步过去时才用。确定吗？', async () => {
+      ZS.toast('正在覆盖云端…');
+      const ok = await ZS.forcePush();
+      ZS.toast(ok ? '已用本机数据覆盖云端 ✓' : '覆盖失败，看提示', 3000);
+      route();
+    });
   };
   window.ZS_CFG = () => {
     const c = ZS.cfg();
@@ -1776,7 +1811,7 @@ const DATA_VER = 43;
     const rp = $('#cfgRepo').value.split('/');
     ZS.setCfg({ token: t, owner: rp[0] || 'aokid666', repo: rp[1] || 'zhengzhi-720', file: $('#cfgFile').value.trim() || 'userdata.json' });
     ZS_CFGCLOSE();
-    await ZS.pull(true); await ZS.push(); render();
+    await ZS.pull(true); await ZS.push(); loadSession(); route();
   };
   window.ZS.confirm = (msg, cb) => {
     const m = document.getElementById('modal');
