@@ -96,7 +96,8 @@ window.ZS = (function () {
     if (!token) return 'no-token';
     let blob = null;
     try { blob = await fetchLogin(); } catch (e) { return 'error'; }
-    if (!blob || blob.v !== 2) return 'no-login';
+    if (!blob) return 'no-login';
+    if (blob.v !== 2) return 'old-format';
     const tiv = crypto.getRandomValues(new Uint8Array(12));
     const dk = await crypto.subtle.importKey('raw', dek, { name: 'AES-GCM' }, false, ['encrypt']);
     const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: tiv }, dk,
@@ -124,6 +125,14 @@ window.ZS = (function () {
     const blob = await fetchLogin();
     if (!blob) throw new Error('云端还没有设置登录密码');
     const kek = await deriveKey(user, pass, b642ab(blob.salt), blob.iter || ITER);
+    if (blob.v !== 2) {
+      /* 老格式（v1）：密码直接加密令牌，没有数据密钥 */
+      try {
+        const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b642ab(blob.iv) }, kek, b642ab(blob.ct));
+        forgetDek();
+        return new TextDecoder().decode(pt);
+      } catch (e) { throw new Error('账号或密码不对'); }
+    }
     let dekRaw;
     try {
       dekRaw = new Uint8Array(await crypto.subtle.decrypt(
