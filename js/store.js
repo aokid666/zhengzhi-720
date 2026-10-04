@@ -4,31 +4,196 @@
 window.ZS = (function () {
   const P = 'zz720.v1.';
   const OWNER = 'aokid666', REPO = 'zhengzhi-720', BRANCH = 'userdata', FILE = 'userdata.json';
-  const K = { data: P + 'data', cfg: P + 'cfg' };
+  const K = { data: P + 'data', cfg: P + 'cfg', meta: P + 'syncmeta', device: P + 'device' };
+  const MAPS = ['progress', 'notes', 'annos', 'flags', 'edit'];
+  const clone = o => o === undefined ? undefined : JSON.parse(JSON.stringify(o));
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o || {}, k);
+  const safeKey = k => !['__proto__', 'constructor', 'prototype'].includes(k);
+  const stable = o => JSON.stringify(o, function (k, v) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const out = {}; Object.keys(v).filter(safeKey).sort().forEach(x => { out[x] = v[x]; }); return out;
+    }
+    return v;
+  });
+  const equal = (a, b) => stable(a) === stable(b);
+  const syncBlank = () => ({ v: 2, fields: {}, deleted: {}, conflicts: {}, daily: {}, attempts: {} });
+  const blank = () => ({ v: 2, updated: 0, progress: {}, notes: {}, annos: {}, flags: {}, edit: {}, sync: syncBlank() });
+  let data = blank(), observed = clone(data);
+  let dirty = false, pushTimer = null, maxTimer = null, retryTimer = null, syncing = false, lastSync = 0;
+  let lastErr = '', lastErrAt = 0, lastOkAt = 0, failCount = 0, corruptLocal = false;
+  let meta = { rev: 0, ack: 0, lastOkAt: 0 }, clock = 0, serial = Promise.resolve(), running = false;
+  const randomId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() :
+                         Date.now().toString(36) + Math.random().toString(36).slice(2));
+  let device;
+  try { device = localStorage.getItem(K.device) || randomId(); localStorage.setItem(K.device, device); }
+  catch (e) { device = randomId(); }
+  // 每个标签页一个写入者，避免同机多标签页的计数混在同一个桶里。
+  const writer = device + ':' + randomId();
+  const editors = new Map();
+  const editorKey = (group, key) => group + '\u0000' + key;
+  function beginEdit(group, key, fields) {
+    const id = editorKey(group, key); if (editors.has(id)) return;
+    const stamps = {};
+    fields.forEach(field => { stamps[field] = clone(fieldStamp(data, group, key, field)); });
+    stamps.$deleted = clone((data.sync.deleted[group] || {})[key]);
+    editors.set(id, stamps);
+  }
+  function endEdit(group, key) { editors.delete(editorKey(group, key)); }
 
-  const blank = () => ({ v: 1, updated: 0, progress: {}, notes: {}, annos: {}, flags: {}, edit: {} });
-
-  let data = blank();
-  let dirty = false, pushTimer = null, syncing = false, lastSync = 0;
-  let lastErr = '', lastErrAt = 0, lastOkAt = 0;
-
+  function normalize(d) {
+    if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('数据格式不正确');
+    d.v = 2;
+    d.daily = d.daily || {}; d.hist = d.hist || {};
+    MAPS.forEach(g => { if (!d[g] || typeof d[g] !== 'object' || Array.isArray(d[g])) d[g] = {}; });
+    d.sync = Object.assign(syncBlank(), d.sync || {});
+    ['fields', 'deleted', 'conflicts', 'daily', 'attempts'].forEach(g => { if (!d.sync[g]) d.sync[g] = {}; });
+    // 在任何修改前固定老字段的版本；不能让一次文字编辑把旧手写也标成新版本。
+    for (const g of MAPS) {
+      const fields = d.sync.fields[g] = d.sync.fields[g] || {};
+      d.sync.deleted[g] = d.sync.deleted[g] || {};
+      for (const k of Object.keys(d[g]).filter(safeKey)) {
+        const row = d[g][k]; if (!row || typeof row !== 'object') throw new Error('记录格式不正确');
+        const stamps = fields[k] = fields[k] || {};
+        Object.keys(row).filter(f => safeKey(f) && f !== 'ts' && !(g === 'progress' && ['tries', 'rights'].includes(f)))
+          .forEach(f => { if (!own(stamps, f)) stamps[f] = legacy(row); });
+      }
+    }
+    if (d.session && !d.sync.session) d.sync.session = legacy(d.session);
+    // 老记录只迁一次到 legacy 桶；新作答按写入者计数，合并时不会重复相加。
+    Object.keys(d.daily || {}).filter(safeKey).forEach(day => {
+      if (!d.sync.daily[day]) d.sync.daily[day] = { legacy: clone(d.daily[day]) };
+    });
+    Object.keys(d.progress).filter(safeKey).forEach(id => {
+      if (!d.sync.attempts[id]) d.sync.attempts[id] = { legacy: {
+        n: d.progress[id].tries || 0, r: d.progress[id].rights || 0 } };
+    });
+    return d;
+  }
+  function readMeta() {
+    try { return Object.assign({ rev: 0, ack: 0, lastOkAt: 0 }, JSON.parse(localStorage.getItem(K.meta) || '{}')); }
+    catch (e) { return { rev: 0, ack: 0, lastOkAt: 0 }; }
+  }
+  function emit(type, detail) {
+    try { document.dispatchEvent(new CustomEvent(type, { detail: detail })); } catch (e) { }
+  }
+  function persistMeta() {
+    const other = readMeta();
+    meta.rev = Math.max(meta.rev, other.rev); meta.ack = Math.max(meta.ack, other.ack);
+    meta.lastOkAt = lastOkAt; meta.lastErr = lastErr; meta.lastErrAt = lastErrAt;
+    localStorage.setItem(K.meta, JSON.stringify(meta));
+    dirty = meta.rev > meta.ack;
+  }
+  function persist() {
+    try {
+      // 先写待同步标记，防止在两次写入之间关闭页面导致队列消失。
+      persistMeta(); localStorage.setItem(K.data, JSON.stringify(data));
+      observed = clone(data); emit('zs-state'); return true;
+    } catch (e) {
+      dirty = meta.rev > meta.ack;
+      setErr('本机保存失败：存储空间不足或浏览器限制。请先导出备份，勿关闭页面。');
+      return false;
+    }
+  }
+  function pending() {
+    meta.rev = Math.max(meta.rev, readMeta().rev) + 1; dirty = true;
+  }
   function load() {
-    try { data = Object.assign(blank(), JSON.parse(localStorage.getItem(K.data) || '{}')); }
-    catch (e) { data = blank(); }
-    if (!data.progress) data.progress = {};
-    if (!data.notes) data.notes = {};
-    if (!data.annos) data.annos = {};
-    if (!data.flags) data.flags = {};
-    if (!data.edit) data.edit = {};
+    meta = readMeta(); lastOkAt = meta.lastOkAt || 0; lastSync = lastOkAt;
+    lastErr = meta.lastErr || ''; lastErrAt = meta.lastErrAt || 0;
+    try {
+      const raw = localStorage.getItem(K.data);
+      data = normalize(Object.assign(blank(), JSON.parse(raw || '{}')));
+      if (!localStorage.getItem(K.meta) && raw && hasRecords(data)) pending();
+      clock = data.updated || 0;
+    } catch (e) {
+      // 不自动清掉损坏的原数据，更不能拿空白记录覆盖云端。
+      corruptLocal = true; setErr('本机记录无法读取，已停止上传。请先导出原始数据或检查备份。');
+    }
+    dirty = dirty || meta.rev > meta.ack; observed = clone(data); emit('zs-state');
     return data;
   }
+  function hasRecords(d) {
+    return MAPS.some(g => Object.keys(d[g] || {}).length) || !!d.session || Object.keys(d.hist || {}).length > 0;
+  }
+  function vectors(stamp) { return stamp && stamp.vv || { legacy: stamp && stamp.t || 0 }; }
+  function dominates(a, b) {
+    const av = vectors(a), bv = vectors(b);
+    return Object.keys(bv).every(k => (av[k] || 0) >= (bv[k] || 0));
+  }
+  function compare(a, b) {
+    return (a.t || 0) - (b.t || 0) || String(a.d || '').localeCompare(String(b.d || '')) ||
+           (a.c || 0) - (b.c || 0);
+  }
+  function legacy(row) { const ts = row && row.ts || 0; return { t: ts, c: 0, d: 'legacy', vv: { legacy: ts } }; }
+  function fieldStamp(d, g, k, f) {
+    return ((d.sync.fields[g] || {})[k] || {})[f] || legacy(d[g] && d[g][k]);
+  }
+  function newStamp(previous) {
+    const vv = {};
+    (previous || []).forEach(s => { Object.keys(vectors(s)).forEach(k => { vv[k] = Math.max(vv[k] || 0, vectors(s)[k]); }); });
+    vv[writer] = meta.rev;
+    clock = Math.max(clock, Date.now(), ...(previous || []).map(s => s && s.t || 0));
+    return { t: clock, c: meta.rev, d: writer, vv: vv };
+  }
+  function fieldMeta(g, k) {
+    const group = data.sync.fields[g] = data.sync.fields[g] || {};
+    return group[k] = group[k] || {};
+  }
+  function captureChanges() {
+    let changed = false;
+    for (const g of MAPS) {
+      const before = observed[g] || {}, after = data[g] || {};
+      for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
+        if (!safeKey(k)) continue;
+        const old = before[k], row = after[k];
+        if (old && !row) {
+          const prev = Object.values(fieldMeta(g, k)).concat(legacy(old));
+          const gone = data.sync.deleted[g] = data.sync.deleted[g] || {};
+          gone[k] = newStamp(prev); changed = true; continue;
+        }
+        if (!row) continue;
+        for (const f of new Set([...Object.keys(old || {}), ...Object.keys(row)])) {
+          if (!safeKey(f) || f === 'ts' || (g === 'progress' && ['tries', 'rights'].includes(f))) continue;
+          if (!equal((old || {})[f], row[f])) {
+            const deletion = (data.sync.deleted[g] || {})[k];
+            const editor = editors.get(editorKey(g, k));
+            const current = fieldStamp(observed, g, k, f), base = editor && editor[f] || current;
+            if (editor && !dominates(base, current)) keepConflict(g, k, f, (old || {})[f], current);
+            const stamp = newStamp([base, editor ? editor.$deleted : deletion].filter(Boolean));
+            fieldMeta(g, k)[f] = stamp; row.ts = stamp.t; changed = true;
+            if (editor) editor[f] = clone(stamp);
+          }
+        }
+      }
+    }
+    if (!equal(observed.session, data.session)) {
+      data.sync.session = newStamp([observed.sync.session || legacy(observed.session)]); changed = true;
+    }
+    if (!equal(observed.hist, data.hist) || !equal(observed.sync.daily, data.sync.daily) ||
+        !equal(observed.sync.attempts, data.sync.attempts) || !equal(observed.sync.conflicts, data.sync.conflicts)) changed = true;
+    return changed;
+  }
+  function schedule(delay) {
+    if (!cfg().auto || !cfg().token || meta.blocked) return;
+    clearTimeout(pushTimer); pushTimer = setTimeout(() => push(true), delay == null ? 3000 : delay);
+    // 连续打字/手写也最多等 15 秒，不一直重置上传倒计时。
+    if (!maxTimer) maxTimer = setTimeout(() => { maxTimer = null; push(true); }, 15000);
+  }
+  function clearPushTimers() { clearTimeout(pushTimer); clearTimeout(maxTimer); pushTimer = maxTimer = null; }
   function save(now) {
-    data.updated = Date.now();
-    localStorage.setItem(K.data, JSON.stringify(data));
-    dirty = true;
+    if (corruptLocal) return false;
+    const previousRev = meta.rev;
+    meta.rev = Math.max(meta.rev, readMeta().rev) + 1;
+    if (!captureChanges()) { meta.rev = Math.max(previousRev, readMeta().rev); return now ? sync(false) : true; }
+    // 另一个标签页可能已经保存；先合并，再落盘，不能整份盖掉它的改动。
+    try {
+      const latest = localStorage.getItem(K.data);
+      if (latest && !equal(JSON.parse(latest), observed)) merge(JSON.parse(latest));
+    } catch (e) { setErr('其他标签页的记录无法合并，请先导出备份'); }
+    data.updated = Math.max(Date.now(), clock); dirty = true;
+    persist();
     if (now) return push();
-    clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => push(true), 4000);
+    schedule(); return true;
   }
   /* ---------- 登录密码：用密码加密令牌，密文放仓库里 ----------
      密文公开无所谓，没有密码解不开；密码不上传、不进代码、不进聊天。 */
@@ -163,14 +328,28 @@ window.ZS = (function () {
     try { return Object.assign(def, JSON.parse(localStorage.getItem(K.cfg) || '{}')); }
     catch (e) { return def; }
   }
-  function setCfg(c) { localStorage.setItem(K.cfg, JSON.stringify(Object.assign(cfg(), c))); }
+  function setCfg(c) {
+    const before = cfg(), next = Object.assign({}, before, c);
+    localStorage.setItem(K.cfg, JSON.stringify(next));
+    clearTimeout(retryTimer); retryTimer = null; failCount = 0;
+    meta.blocked = false;
+    if (before.token !== next.token) lastErr = '';
+    if (['owner', 'repo', 'branch', 'file'].some(k => before[k] !== next[k])) { pending(); persist(); }
+    emit('zs-state');
+  }
 
   function hdr(c) { return { 'Authorization': 'token ' + c.token, 'Accept': 'application/vnd.github+json' }; }
-  function api(c, path, opt) {
+  async function api(c, path, opt) {
     const url = 'https://api.github.com/repos/' + c.owner + '/' + c.repo + '/' + path;
     opt = opt || {};
     opt.headers = Object.assign(hdr(c), opt.headers || {});
-    return fetch(url, opt);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 15000);
+    try { return await fetch(url, Object.assign({}, opt, { signal: ctl.signal, cache: 'no-store' })); }
+    catch (e) {
+      if (e.name === 'AbortError') throw Object.assign(new Error('请求超时，联网后会自动重试'), { retryable: true });
+      throw Object.assign(new Error('网络连接失败：' + e.message), { retryable: true });
+    } finally { clearTimeout(timer); }
   }
 
   function b64enc(str) {
@@ -191,151 +370,319 @@ window.ZS = (function () {
     if (!c.branch || c.branch === 'main') return true;
     const g = await api(c, 'git/ref/heads/' + c.branch, { headers: hdr(c) });
     if (g.ok || g.status === 200) return true;
+    if (g.status !== 404) await checkResponse(g);
     const m = await api(c, 'git/ref/heads/main', { headers: hdr(c) });
-    if (!m.ok) return false;
+    if (!m.ok) await checkResponse(m);
     const sha = (await m.json()).object.sha;
     const p = await api(c, 'git/refs', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ref: 'refs/heads/' + c.branch, sha: sha }),
     });
-    return p.ok || p.status === 422;
+    if (p.ok) return true;
+    if (p.status === 422) {
+      const created = await api(c, 'git/ref/heads/' + c.branch);
+      if (created.ok) return true;
+    }
+    await checkResponse(p);
   }
 
-  /* 把云端文本并进本地（只增不减：远端条目更新才覆盖本地） */
-  function applyRemote(txt) {
-    const remote = JSON.parse(txt);
-    merge(remote);
-    localStorage.setItem(K.data, JSON.stringify(data));
-    return remote;
+  function putField(row, field, value) {
+    if (value === undefined) { delete row[field]; return; }
+    if (Array.isArray(row[field]) && Array.isArray(value)) {
+      const copied = clone(value); row[field].length = 0; copied.forEach(item => row[field].push(item));
+    }
+    else row[field] = clone(value);
   }
-
-  async function pull(silent) {
-    const c = cfg();
-    if (!c.token) { if (!silent) toast('还没填 GitHub 令牌'); return null; }
-    try {
-      const r = await api(c, 'contents/' + c.file + '?ref=' + c.branch, { headers: hdr(c) });
-      if (r.status === 404) return null;
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const j = await r.json();
-      return applyRemote(b64dec(j.content));
-    } catch (e) { setErr('拉取失败：' + e.message); if (!silent) toast('拉取失败：' + e.message); return null; }
+  function conflictId(value) {
+    const text = stable(value); let a = 2166136261, b = 5381;
+    for (let i = 0; i < text.length; i++) { a = Math.imul(a ^ text.charCodeAt(i), 16777619); b = Math.imul(b, 33) ^ text.charCodeAt(i); }
+    return (a >>> 0).toString(16) + '-' + (b >>> 0).toString(16);
   }
-
-  let redoPush = false, failCount = 0;
-  async function push(silent, force) {
-    const c = cfg();
-    if (!c.token) { if (!silent) toast('还没填 GitHub 令牌'); return false; }
-    if (syncing) { redoPush = true; return false; }   // 正在推：记一笔，等会儿补推
-    syncing = true;
-    try {
-      for (let round = 1; round <= 4; round++) {
-        let sha = null;
-        const g = await api(c, 'contents/' + c.file + '?ref=' + c.branch, { headers: hdr(c) });
-        if (g.ok) {
-          const j = await g.json();
-          sha = j.sha;
-          /* 上传前先把云端并进来，否则本机这份「全量覆盖」会抹掉别的设备的记录 */
-          if (!force) {
-            try { applyRemote(b64dec(j.content)); }
-            catch (e) { throw new Error('云端文件异常，已取消上传以保护记录'); }
-          }
-        } else if (g.status !== 404) {
-          throw new Error(explain(g.status));
-        } else if (!(await ensureBranch(c))) {
-          throw new Error('无法创建分支 ' + c.branch);
-        }
-
-        const body = {
-          message: 'sync ' + new Date().toISOString().slice(0, 19),
-          branch: c.branch, content: b64enc(JSON.stringify(data)),
-        };
-        if (sha) body.sha = sha;
-        const p = await api(c, 'contents/' + c.file, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-        });
-        if (p.ok) {
-          failCount = 0;
-          dirty = false; lastSync = Date.now(); lastOkAt = Date.now(); lastErr = '';
-          if (!silent) toast('已同步到云端 ✓');
-          document.dispatchEvent(new CustomEvent('zs-synced'));
-          return true;
-        }
-        const e = await p.json().catch(() => ({}));
-        if (p.status === 409 && round < 4) {
-          /* 云端在刚才这一瞬间被别的设备改了：重新取 sha、重新合并，再来一次 */
-          await new Promise(r => setTimeout(r, 700 + round * 600));
-          continue;
-        }
-        if (p.status === 422 && round < 4) {
-          await new Promise(r => setTimeout(r, 900));
-          continue;
-        }
-        throw new Error(explain(p.status) + (e.message ? '（' + e.message + '）' : ''));
-      }
-      throw new Error('多次重试仍失败，请稍后再试');
-    } catch (e) {
-      setErr(e.message || String(e));
-      if (!silent) toast('同步失败：' + e.message, 3600);
-      /* 失败后自己再试几次（不然你不操作它就永远卡着） */
-      if (failCount < 3) {
-        failCount++;
-        setTimeout(() => push(true), 15000 * failCount);
-      }
-      return false;
-    } finally {
-      syncing = false;
-      if (redoPush) {           // 刚才被挡下的那次，现在补上
-        redoPush = false;
-        setTimeout(() => push(true), 800);
+  function keepConflict(group, key, field, value, stamp) {
+    const entry = { group: group, key: key, field: field, value: clone(value), absent: value === undefined, stamp: clone(stamp) };
+    data.sync.conflicts[conflictId(entry)] = entry;
+  }
+  function mergeCounters(target, remote) {
+    for (const key of Object.keys(remote || {}).filter(safeKey)) {
+      const buckets = target[key] = target[key] || {};
+      for (const id of Object.keys(remote[key]).filter(safeKey)) {
+        const a = buckets[id] || {}, b = remote[key][id] || {};
+        buckets[id] = { n: Math.max(a.n || 0, b.n || 0), r: Math.max(a.r || 0, b.r || 0) };
       }
     }
   }
+  function counterTotal(buckets) {
+    return Object.values(buckets || {}).reduce((sum, x) => ({ n: sum.n + (x.n || 0), r: sum.r + (x.r || 0) }), { n: 0, r: 0 });
+  }
+  function recount() {
+    data.daily = data.daily || {};
+    Object.keys(data.sync.daily).forEach(day => { data.daily[day] = counterTotal(data.sync.daily[day]); });
+    Object.keys(data.sync.attempts).forEach(id => {
+      if (data.progress[id]) {
+        const total = counterTotal(data.sync.attempts[id]);
+        data.progress[id].tries = total.n; data.progress[id].rights = total.r;
+      }
+    });
+  }
+  function recordAnswer(id, right, sel) {
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    const day = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    for (const [group, key] of [['daily', day], ['attempts', id]]) {
+      const buckets = data.sync[group][key] = data.sync[group][key] || {};
+      const count = buckets[writer] = buckets[writer] || { n: 0, r: 0 };
+      count.n++; if (right) count.r++;
+    }
+    const hist = data.hist = data.hist || {}, list = hist[id] = hist[id] || [];
+    list.push({ id: writer + ':' + randomId(), t: Date.now(), r: right ? 1 : 0, s: (sel || []).join('') });
+    if (list.length > 30) list.splice(0, list.length - 30);
+    recount();
+  }
 
-  /* 合并云端数据进本地。**只增不减**：本机已有的东西不会因为云端没有就被删掉。
-     - MAPS  按 key 逐条比 ts，谁新用谁
-     - daily 计数类，取最大值（同一天在两台设备各做了几题）
-     - hist  作答历史是数组，按时间戳并集去重
-     - ONES  整体对象比 ts（队列会话这种"最新一次状态"） */
-  const MAPS = ['progress', 'notes', 'annos', 'flags', 'edit'];
-  const ONES = ['session'];
-
-  function merge(remote) {
-    if (!remote) return;
+  // 字段分别合并；向量版本能区分“先后修改”和“各自在旧版本上修改”。
+  // 后者保留输掉的版本，避免把同一题的文字/手写编辑静默丢掉。
+  function merge(input) {
+    const remote = normalize(clone(input));
+    for (const [id, value] of Object.entries(remote.sync.conflicts)) if (safeKey(id)) data.sync.conflicts[id] = value;
     for (const g of MAPS) {
-      const r = remote[g] || {}, l = data[g] || {};
-      for (const k in r) if (!l[k] || (r[k].ts || 0) > (l[k].ts || 0)) l[k] = r[k];
-      data[g] = l;
-    }
-    if (remote.daily) {
-      const l = data.daily = data.daily || {};
-      for (const k in remote.daily) {
-        const r = remote.daily[k], o = l[k];
-        if (!o) l[k] = r;
-        else { o.n = Math.max(o.n || 0, r.n || 0); o.r = Math.max(o.r || 0, r.r || 0); }
+      const rm = remote[g], lm = data[g];
+      const rFields = remote.sync.fields[g] || {}, lFields = data.sync.fields[g] || {};
+      for (const k of new Set([...Object.keys(rm), ...Object.keys(rFields)])) {
+        if (!safeKey(k)) continue;
+        const r = rm[k] || {}, l = lm[k] = lm[k] || {};
+        const stamps = fieldMeta(g, k);
+        const fields = new Set([...Object.keys(r), ...Object.keys(rFields[k] || {})]);
+        for (const f of fields) {
+          if (!safeKey(f) || f === 'ts' || (g === 'progress' && ['tries', 'rights'].includes(f))) continue;
+          const a = fieldStamp(data, g, k, f), b = fieldStamp(remote, g, k, f);
+          const known = own(l, f) || own(lFields[k], f);
+          const aAfter = dominates(a, b), bAfter = dominates(b, a);
+          const same = equal(l[f], r[f]);
+          const concurrent = known && !same && ((!aAfter && !bAfter) || (aAfter && bAfter));
+          let useRemote = !known || (bAfter && !aAfter);
+          if (known && ((!aAfter && !bAfter) || (aAfter && bAfter))) {
+            useRemote = compare(b, a) > 0 || (compare(b, a) === 0 && String(stable(r[f])) > String(stable(l[f])));
+          }
+          if (concurrent) keepConflict(g, k, f, useRemote ? l[f] : r[f], useRemote ? a : b);
+          if (useRemote) { putField(l, f, r[f]); stamps[f] = clone(b); }
+          else if (!own(stamps, f)) stamps[f] = clone(a);
+          clock = Math.max(clock, a.t || 0, b.t || 0);
+        }
+        l.ts = Math.max(l.ts || 0, r.ts || 0);
+      }
+      const gone = data.sync.deleted[g] = data.sync.deleted[g] || {};
+      for (const k of Object.keys(remote.sync.deleted[g] || {}).filter(safeKey)) {
+        const r = remote.sync.deleted[g][k], l = gone[k];
+        if (!l || (dominates(r, l) && !dominates(l, r)) || (!dominates(l, r) && compare(r, l) > 0)) gone[k] = clone(r);
+      }
+      for (const k of Object.keys(gone)) {
+        const row = lm[k]; if (!row) continue;
+        const tombstone = gone[k], stamps = Object.values(fieldMeta(g, k));
+        // 只有明确基于删除版本进行的重新创建，才能重新出现。
+        const recreated = stamps.some(s => dominates(s, tombstone) && !dominates(tombstone, s));
+        if (!recreated) {
+          if (stamps.some(s => !dominates(tombstone, s))) keepConflict(g, k, '$record', row, legacy(row));
+          delete lm[k];
+        }
       }
     }
+    mergeCounters(data.sync.daily, remote.sync.daily);
+    mergeCounters(data.sync.attempts, remote.sync.attempts);
+    recount();
     if (remote.hist) {
-      const l = data.hist = data.hist || {};
-      for (const k in remote.hist) {
-        const r = remote.hist[k] || [];
-        if (!l[k]) { l[k] = r.slice(); continue; }
-        const seen = {};
-        l[k].forEach(x => { seen[x.t] = 1; });
-        r.forEach(x => { if (!seen[x.t]) { l[k].push(x); seen[x.t] = 1; } });
-        l[k].sort((a, b) => a.t - b.t);
-        if (l[k].length > 30) l[k].splice(0, l[k].length - 30);
-      }
+      const hist = data.hist = data.hist || {};
+      Object.keys(remote.hist).filter(safeKey).forEach(k => {
+        const seen = new Map();
+        const id = x => x.id || 'legacy:' + x.t + ':' + x.r + ':' + x.s;
+        (hist[k] || []).concat(remote.hist[k] || []).forEach(x => { seen.set(id(x), clone(x)); });
+        hist[k] = Array.from(seen.values()).sort((a, b) => a.t - b.t || String(a.id || '').localeCompare(String(b.id || ''))).slice(-30);
+      });
     }
-    for (const g of ONES) {
-      const r = remote[g];
-      if (r && (!data[g] || (r.ts || 0) > (data[g].ts || 0))) data[g] = r;
+    if (remote.session) {
+      const a = data.sync.session || legacy(data.session), b = remote.sync.session || legacy(remote.session);
+      const aAfter = dominates(a, b), bAfter = dominates(b, a);
+      const chooseRemote = (!aAfter && !bAfter) || (aAfter && bAfter);
+      if (!data.session || (bAfter && !aAfter) || (chooseRemote && (compare(b, a) > 0 ||
+          (compare(b, a) === 0 && String(stable(remote.session)) > String(stable(data.session)))))) {
+        data.session = clone(remote.session); data.sync.session = clone(b);
+      }
     }
     data.updated = Math.max(data.updated || 0, remote.updated || 0);
+    return remote;
+  }
+  function applyRemote(input) {
+    const before = stable(data), remote = merge(typeof input === 'string' ? JSON.parse(input) : input);
+    const differs = !equal(data, remote);
+    if (differs && !dirty) pending();
+    persist();
+    if (before !== stable(data)) emit('zs-remote');
+    return { remote: remote, differs: differs };
+  }
+  function restoreConflict(id) {
+    const entry = data.sync.conflicts[id]; if (!entry) return false;
+    if (!MAPS.includes(entry.group) || !safeKey(entry.key)) return false;
+    const group = data[entry.group]; if (!group) return false;
+    if (entry.field === '$record') {
+      if (group[entry.key]) keepConflict(entry.group, entry.key, '$record', group[entry.key], legacy(group[entry.key]));
+      group[entry.key] = clone(entry.value);
+    }
+    else {
+      const row = group[entry.key] = group[entry.key] || {};
+      keepConflict(entry.group, entry.key, entry.field, row[entry.field], fieldStamp(data, entry.group, entry.key, entry.field));
+      putField(row, entry.field, entry.absent ? undefined : entry.value);
+    }
+    save(); return true;
+  }
+
+  function requestError(r, message) {
+    const remaining = r.headers && r.headers.get('x-ratelimit-remaining');
+    const retryAfter = Number(r.headers && r.headers.get('retry-after')) || 0;
+    const rateLimit = r.status === 429 || (r.status === 403 && (remaining === '0' || retryAfter || /rate limit/i.test(message || '')));
+    const reset = Number(r.headers && r.headers.get('x-ratelimit-reset')) || 0;
+    return Object.assign(new Error(explain(r.status) + (message ? '（' + message + '）' : '')), {
+      status: r.status, retryable: rateLimit || r.status >= 500 || r.status === 409,
+      retryAfter: rateLimit ? Math.max(60000, retryAfter * 1000, remaining === '0' ? reset * 1000 - Date.now() : 0) : 0
+    });
+  }
+  async function checkResponse(r) {
+    const detail = await r.json().catch(() => ({})); throw requestError(r, detail.message);
+  }
+  const contentPath = c => 'contents/' + c.file.split('/').map(encodeURIComponent).join('/');
+  async function readRemote(c, ref) {
+    const path = contentPath(c) + '?ref=' + encodeURIComponent(ref || c.branch);
+    const r = await api(c, path, { headers: { Accept: 'application/vnd.github.object+json' } });
+    if (r.status === 404) return { exists: false, sha: null, data: null };
+    if (!r.ok) await checkResponse(r);
+    const j = await r.json(); let text;
+    if (j.encoding === 'base64' || (typeof j.content === 'string' && j.content && !j.encoding)) text = b64dec(j.content);
+    else {
+      // Contents JSON 对大于 1 MB 的文件可能不再返回 Base64，仍从鉴权 API 读取原文。
+      const raw = await api(c, path, { headers: { Accept: 'application/vnd.github.raw+json' } });
+      if (!raw.ok) await checkResponse(raw);
+      text = await raw.text();
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== 'object' || !MAPS.some(g => own(parsed, g))) throw new Error('invalid');
+      normalize(clone(parsed));
+    } catch (e) { throw Object.assign(new Error('云端文件格式异常，已停止上传以保护记录'), { retryable: false }); }
+    return { exists: true, sha: j.sha, data: parsed };
+  }
+  function acknowledge(revision) {
+    meta.ack = Math.max(meta.ack, revision); lastSync = lastOkAt = Date.now(); lastErr = '';
+    failCount = 0; meta.blocked = false; clearTimeout(retryTimer); retryTimer = null;
+    persist(); emit('zs-synced');
+  }
+  function online() { return typeof navigator === 'undefined' || navigator.onLine !== false; }
+  function retry(error) {
+    if (!error.retryable || !cfg().auto || !online()) return;
+    failCount++;
+    const delay = Math.max(error.retryAfter || 0, Math.min(300000, 5000 * Math.pow(2, Math.min(failCount - 1, 6)))) +
+                  Math.floor(Math.random() * 1000);
+    clearTimeout(retryTimer); retryTimer = setTimeout(() => { retryTimer = null; sync(true); }, delay);
+  }
+  function enqueue(work) {
+    const next = serial.catch(() => {}).then(async () => {
+      running = true;
+      try { return await work(); } finally { running = false; emit('zs-state'); }
+    });
+    serial = next; return next;
+  }
+  async function doPush(silent, force, reconcile) {
+    const c = cfg();
+    if (!c.token || corruptLocal) { if (!silent) toast(corruptLocal ? lastErr : '还没填 GitHub 令牌'); return false; }
+    if (silent && meta.blocked) return false;
+    if (!online()) { emit('zs-state'); return false; }
+    if (!dirty && !force && !reconcile) return true;
+    clearPushTimers(); syncing = true; emit('zs-state');
+    try {
+      for (let round = 1; round <= 4; round++) {
+        const remote = await readRemote(c);
+        const result = remote.exists && !force ? applyRemote(remote.data) : null;
+        if (remote.exists && !force && !result.differs) {
+          acknowledge(meta.rev);
+          if (!silent) toast('已同步到云端 ✓');
+          return true;
+        }
+        if (!remote.exists && !hasRecords(data)) { acknowledge(meta.rev); return true; }
+        if (!remote.exists && !(await ensureBranch(c))) throw new Error('无法创建分支 ' + c.branch);
+        const revision = meta.rev, snapshot = JSON.stringify(data);
+        const body = { message: 'sync ' + new Date().toISOString().slice(0, 19), branch: c.branch, content: b64enc(snapshot) };
+        if (remote.sha) body.sha = remote.sha;
+        const response = await api(c, contentPath(c), {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        if (response.ok) {
+          acknowledge(revision);
+          // 请求发出去以后新增的修改，不能被这次响应误标为“已同步”。
+          if (dirty) schedule(250);
+          if (!silent) toast(dirty ? '本次已上传，新修改正在补传…' : '已同步到云端 ✓');
+          return true;
+        }
+        if (response.status === 409 && round < 4) {
+          await new Promise(resolve => setTimeout(resolve, 500 * round + Math.floor(Math.random() * 500)));
+          continue;
+        }
+        await checkResponse(response);
+      }
+      throw Object.assign(new Error('多设备同时更新，稍后会自动重试'), { retryable: true });
+    } catch (e) {
+      if (e.retryable === false || e.status === 401 || e.status === 422 || (e.status === 403 && !e.retryable)) meta.blocked = true;
+      setErr(e.message || String(e)); retry(e);
+      if (!silent) toast('同步失败：' + e.message, 3600);
+      return false;
+    } finally { syncing = false; emit('zs-state'); }
+  }
+  function push(silent, force) { return enqueue(() => doPush(silent, force, false)); }
+  function sync(silent) { return enqueue(() => doPush(silent, false, true)); }
+  function pull(silent) {
+    return enqueue(async () => {
+      const c = cfg(); if (!c.token || !online() || corruptLocal) return null;
+      syncing = true; emit('zs-state');
+      try {
+        const remote = await readRemote(c); if (!remote.exists) return null;
+        const result = applyRemote(remote.data);
+        if (!result.differs) acknowledge(meta.rev); else schedule(250);
+        return result.remote;
+      } catch (e) {
+        setErr('拉取失败：' + e.message); retry(e);
+        if (!silent) toast('拉取失败：' + e.message);
+        return null;
+      } finally { syncing = false; emit('zs-state'); }
+    });
+  }
+  function status() {
+    let state = !cfg().token ? 'unconfigured' : !online() ? 'offline' : syncing ? 'syncing' :
+                lastErr ? 'error' : dirty ? 'pending' : lastOkAt ? 'synced' : 'pending';
+    return { state: state, dirty: dirty, lastOkAt: lastOkAt, error: lastErr,
+             conflicts: Object.keys(data.sync.conflicts).length };
+  }
+  let started = false, pollTimer = null;
+  function startSync() {
+    if (started) return; started = true;
+    const resume = () => { emit('zs-state'); if (cfg().auto && cfg().token && !meta.blocked) sync(true); };
+    window.addEventListener('online', resume);
+    window.addEventListener('offline', () => emit('zs-state'));
+    window.addEventListener('storage', e => {
+      if (e.key !== K.data || !e.newValue || corruptLocal) return;
+      try {
+        const before = stable(data); merge(JSON.parse(e.newValue)); meta = readMeta();
+        dirty = meta.rev > meta.ack; observed = clone(data);
+        emit('zs-state'); if (before !== stable(data)) emit('zs-remote');
+        if (dirty) schedule(250);
+      } catch (error) { setErr('其他标签页的记录无法读取'); }
+    });
+    pollTimer = setInterval(() => {
+      if (!document.hidden && cfg().auto && cfg().token && !meta.blocked) sync(true);
+    }, 45000);
+    resume();
   }
 
   function setErr(msg) {
     lastErr = String(msg).slice(0, 200); lastErrAt = Date.now();
+    try { persistMeta(); } catch (e) { }
     try { document.dispatchEvent(new CustomEvent('zs-error', { detail: lastErr })); } catch (e) { }
+    emit('zs-state');
   }
   /* 401/403 基本就是令牌失效或权限不够 */
   function explain(status) {
@@ -357,16 +704,23 @@ window.ZS = (function () {
   }
   async function fetchVersion(sha) {
     const c = cfg();
-    const r = await api(c, 'contents/' + c.file + '?ref=' + encodeURIComponent(sha));
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
-    return JSON.parse(b64dec(j.content));
+    const result = await readRemote(c, sha);
+    if (!result.exists) throw new Error('找不到这一版记录');
+    return result.data;
   }
   /* 把某一版合并回本地再上传（只增不减，所以不会把现有数据弄丢） */
   async function restore(ver) {
-    merge(ver);
-    localStorage.setItem(K.data, JSON.stringify(data));
-    return await push(true);
+    const old = normalize(clone(ver));
+    for (const g of MAPS) {
+      for (const k of Object.keys(old[g]).filter(safeKey)) {
+        if (!data[g][k]) data[g][k] = clone(old[g][k]);
+        else if (!equal(data[g][k], old[g][k]) && ['notes', 'annos', 'edit'].includes(g)) {
+          keepConflict(g, k, '$record', old[g][k], legacy(old[g][k]));
+        }
+      }
+    }
+    save();
+    return await sync(true);
   }
   function summarize(v) {
     const n = o => Object.keys(o || {}).length;
@@ -392,7 +746,8 @@ window.ZS = (function () {
   }
 
   return {
-    load, save, cfg, setCfg, pull, push, toast, fmt, ensureBranch,
+    load, save, cfg, setCfg, pull, push, sync, startSync, status, recordAnswer, restoreConflict,
+    beginEdit, endEdit, toast, fmt, ensureBranch,
     forcePush: silent => push(silent, true),   // 跳过合并，直接用本机数据覆盖云端
     history, fetchVersion, restore, summarize,
     get lastErr() { return lastErr; },
@@ -403,6 +758,7 @@ window.ZS = (function () {
     get data() { return data; },
     get dirty() { return dirty; },
     get lastSync() { return lastSync; },
-    reset() { data = blank(); localStorage.removeItem(K.data); },
+    reset() { data = blank(); observed = clone(data); meta = { rev: 0, ack: 0, lastOkAt: 0 }; dirty = false;
+              localStorage.removeItem(K.data); localStorage.removeItem(K.meta); clearPushTimers(); },
   };
 })();

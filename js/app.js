@@ -1,6 +1,6 @@
 /* 720题 主应用 */
 const DATA_VER = 43;
-const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 99;      // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -37,6 +37,7 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
   /* 「上次做到哪题」也进同步包 */
   function setLastQ(id) {
     try {
+      if (lastQId() === id) return;
       localStorage.setItem('zz720.last', id);
       ZS.data.session = Object.assign({}, ZS.data.session || {}, { last: id, ts: Date.now() });
       ZS.save();
@@ -52,6 +53,7 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     b.style.display = n ? 'block' : 'none';
   }
   function parkQ() {
+    if (!S.q && !S.sb) return;
     if (S.q) { S.q.sb = S.sb || S.q.sb; if (S.curId) { const k = S.q.ids.indexOf(S.curId); if (k >= 0) S.q.i = k; } }
     S.q = null; S.sb = null; saveSession(); updateQBadge();
   }
@@ -354,6 +356,42 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     });
   };
 
+  const SYNC_LABELS = { unconfigured: '☁️ 本机保存 · 尚未连接云端', offline: '📴 离线 · 联网后自动同步',
+    syncing: '☁️ 同步中…', error: '⚠️ 同步需要处理', pending: '☁️ 本机已保存 · 等待同步', synced: '☁️ 已同步' };
+  function updateSyncStatus() {
+    const status = ZS.status(), label = SYNC_LABELS[status.state];
+    const time = status.lastOkAt ? new Date(status.lastOkAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const el = $('#syncStatus');
+    if (el) {
+      el.dataset.state = status.state;
+      el.textContent = label + (status.state === 'synced' && time ? ' · ' + time : '');
+      el.title = status.error || (status.lastOkAt ? '最近成功：' + ZS.fmt(status.lastOkAt) : '点击查看同步设置');
+    }
+    const info = $('#mySyncState');
+    if (info) info.textContent = label + (status.lastOkAt ? ' · 最近成功 ' + ZS.fmt(status.lastOkAt) : '');
+    const error = $('#mySyncError'); if (error) { error.textContent = status.error; error.hidden = !status.error; }
+    const homeInfo = $('#syinfo'); if (homeInfo) homeInfo.textContent = label;
+  }
+  function flushEditors() {
+    if (window.ANNO && ANNO.flush) ANNO.flush();
+    if (nd && nd.cur) {
+      nd.strokes.push(nd.cur); nd.cur = null;
+      const note = ZS.data.notes[nd.id];
+      if (note) { note.strokes = nd.strokes; note.ts = Date.now(); ZS.save(); }
+    }
+  }
+  function applyRemoteView() {
+    updateSyncStatus();
+    // 当前题目与讲义保持原位；下一次主动导航时再装配新数据。
+    if (S.route.startsWith('q/') || S.route.startsWith('lect/')) {
+      S.remotePending = true;
+      const hint = $('#syncRemoteHint'); if (hint) hint.hidden = false;
+      return;
+    }
+    const y = window.scrollY;
+    loadSession(); route(); window.scrollTo(0, y);
+  }
+
   async function boot() {
     /* 没登录 → 只显示门禁，不加载任何内容 */
     applyTheme();
@@ -370,8 +408,11 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     migrateAnnoKeys();
     window.addEventListener('hashchange', route);
     route();
-    if (ZS.cfg().token) { ZS.pull(true).then(() => { loadSession(); route(); }); }
-    document.addEventListener('zs-synced', () => { /* no-op */ });
+    document.addEventListener('zs-state', updateSyncStatus);
+    document.addEventListener('zs-synced', updateSyncStatus);
+    document.addEventListener('zs-remote', applyRemoteView);
+    updateSyncStatus();
+    ZS.startSync();
     /* 自动同步失败不再静默：弹一次提示，引导去诊断 */
     let lastErrToast = 0;
     document.addEventListener('zs-error', () => {
@@ -381,12 +422,11 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     });
     /* 切走时推送；切回来时自动拉一次，保证换设备后接着用 */
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { ZS.push(true); return; }
-      if (ZS.cfg().token) ZS.pull(true).then(() => { route(); updateQBadge(); });
+      if (document.hidden) { flushEditors(); ZS.push(true); return; }
+      if (ZS.cfg().token) ZS.sync(true);
     });
     /* 安卓上 pagehide 比 visibilitychange 更可靠（切后台/锁屏/回桌面都可能只触发它） */
-    window.addEventListener('pagehide', () => ZS.push(true));
-    window.addEventListener('beforeunload', () => ZS.push(true));
+    window.addEventListener('pagehide', () => { flushEditors(); ZS.push(true); });
   }
 
   async function needLect() {
@@ -418,16 +458,8 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     else { p.rv = 0; p.due = Date.now() + DAY / 2; }
     if (!right && autoStar()) { const f = ZS.data.flags[id] = ZS.data.flags[id] || { ts: 0 }; f.star = true; f.ts = Date.now(); }
     delete S['redo_' + id];
-    /* 每日做题量（打卡用） */
-    const dl = ZS.data.daily = ZS.data.daily || {};
-    const dk = dayKey(Date.now());
-    const de = dl[dk] = dl[dk] || { n: 0, r: 0 };
-    de.n++; if (right) de.r++;
-    /* 作答历史 */
-    const H = ZS.data.hist = ZS.data.hist || {};
-    const arr = H[id] = H[id] || [];
-    arr.push({ t: Date.now(), r: right ? 1 : 0, s: (sel || []).join('') });
-    if (arr.length > 30) arr.splice(0, arr.length - 30);
+    // 新作答按设备/标签页计数，历史记录使用唯一编号，跨设备合并不重复、不少算。
+    ZS.recordAnswer(id, right, sel);
     ZS.save();
   }
   const dueNow = id => { const p = P(id); return !p || !p.due || p.due <= Date.now(); };
@@ -470,7 +502,10 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
   function route() {
     let h = location.hash.replace(/^#\/?/, '');
     try { h = decodeURIComponent(h); } catch (e) { }
+    if (S.remotePending) loadSession();
     S.route = h;
+    S.remotePending = false;
+    const remoteHint = $('#syncRemoteHint'); if (remoteHint) remoteHint.hidden = true;
     const [p, a] = h.split('/');
     /* 页面历史栈（供返回按钮用） */
     if (S.back[S.back.length - 1] !== h) S.back.push(h);
@@ -490,7 +525,14 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
   const go = h => { location.hash = '#/' + h; };
 
   function shell(inner) {
+    flushEditors();
+    if (ANNO.on) ANNO.close();
+    if (S.openNoteId) { ZS.endEdit('notes', S.openNoteId); S.openNoteId = null; }
+    if (nd && nd.ro) nd.ro.disconnect(); nd = null;
     $('#view').innerHTML = inner;
+    S.remotePending = false;
+    const hint = $('#syncRemoteHint'); if (hint) hint.hidden = true;
+    updateSyncStatus();
     window.scrollTo(0, 0);
   }
 
@@ -999,13 +1041,15 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     const box = $('#noteBox'); if (!box) return;
     const tg = $('#noteToggle');
     if (!force && box.innerHTML.trim()) {
+      flushEditors(); ZS.endEdit('notes', id); S.openNoteId = null;
       box.innerHTML = '';
       if (tg) tg.textContent = '打开';
       if (nd && nd.id === id) nd = null;
       return;
     }
     if (tg) tg.textContent = '收起';
-    const n = ZS.data.notes[id] || (ZS.data.notes[id] = { text: '', strokes: [], pics: [], ts: Date.now() });
+    const n = ZS.data.notes[id] || (ZS.data.notes[id] = { text: '', strokes: [], pics: [], ts: 0 });
+    ZS.beginEdit('notes', id, ['text', 'strokes', 'pics']); S.openNoteId = id;
     if (!n.strokes) n.strokes = [];
     if (!n.pics) n.pics = [];
     box.innerHTML = `<div id="notearea">
@@ -1036,12 +1080,16 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
       </div></div>`;
     $('#noteText').innerHTML = n.text || '';
     $('#noteText').addEventListener('input', () => {
-      n.text = $('#noteText').innerHTML; n.ts = Date.now(); ZS.save();
-      $('#noteSum').textContent = noteSummary(n);
+      const current = ZS.data.notes[id] || (ZS.data.notes[id] = n);
+      current.text = $('#noteText').innerHTML; current.ts = Date.now(); ZS.save();
+      $('#noteSum').textContent = noteSummary(current);
     });
     $('#picIn').addEventListener('change', e => {
       const f = e.target.files[0]; if (!f) return;
-      shrinkImg(f, d => { n.pics.push(d); n.ts = Date.now(); ZS.save(); drawPics(id); $('#noteSum').textContent = noteSummary(n); });
+      shrinkImg(f, d => {
+        const current = ZS.data.notes[id] || (ZS.data.notes[id] = n);
+        current.pics.push(d); current.ts = Date.now(); ZS.save(); drawPics(id); $('#noteSum').textContent = noteSummary(current);
+      });
       e.target.value = '';
     });
     drawPics(id);
@@ -1128,8 +1176,9 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     const end = () => {
       if (!nd.cur) return;
       nd.strokes.push(nd.cur); nd.cur = null;
-      n.strokes = nd.strokes; n.ts = Date.now(); ZS.save();
-      $('#noteSum').textContent = noteSummary(n);
+      const current = ZS.data.notes[id] || (ZS.data.notes[id] = n);
+      current.strokes = nd.strokes; current.ts = Date.now(); ZS.save();
+      $('#noteSum').textContent = noteSummary(current);
       resize();
     };
     cv.onpointerup = end; cv.onpointercancel = end; cv.onpointerleave = end;
@@ -1506,6 +1555,40 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     ZS.toast('模拟考试开始：' + picked.length + ' 题，交卷后统一给分', 3000);
   };
 
+  function conflictSection() {
+    const entries = Object.entries(ZS.data.sync.conflicts || {}).filter(([id]) => /^[a-f0-9]+-[a-f0-9]+$/.test(id));
+    if (!entries.length) return '';
+    const names = { notes: '笔记', annos: '手写批注', edit: '讲义修改', flags: '标记', progress: '做题状态' };
+    return '<div class="sec-title">保留的冲突版本 · ' + entries.length + '</div><div class="card pad">' +
+      '<div class="tiny muted">不同设备修改了同一处内容，另一份已保留。查看后可以恢复；恢复时也会保留当前版本。</div>' +
+      entries.slice(-20).reverse().map(([id, value]) => '<div style="padding-top:10px">' +
+        '<span class="tiny">' + esc(names[value.group] || '记录') + ' · ' + esc(value.key) + ' · ' +
+        esc(ZS.fmt(value.stamp && value.stamp.t)) + '</span> ' +
+        '<button class="btn" onclick="ZS_CVIEW(\'' + id + '\')">查看副本</button></div>').join('') +
+      (entries.length > 20 ? '<p class="tiny muted">这里显示最近 20 份，全部副本包含在导出备份中。</p>' : '') + '</div>';
+  }
+  window.ZS_CVIEW = id => {
+    const value = ZS.data.sync.conflicts[id]; if (!value) return;
+    const record = value.field === '$record' ? value.value || {} : { [value.field]: value.value };
+    const m = $('#modal');
+    const text = record.text || (value.group === 'edit' ? value.value : '');
+    m.innerHTML = '<div class="box"><h3>保留的副本 · ' + esc(value.key) + '</h3><div style="max-height:56vh;overflow:auto">' +
+      (text ? '<p style="white-space:pre-wrap">' + esc(String(text).replace(/<[^>]*>/g, '')) + '</p>' : '') +
+      (record.strokes ? '<canvas id="conflictCanvas" style="width:100%;height:240px"></canvas>' : '') +
+      (record.pics || []).filter(p => typeof p === 'string' && p.startsWith('data:image/')).map(p => '<img src="' + esc(p) + '">').join('') +
+      (!text && !record.strokes && !(record.pics || []).length ? '<p>' + esc(value.absent ? '这个版本移除了该项内容。' : JSON.stringify(value.value)) + '</p>' : '') +
+      '</div><div class="acts"><button class="btn main" onclick="ZS_CRESTORE(\'' + id + '\')">恢复这个副本</button>' +
+      '<button class="btn" onclick="ZS_CFGCLOSE()">关闭</button></div></div>';
+    m.classList.add('show');
+    const canvas = $('#conflictCanvas');
+    if (canvas) ANNO.paintOn(canvas, record.strokes, canvas.clientWidth || 300, 240);
+  };
+  window.ZS_CRESTORE = id => {
+    ZS.confirm('恢复这个副本？当前内容也会保留为副本，恢复后自动同步。', () => {
+      if (ZS.restoreConflict(id)) { ZS_CFGCLOSE(); route(); ZS.toast('已恢复副本，正在同步'); }
+    });
+  };
+
   function renderMe() {
     showQNav(false);
     const all = S.qs.map(q => q.id), st = statOf(all);
@@ -1561,18 +1644,19 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
       <div class="sec-title">云端同步</div>
       <div class="card pad">
         <div class="tiny muted">数据仓库：${esc(cfg.owner)}/${esc(cfg.repo)} · 文件 ${esc(cfg.file)}<br>
-        本地数据量约 ${sz} KB　${ZS.lastSync ? '上次同步 ' + ZS.fmt(ZS.lastSync) : '尚未同步'}
-        ${ZS.lastErr ? `<br><span style="color:var(--bad)">⚠️ 最近一次同步失败：${esc(ZS.lastErr)}</span>` : ''}</div>
+        本地数据量约 ${sz} KB<br><span id="mySyncState"></span><br>
+        <span id="mySyncError" style="color:var(--bad)" hidden></span></div>
         <div class="acts">
           <button class="btn main" onclick="ZS_SYNC()">☁️ 立即同步</button>
           <button class="btn" onclick="ZS_CFG()">设置令牌</button>
-          <button class="btn" onclick="ZS_FORCE()">⚠️ 以本机覆盖云端</button>
+          <button class="btn" onclick="ZS_FORCE()">高级：以本机覆盖云端</button>
           <button class="btn" onclick="ZS_HIST()">🕘 历史版本</button>
           <button class="btn" onclick="ZS_SETPASS()">🔐 设置登录密码</button>
           <button class="btn" onclick="ZS_LOGOUT()">🚪 退出登录</button>
           <button class="btn" onclick="ZS_DIAG()">🩺 同步诊断</button>
         </div>
       </div>
+      ${conflictSection()}
       <div class="sec-title">使用帮助</div>
       <div class="card pad tiny muted" style="line-height:1.9">
         <b>三种做笔记的方式</b><br>
@@ -1639,7 +1723,7 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
   /* 重做：保留历史次数与复习进度，只把本题切回「待作答」状态 */
   function doRedo(id) {
     S['redo_' + id] = true; delete S['rev_' + id]; S['sel_' + id] = [];
-    if ((ZS.data.flags[id] || {}).guess) { ZS.data.flags[id].guess = false; ZS.save(); }
+    if ((ZS.data.flags[id] || {}).guess) { ZS.data.flags[id].guess = false; ZS.data.flags[id].ts = Date.now(); ZS.save(); }
     renderQuestion(id);
     ZS.toast('已重置本题，可以重做（累计次数保留）');
   }
@@ -1673,7 +1757,7 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     ZS.confirm('确定要重做' + label + '吗？\n共 ' + list.length + ' 题，其中已做 ' + done + ' 题。\n（已做的结果会重置，累计次数、笔记和手写标注都保留）', () => {
       list.forEach(q => {
         const p = ZS.data.progress[q.id];
-        if (p) { delete p.s; delete p.guess; }
+        if (p) { delete p.s; delete p.guess; p.ts = Date.now(); }
         S['redo_' + q.id] = true; S['sel_' + q.id] = [];
       });
       ZS.save();
@@ -2092,8 +2176,9 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     const c = ZS.cfg();
     if (!c.token) return ZS_CFG();
     ZS.toast('同步中…');
-    await ZS.pull(true); loadSession(); route();
-    await ZS.push();
+    flushEditors();
+    await ZS.sync(false);
+    updateSyncStatus();
   };
   /* 应急：跳过合并，直接用本机这份把云端覆盖掉。
      只在你「故意在本机删了东西、想让云端也跟着删」时才用。 */
@@ -2142,7 +2227,7 @@ const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= �
       setTimeout(() => location.reload(), 700);
       return;
     }
-    await ZS.pull(true); await ZS.push(); loadSession(); route();
+    await ZS.sync(false); loadSession(); route(); updateSyncStatus();
     if (st === 'updated') ZS.toast('✅ 令牌已更新，登录密文也一起更新了', 3200);
     else if (st === 'old-format') ZS.toast('⚠️ 检测到旧格式的登录密文，换令牌后请到「🔐 设置登录密码」重设一次，以后就能自动更新了', 7000);
     else if (st === 'no-dek') ZS.toast('⚠️ 令牌换了，但登录密文没更新：请到「🔐 设置登录密码」重设一次，否则新设备会解锁出旧令牌', 7000);

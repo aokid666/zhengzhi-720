@@ -205,7 +205,8 @@ window.ANNO = (function () {
   function markDirty() {
     st.dirty = true;
     clearTimeout(saveT);
-    saveT = setTimeout(flush, 1200);
+    // 一笔完成就落到本机，云端上传由存储层单独防抖。
+    flush();
     document.dispatchEvent(new CustomEvent('anno-change'));
   }
   function flush() {
@@ -217,6 +218,7 @@ window.ANNO = (function () {
   function open(host, key) {
     if (!host) return false;
     if (st.on) close();
+    ZS.beginEdit('annos', key, ['strokes']);
     let p = host;
     while (p && p !== document.body) {
       if (p.classList && p.classList.contains('acc')) p.classList.add('open');
@@ -241,6 +243,7 @@ window.ANNO = (function () {
 
   function close() {
     flush();
+    ZS.endEdit('annos', st.key);
     if (st.host) {
       const cv = st.host.querySelector(':scope > canvas.anno-cv');
       if (cv) { cv.style.pointerEvents = 'none'; cv.classList.remove('editing'); }
@@ -358,8 +361,14 @@ window.ANNO = (function () {
       paint(cv, rec.strokes, host.clientWidth, host.clientHeight);
     });
   }
+  function flushCurrent() {
+    if (st.cur && st.cur.p && st.cur.p.length) {
+      st.strokes.push(st.cur); st.cur = null; st.drawing = false; st.dirty = true;
+    }
+    flush();
+  }
   return {
-    open, close, renderScope, renderOne, setVisible, paintOn, WIDTHS, repaintAll,
+    open, close, flush: flushCurrent, renderScope, renderOne, setVisible, paintOn, WIDTHS, repaintAll,
     get on() { return st.on; },
     get widthIndex() { return st.wi; },
     get visible() { return visible; },
