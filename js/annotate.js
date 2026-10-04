@@ -98,6 +98,7 @@ window.ANNO = (function () {
     if (!st.cv) return;
     st.cv.style.pointerEvents = st.scroll ? 'none' : 'auto';
     st.cv.classList.toggle('editing', !st.scroll && st.on);
+    document.body.classList.toggle('annodraw', !st.scroll && st.on);
   }
 
   function redraw() {
@@ -252,7 +253,7 @@ window.ANNO = (function () {
       setTimeout(() => { if (!st.on) renderOne(h); }, 60);
     }
     st.on = false; st.host = null; st.cv = null;
-    document.body.classList.remove('annomode');
+    document.body.classList.remove('annomode', 'annodraw');
     hideBar();
   }
 
@@ -338,6 +339,13 @@ window.ANNO = (function () {
   document.addEventListener('click', e => {
     const hd = e.target.closest && e.target.closest('.acc > .hd');
     if (hd) setTimeout(() => renderScope(hd.closest('.acc') || document), 120);
+  }, true);
+
+  // 长按落在画布边缘的文字上时，阻止浏览器进入原生文字选择模式。
+  document.addEventListener('selectstart', e => {
+    const target = e.target;
+    if (!target.closest || !target.closest('#view') || target.closest('[contenteditable="true"],input,textarea')) return;
+    if ((st.on && !st.scroll) || document.body.classList.contains('notedraw')) e.preventDefault();
   }, true);
 
   function paintOn(cv, strokes, w, h) {

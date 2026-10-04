@@ -145,6 +145,12 @@ button{font:inherit;color:inherit}
 .annohost{position:relative}
 .annohost>.anno-cv{position:absolute;left:0;top:0;width:100%;height:100%;z-index:5;pointer-events:none;touch-action:pan-y}
 .annohost>.anno-cv.editing{pointer-events:auto;touch-action:none;cursor:crosshair}
+/* 书写时关掉正文的长按选字；切到滚动或完成后恢复。 */
+body.annodraw #view,body.annodraw #view *,
+body.notedraw #view,body.notedraw #view *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body.annodraw #view [contenteditable="true"],body.notedraw #view [contenteditable="true"]{
+  -webkit-user-select:text;user-select:text;-webkit-touch-callout:default
+}
 .anno-cv.drawing{cursor:crosshair}
 .pgwrap.zoomed img{max-height:78vh;object-fit:contain;background:#fff}
 #annobar{

@@ -1,6 +1,6 @@
 /* 720题 主应用 */
 const DATA_VER = 43;
-const APP_VER = 100;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -541,6 +541,7 @@ const APP_VER = 100;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (ANNO.on) ANNO.close();
     if (S.openNoteId) { ZS.endEdit('notes', S.openNoteId); S.openNoteId = null; }
     if (nd && nd.ro) nd.ro.disconnect(); nd = null;
+    document.body.classList.remove('notedraw');
     $('#view').innerHTML = inner;
     S.remotePending = false;
     const hint = $('#syncRemoteHint'); if (hint) hint.hidden = true;
@@ -1059,6 +1060,7 @@ const APP_VER = 100;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       box.innerHTML = '';
       if (tg) tg.textContent = '打开';
       if (nd && nd.id === id) nd = null;
+      document.body.classList.remove('notedraw');
       return;
     }
     if (tg) tg.textContent = '收起';
@@ -1201,6 +1203,7 @@ const APP_VER = 100;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
   function noteToolSync() {
     const dt = $('#drawTools'); if (!dt || !nd) return;
+    document.body.classList.toggle('notedraw', !nd.scroll && $('#noteCv').style.display !== 'none');
     const mb = dt.querySelector('#noteMode');
     if (mb) {
       mb.textContent = nd.scroll ? '🖐 滚动中（点此书写）' : '✍️ 书写中（点此滚动）';
@@ -1998,6 +2001,7 @@ const APP_VER = 100;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (w.style.display === 'none') noteDrawOn(id);
     else {
       w.style.display = 'none';
+      document.body.classList.remove('notedraw');
       const dt = $('#drawTools'); if (dt) dt.style.display = 'none';
       const bd = $('#btnDraw'); if (bd) bd.classList.remove('on');
       if (nd) { const n = ZS.data.notes[id]; n.strokes = nd.strokes; n.ts = Date.now(); ZS.save(); }
@@ -2042,6 +2046,7 @@ const APP_VER = 100;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     ZS.confirm('删除本题的全部笔记（文字 + 手写 + 图片）？', () => {
       delete ZS.data.notes[id];
       if (nd && nd.id === id) nd = null;
+      document.body.classList.remove('notedraw');
       ZS.save(true); renderNote(id); ZS.toast('已删除');
     });
   };
