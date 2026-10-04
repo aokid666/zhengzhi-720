@@ -221,48 +221,74 @@ window.ZS = (function () {
     } catch (e) { setErr('拉取失败：' + e.message); if (!silent) toast('拉取失败：' + e.message); return null; }
   }
 
+  let redoPush = false, failCount = 0;
   async function push(silent, force) {
     const c = cfg();
     if (!c.token) { if (!silent) toast('还没填 GitHub 令牌'); return false; }
-    if (syncing) return false;
+    if (syncing) { redoPush = true; return false; }   // 正在推：记一笔，等会儿补推
     syncing = true;
     try {
-      let sha = null;
-      const g = await api(c, 'contents/' + c.file + '?ref=' + c.branch, { headers: hdr(c) });
-      if (g.ok) {
-        const j = await g.json();
-        sha = j.sha;
-        /* 关键：上传前先把云端并进来。
-           上传是「全量覆盖」，不先合并的话，本机这份（比如换设备后还没拉到的空数据）
-           会把别的设备的记录整份抹掉。合并只会把云端多出来的条目补进本地，不会删本地任何东西。 */
-        if (!force) {
-          try { applyRemote(b64dec(j.content)); }
-          catch (e) { if (!silent) toast('云端文件异常，已取消上传以保护记录', 3600); syncing = false; return false; }
+      for (let round = 1; round <= 4; round++) {
+        let sha = null;
+        const g = await api(c, 'contents/' + c.file + '?ref=' + c.branch, { headers: hdr(c) });
+        if (g.ok) {
+          const j = await g.json();
+          sha = j.sha;
+          /* 上传前先把云端并进来，否则本机这份「全量覆盖」会抹掉别的设备的记录 */
+          if (!force) {
+            try { applyRemote(b64dec(j.content)); }
+            catch (e) { throw new Error('云端文件异常，已取消上传以保护记录'); }
+          }
+        } else if (g.status !== 404) {
+          throw new Error(explain(g.status));
+        } else if (!(await ensureBranch(c))) {
+          throw new Error('无法创建分支 ' + c.branch);
         }
-      } else if (g.status !== 404) {
-        throw new Error('读取云端失败 HTTP ' + g.status);
-      } else if (!(await ensureBranch(c))) {
-        throw new Error('无法创建分支 ' + c.branch);
+
+        const body = {
+          message: 'sync ' + new Date().toISOString().slice(0, 19),
+          branch: c.branch, content: b64enc(JSON.stringify(data)),
+        };
+        if (sha) body.sha = sha;
+        const p = await api(c, 'contents/' + c.file, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        if (p.ok) {
+          failCount = 0;
+          dirty = false; lastSync = Date.now(); lastOkAt = Date.now(); lastErr = '';
+          if (!silent) toast('已同步到云端 ✓');
+          document.dispatchEvent(new CustomEvent('zs-synced'));
+          return true;
+        }
+        const e = await p.json().catch(() => ({}));
+        if (p.status === 409 && round < 4) {
+          /* 云端在刚才这一瞬间被别的设备改了：重新取 sha、重新合并，再来一次 */
+          await new Promise(r => setTimeout(r, 700 + round * 600));
+          continue;
+        }
+        if (p.status === 422 && round < 4) {
+          await new Promise(r => setTimeout(r, 900));
+          continue;
+        }
+        throw new Error(explain(p.status) + (e.message ? '（' + e.message + '）' : ''));
       }
-      const body = {
-        message: 'sync ' + new Date().toISOString().slice(0, 19),
-        branch: c.branch, content: b64enc(JSON.stringify(data)),
-      };
-      if (sha) body.sha = sha;
-      const p = await api(c, 'contents/' + c.file, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      });
-      if (!p.ok) { const e = await p.json().catch(() => ({})); throw new Error(explain(p.status) + (e.message ? '（' + e.message + '）' : '')); }
-      dirty = false; lastSync = Date.now(); lastOkAt = Date.now(); lastErr = '';
-      if (!silent) toast('已同步到云端 ✓');
-      document.dispatchEvent(new CustomEvent('zs-synced'));
-      return true;
+      throw new Error('多次重试仍失败，请稍后再试');
     } catch (e) {
       setErr(e.message || String(e));
       if (!silent) toast('同步失败：' + e.message, 3600);
+      /* 失败后自己再试几次（不然你不操作它就永远卡着） */
+      if (failCount < 3) {
+        failCount++;
+        setTimeout(() => push(true), 15000 * failCount);
+      }
       return false;
+    } finally {
+      syncing = false;
+      if (redoPush) {           // 刚才被挡下的那次，现在补上
+        redoPush = false;
+        setTimeout(() => push(true), 800);
+      }
     }
-    finally { syncing = false; }
   }
 
   /* 合并云端数据进本地。**只增不减**：本机已有的东西不会因为云端没有就被删掉。
