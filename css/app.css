@@ -111,6 +111,8 @@ button{font:inherit;color:inherit}
 .opt.right{border-color:var(--ok);background:#eaf7f0}
 .opt.wrong{border-color:var(--bad);background:#fdeeec}
 .opt .mk{font-size:13px;font-weight:700}
+.opt.right .mk{color:var(--ok)}
+.opt.wrong .mk{color:var(--bad)}
 .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .btn{border:1px solid var(--line);background:var(--fill);border-radius:11px;padding:9px 16px;cursor:pointer;font-size:14.5px}
 .btn.main{background:var(--teal);color:#fff;border-color:var(--teal)}
@@ -392,6 +394,11 @@ html[data-theme="dark"] .annobtn{background:rgba(33,44,47,.9);border-color:var(-
 html[data-theme="dark"] .tocrow:active{background:var(--fill2)}
 html[data-theme="dark"] #notearea .nhd{background:var(--fill2);border-bottom-color:var(--line)}
 html[data-theme="dark"] .btn.guess{background:#2a2440;border-color:#4a3d73;color:#bda9f5}
+html[data-theme="dark"] .opt.sel{background:#183734}
+html[data-theme="dark"] .opt.right,html[data-theme="dark"] .res.ok{background:#173b2e;color:var(--ink)}
+html[data-theme="dark"] .opt.wrong,html[data-theme="dark"] .res.bad{background:#482825;color:var(--ink)}
+html[data-theme="dark"] .opt.right .k,html[data-theme="dark"] .opt.right .mk,html[data-theme="dark"] .res.ok{color:#a7efd0}
+html[data-theme="dark"] .opt.wrong .k,html[data-theme="dark"] .opt.wrong .mk,html[data-theme="dark"] .res.bad{color:#ffb0a9}
 html[data-theme="dark"] mark{background:#7a6220;color:#f2e8cc}
 html[data-theme="dark"] .qbadge{color:#fff}
 /* 纸面（讲义截图 / 手写板 / 放大视图）在夜间保持浅色，不然黑色笔迹看不见 */

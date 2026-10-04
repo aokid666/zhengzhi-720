@@ -1,6 +1,6 @@
 /* 720题 主应用 */
 const DATA_VER = 43;
-const APP_VER = 99;      // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 100;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -438,6 +438,17 @@ const APP_VER = 99;      // 每次改动前端都 +1，和 index.html 的 ?v= �
   /* ---------- 进度 ---------- */
   const P = id => ZS.data.progress[id] || null;
   const isDone = id => { const p = P(id); return !!(p && p.s); };
+  function savedSelection(id, p) {
+    if (!p) return null;
+    if (Array.isArray(p.sel)) return p.sel;
+    // v99 及更早版本只在作答历史里保存选择。仅当时间和对错与当前进度匹配时恢复，
+    // 避免多次作答或跨设备同步后把另一轮的选项当成当前选项。
+    const matching = (ZS.data.hist[id] || []).filter(x => typeof x.s === 'string' &&
+      /^[ABCD]+$/.test(x.s) && Math.abs((x.t || 0) - (p.ts || 0)) <= 2000 &&
+      !!x.r === (p.s === 'right'));
+    if (!matching.length) return null;
+    return matching.sort((a, b) => b.t - a.t)[0].s.split('');
+  }
   /* 艾宾浩斯复习间隔（天）：答对进下一档，答错回到第 1 档 */
   const EB = [1, 2, 4, 7, 15, 30];
   const DAY = 86400000;
@@ -451,6 +462,7 @@ const APP_VER = 99;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     p.tries = (p.tries || 0) + 1;
     if (right) p.rights = (p.rights || 0) + 1;
     p.s = right ? 'right' : 'wrong';
+    p.sel = (sel || []).slice();
     p.guess = !!guess;
     p.ts = Date.now();
     if (right && !p.guess) { p.rv = Math.min((p.rv || 0) + 1, EB.length); p.due = Date.now() + EB[p.rv - 1] * DAY; }
@@ -720,7 +732,8 @@ const APP_VER = 99;      // 每次改动前端都 +1，和 index.html 的 ?v= �
     const answered = inSb(id) ? !!sbRec : (!!(p && p.s) && !S['redo_' + id]);
     const revealed = answered || !!S['rev_' + id];
     if (revealed) { needLect().then(() => { if (S.cur === q && !q._lectDone) { q._lectDone = 1; paintLect(q); } }); }
-    const sel = (sbRec ? sbRec.sel : (S['sel_' + id] || [])) || [];
+    const saved = answered && !sbRec ? savedSelection(id, p) : null;
+    const sel = sbRec ? sbRec.sel : answered ? (saved || []) : (S['sel_' + id] || []);
     /* 模拟考计时器 */
     clearInterval(S._mt);
     if (S.q && S.q.mode === 'mock' && S.q.start) {
@@ -755,10 +768,11 @@ const APP_VER = 99;      // 每次改动前端都 +1，和 index.html 的 ?v= �
         const isRight = q.answer.includes(k), chose = sel.includes(k);
         if (isRight) cls += ' right';
         else if (chose) cls += ' wrong';
+        if (chose) cls += ' chosen';
       }
       h += `<div class="${cls}"${revealed ? '' : ` onclick="ZS_SEL('${id}','${k}')"`}>
         <span class="k">${k}</span><span class="v">${esc(v)}</span>
-        ${revealed ? `<span class="mk" style="color:${q.answer.includes(k) ? 'var(--ok)' : '#bbb'}">${q.answer.includes(k) ? '✔' : ''}</span>` : ''}
+        ${revealed ? `<span class="mk">${sel.includes(k) ? '你选' : ''}${q.answer.includes(k) ? ' ✔' : ''}</span>` : ''}
       </div>`;
     });
     h += `</div></div>`;
@@ -783,7 +797,7 @@ const APP_VER = 99;      // 每次改动前端都 +1，和 index.html 的 ?v= �
             <button class="btn" onclick="ZS_SB_END()">结束并处理</button>
           </div>`;
       } else {
-        h += `<div class="res ${right ? 'ok' : 'bad'}">${right ? '✔ 做对了' : '✘ 做错了'} —— 正确答案：${esc(q.answer)}${sel.length ? '，你选了 ' + esc(sel.join('')) : ''}</div>
+        h += `<div class="res ${right ? 'ok' : 'bad'}">${right ? '✔ 做对了' : '✘ 做错了'} —— 正确答案：${esc(q.answer)}${sel.length ? '，你选了 ' + esc(sel.join('')) : '，此前作答选项未记录'}</div>
           <div class="tiny muted" style="margin:8px 2px 0">📊 这题已做 <b>${p.tries || 1}</b> 次，做对 <b>${p.rights || 0}</b> 次${dueText(p)}</div>
           <div class="acts">
             <button class="btn guess ${flag(id, 'guess') ? 'on' : ''}" onclick="ZS_GUESS('${id}')">${flag(id, 'guess') ? '已标记：蒙对的' : '标记为「蒙对」'}</button>
@@ -1393,9 +1407,10 @@ const APP_VER = 99;      // 每次改动前端都 +1，和 index.html 的 ?v= �
       body += `<h2>${esc(k)}</h2>`;
       qs.forEach(q => {
         const p = P(q.id) || {};
+        const chosen = savedSelection(q.id, p);
         body += `<div class="q"><div class="stem">${esc(q.no)}. ${esc(q.stem)}</div>
           <div class="opts">${['A', 'B', 'C', 'D'].map(x => q.options[x] ? `<div>${x}. ${esc(q.options[x])}</div>` : '').join('')}</div>
-          <div class="ans">正确答案：<b>${esc(q.answer)}</b>　（做过 ${p.tries || 0} 次，对 ${p.rights || 0} 次）</div>
+          <div class="ans">你的作答：<b>${chosen && chosen.length ? esc(chosen.join('')) : '此前未记录'}</b>　正确答案：<b>${esc(q.answer)}</b>　（做过 ${p.tries || 0} 次，对 ${p.rights || 0} 次）</div>
           <div class="an">${esc((q.analysisRaw || '').slice(0, 260))}</div></div>`;
       });
     });

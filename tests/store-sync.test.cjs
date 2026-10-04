@@ -209,6 +209,17 @@ test('history events with matching milliseconds still have distinct identifiers'
   assert.equal(a.ZS.data.hist.q1.length, 2);
 });
 
+test('the selected options travel with the latest answer to another device', async () => {
+  const cloud = server(), a = client(cloud), b = client(cloud);
+  a.ZS.data.progress.q1 = { s: 'wrong', sel: ['B', 'D'], ts: Date.now(), tries: 1, rights: 0 };
+  a.ZS.recordAnswer('q1', false, ['B', 'D']);
+  a.ZS.save(); await a.ZS.push(true); await b.ZS.sync(true);
+  assert.deepEqual(Array.from(b.ZS.data.progress.q1.sel), ['B', 'D']);
+  assert.equal(b.ZS.data.progress.q1.s, 'wrong');
+  const reloaded = client(cloud, blank(), { kv: b.kv });
+  assert.deepEqual(Array.from(reloaded.ZS.data.progress.q1.sel), ['B', 'D']);
+});
+
 test('no-op syncs read cloud without uploading identical data', async () => {
   const cloud = server(), a = client(cloud);
   await a.ZS.sync(true); await a.ZS.sync(true); await a.ZS.push(true);
