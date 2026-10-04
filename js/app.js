@@ -1,6 +1,6 @@
 /* 720题 主应用 */
 const DATA_VER = 43;
-const APP_VER = 97;      // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 98;      // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -384,6 +384,9 @@ const APP_VER = 97;      // 每次改动前端都 +1，和 index.html 的 ?v= �
       if (document.hidden) { ZS.push(true); return; }
       if (ZS.cfg().token) ZS.pull(true).then(() => { route(); updateQBadge(); });
     });
+    /* 安卓上 pagehide 比 visibilitychange 更可靠（切后台/锁屏/回桌面都可能只触发它） */
+    window.addEventListener('pagehide', () => ZS.push(true));
+    window.addEventListener('beforeunload', () => ZS.push(true));
   }
 
   async function needLect() {
