@@ -28,7 +28,7 @@ window.ZS = (function () {
     dirty = true;
     if (now) return push();
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => push(true), 12000);
+    pushTimer = setTimeout(() => push(true), 4000);
   }
   /* ---------- 登录密码：用密码加密令牌，密文放仓库里 ----------
      密文公开无所谓，没有密码解不开；密码不上传、不进代码、不进聊天。 */
