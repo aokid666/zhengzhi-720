@@ -172,6 +172,71 @@ const DATA_VER = 43;
     if (S.qs.length) route();
   };
 
+
+  /* ---------- 同步诊断 ---------- */
+  window.ZS_DIAG = async () => {
+    const c = ZS.cfg();
+    const m = document.getElementById('modal');
+    const rows = [];
+    const add = (k, v) => rows.push([k, v]);
+    const tok = (c.token || '').trim();
+    m.innerHTML = '<div class="box"><h3>🩺 同步诊断</h3><div class="tiny muted">检查中…</div></div>';
+    m.classList.add('show');
+    const msg = ZS.lastErr || '';
+
+    add('令牌', tok ? '已配置（' + esc(tok.slice(0, 7)) + '…）' : '❌ <b>没配置</b>');
+    add('仓库', esc(c.owner) + '/' + esc(c.repo) + ' @ ' + esc(c.branch));
+    add('数据文件', esc(c.file));
+    add('本机记录', Object.keys(ZS.data.progress || {}).length + ' 题');
+    add('最近成功', ZS.lastOkAt ? esc(ZS.fmt(ZS.lastOkAt)) : '<span style="color:var(--warn)">从未</span>');
+    add('最近失败', msg ? '<span style="color:var(--bad)">' + esc(msg) + '</span>' +
+        (ZS.lastErrAt ? '<br><span class="tiny muted">' + esc(ZS.fmt(ZS.lastErrAt)) + '</span>' : '')
+      : '<span class="tiny muted">无</span>');
+
+    if (!tok) {
+      add('结论', '👉 这台设备<b>没有令牌</b>，所以完全不会同步。点下面「重新设置令牌」或「用账号密码登录」。');
+    } else {
+      const hdr = { Authorization: 'token ' + tok, Accept: 'application/vnd.github+json' };
+      const api = 'https://api.github.com/repos/' + c.owner + '/' + c.repo;
+      try {
+        const r = await fetch('https://api.github.com/user', { headers: hdr });
+        if (r.status === 200) { const u = await r.json(); add('① 令牌验证', '✅ 有效（账号 ' + esc(u.login) + '）'); }
+        else add('① 令牌验证', '❌ ' + esc(ZS.explain(r.status)));
+      } catch (e) { add('① 令牌验证', '❌ 网络不通：' + esc(e.message)); }
+      try {
+        const r = await fetch(api, { headers: hdr });
+        if (r.ok) { const d = await r.json(); add('② 仓库读取', '✅ 可访问（' + (d.private ? '私有' : '公开') + '）'); }
+        else add('② 仓库读取', '❌ ' + esc(ZS.explain(r.status)));
+      } catch (e) { add('② 仓库读取', '❌ ' + esc(e.message)); }
+      try {
+        const r = await fetch(api + '/contents/' + c.file + '?ref=' + c.branch, { headers: hdr });
+        if (r.ok) {
+          const j = await r.json();
+          let info = '✅ 存在（' + Math.round(j.size / 1024) + ' KB）';
+          try {
+            const bin = atob((j.content || '').replace(/\s/g, ''));
+            const by = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) by[i] = bin.charCodeAt(i);
+            const remote = JSON.parse(new TextDecoder().decode(by));
+            info += '<br><span class="tiny muted">云端 ' + Object.keys(remote.progress || {}).length +
+              ' 题有记录，最后更新 ' + esc(ZS.fmt(remote.updated)) + '</span>';
+          } catch (e) { }
+          add('③ 云端数据', info);
+        } else if (r.status === 404) add('③ 云端数据', '⚠️ 还没有（第一次同步会自动创建）');
+        else add('③ 云端数据', '❌ ' + esc(ZS.explain(r.status)));
+      } catch (e) { add('③ 云端数据', '❌ ' + esc(e.message)); }
+      add('结论', '三项全 ✅ 却还不同步，把这一页截图发我。');
+    }
+
+    m.innerHTML = '<div class="box"><h3>🩺 同步诊断</h3>' +
+      '<div style="max-height:58vh;overflow:auto">' +
+      rows.map(r => '<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.6">' +
+        '<div style="flex:0 0 76px;color:var(--ink3)">' + r[0] + '</div><div style="flex:1;word-break:break-all">' + r[1] + '</div></div>').join('') +
+      '</div><div class="acts"><button class="btn main" onclick="ZS_SYNC()">立即同步</button>' +
+      '<button class="btn" onclick="ZS_CFG()">重新设置令牌</button>' +
+      '<button class="btn" onclick="ZS_CFGCLOSE()">关闭</button></div></div>';
+  };
+
   /* ---------- 登录门禁 ---------- */
   const needGate = () => !ZS.cfg().token && ZS.cfg().gate !== '0';
 
@@ -303,6 +368,13 @@ const DATA_VER = 43;
     route();
     if (ZS.cfg().token) { ZS.pull(true).then(() => { loadSession(); route(); }); }
     document.addEventListener('zs-synced', () => { /* no-op */ });
+    /* 自动同步失败不再静默：弹一次提示，引导去诊断 */
+    let lastErrToast = 0;
+    document.addEventListener('zs-error', () => {
+      if (Date.now() - lastErrToast < 60000) return;
+      lastErrToast = Date.now();
+      ZS.toast('⚠️ 云同步失败，去「我的 → 🩺 同步诊断」看看原因', 4200);
+    });
     /* 切走时推送；切回来时自动拉一次，保证换设备后接着用 */
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { ZS.push(true); return; }
@@ -1475,7 +1547,8 @@ const DATA_VER = 43;
       <div class="sec-title">云端同步</div>
       <div class="card pad">
         <div class="tiny muted">数据仓库：${esc(cfg.owner)}/${esc(cfg.repo)} · 文件 ${esc(cfg.file)}<br>
-        本地数据量约 ${sz} KB　${ZS.lastSync ? '上次同步 ' + ZS.fmt(ZS.lastSync) : '尚未同步'}</div>
+        本地数据量约 ${sz} KB　${ZS.lastSync ? '上次同步 ' + ZS.fmt(ZS.lastSync) : '尚未同步'}
+        ${ZS.lastErr ? `<br><span style="color:var(--bad)">⚠️ 最近一次同步失败：${esc(ZS.lastErr)}</span>` : ''}</div>
         <div class="acts">
           <button class="btn main" onclick="ZS_SYNC()">☁️ 立即同步</button>
           <button class="btn" onclick="ZS_CFG()">设置令牌</button>
@@ -1483,6 +1556,7 @@ const DATA_VER = 43;
           <button class="btn" onclick="ZS_HIST()">🕘 历史版本</button>
           <button class="btn" onclick="ZS_SETPASS()">🔐 设置登录密码</button>
           <button class="btn" onclick="ZS_LOGOUT()">🚪 退出登录</button>
+          <button class="btn" onclick="ZS_DIAG()">🩺 同步诊断</button>
         </div>
       </div>
       <div class="sec-title">使用帮助</div>
