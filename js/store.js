@@ -10,6 +10,7 @@ window.ZS = (function () {
 
   let data = blank();
   let dirty = false, pushTimer = null, syncing = false, lastSync = 0;
+  let lastErr = '', lastErrAt = 0, lastOkAt = 0;
 
   function load() {
     try { data = Object.assign(blank(), JSON.parse(localStorage.getItem(K.data) || '{}')); }
@@ -217,7 +218,7 @@ window.ZS = (function () {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
       return applyRemote(b64dec(j.content));
-    } catch (e) { if (!silent) toast('拉取失败：' + e.message); return null; }
+    } catch (e) { setErr('拉取失败：' + e.message); if (!silent) toast('拉取失败：' + e.message); return null; }
   }
 
   async function push(silent, force) {
@@ -251,12 +252,16 @@ window.ZS = (function () {
       const p = await api(c, 'contents/' + c.file, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
-      if (!p.ok) { const e = await p.json().catch(() => ({})); throw new Error(e.message || ('HTTP ' + p.status)); }
-      dirty = false; lastSync = Date.now();
+      if (!p.ok) { const e = await p.json().catch(() => ({})); throw new Error(explain(p.status) + (e.message ? '（' + e.message + '）' : '')); }
+      dirty = false; lastSync = Date.now(); lastOkAt = Date.now(); lastErr = '';
       if (!silent) toast('已同步到云端 ✓');
       document.dispatchEvent(new CustomEvent('zs-synced'));
       return true;
-    } catch (e) { if (!silent) toast('同步失败：' + e.message, 3600); return false; }
+    } catch (e) {
+      setErr(e.message || String(e));
+      if (!silent) toast('同步失败：' + e.message, 3600);
+      return false;
+    }
     finally { syncing = false; }
   }
 
@@ -300,6 +305,20 @@ window.ZS = (function () {
       if (r && (!data[g] || (r.ts || 0) > (data[g].ts || 0))) data[g] = r;
     }
     data.updated = Math.max(data.updated || 0, remote.updated || 0);
+  }
+
+  function setErr(msg) {
+    lastErr = String(msg).slice(0, 200); lastErrAt = Date.now();
+    try { document.dispatchEvent(new CustomEvent('zs-error', { detail: lastErr })); } catch (e) { }
+  }
+  /* 401/403 基本就是令牌失效或权限不够 */
+  function explain(status) {
+    if (status === 401) return '令牌无效或已过期 —— 请到「我的 → 设置令牌」重新填一个';
+    if (status === 403) return '令牌权限不够（需要 repo 权限）或触发了限流';
+    if (status === 404) return '找不到仓库/分支/文件 —— 检查「设置令牌」里的仓库和路径';
+    if (status === 409) return '版本冲突 —— 再点一次「立即同步」通常就好';
+    if (status === 422) return '请求被拒绝 —— 可能是文件太大或分支有问题';
+    return 'HTTP ' + status;
   }
 
   /* ---------- 云端历史版本（每次同步都是一个 git 提交）---------- */
@@ -350,6 +369,10 @@ window.ZS = (function () {
     load, save, cfg, setCfg, pull, push, toast, fmt, ensureBranch,
     forcePush: silent => push(silent, true),   // 跳过合并，直接用本机数据覆盖云端
     history, fetchVersion, restore, summarize,
+    get lastErr() { return lastErr; },
+    get lastErrAt() { return lastErrAt; },
+    get lastOkAt() { return lastOkAt; },
+    explain,
     fetchLogin, makeLogin, saveLogin, unlock, upgradeLogin, refreshLogin, forgetDek,
     get data() { return data; },
     get dirty() { return dirty; },
