@@ -268,14 +268,16 @@ const DATA_VER = 43;
       <div class="acts" style="margin-top:16px;justify-content:center">
         <button class="btn main" id="gGo">进入</button></div>
       <div class="tiny muted" id="gMsg" style="text-align:center;margin-top:10px;min-height:20px"></div>
-      <div style="text-align:center;margin-top:12px">
-        <a href="javascript:void(0)" onclick="ZS_CFG()" style="font-size:12.5px;color:var(--ink3)">忘了密码？改用 GitHub 令牌进入</a>
+      <div class="acts" style="justify-content:center;margin-top:14px">
+        <button type="button" class="btn" id="gEsc" style="font-size:13px">忘了密码？改用 GitHub 令牌进入</button>
       </div>
     </div>`;
     const go = () => ZS_UNLOCK();
     document.getElementById('gGo').onclick = go;
     document.getElementById('gPass').onkeydown = e => { if (e.key === 'Enter') go(); };
     document.getElementById('gUser').onkeydown = e => { if (e.key === 'Enter') go(); };
+    const esc2 = document.getElementById('gEsc');
+    if (esc2) esc2.onclick = () => ZS_CFG();
   }
 
   window.ZS_UNLOCK = async () => {
