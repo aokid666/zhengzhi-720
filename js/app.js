@@ -1,5 +1,6 @@
 /* 720题 主应用 */
 const DATA_VER = 43;
+const APP_VER = 97;      // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -184,6 +185,7 @@ const DATA_VER = 43;
     m.classList.add('show');
     const msg = ZS.lastErr || '';
 
+    add('版本', '前端 v' + APP_VER + ' · 数据 v' + DATA_VER);
     add('令牌', tok ? '已配置（' + esc(tok.slice(0, 7)) + '…）' : '❌ <b>没配置</b>');
     add('仓库', esc(c.owner) + '/' + esc(c.repo) + ' @ ' + esc(c.branch));
     add('数据文件', esc(c.file));
@@ -1534,6 +1536,13 @@ const DATA_VER = 43;
           <button class="btn" onclick="ZS_COPY()">📋 复制到剪贴板</button>
         </div>
       </div>
+      <div class="sec-title">关于</div>
+      <div class="card pad">
+        <div class="tiny muted">当前版本 <b style="color:var(--teal)">v${APP_VER}</b>（前端）
+        · 题库数据 v${DATA_VER}<br>
+        如果功能跟预期不一致，多半是浏览器拿的是缓存版本 —— 用带 <code>?n=99</code> 的网址打开一次即可。</div>
+      </div>
+
       <div class="sec-title">外观</div>
       <div class="card pad">
         <div class="acts">
