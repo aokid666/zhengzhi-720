@@ -1,6 +1,7 @@
 /* 720题 主应用 */
 const DATA_VER = 43;
-const APP_VER = 102;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
+const APP_VER = 104;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -130,7 +131,28 @@ const APP_VER = 102;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       delete A[k];
       m++;
     });
-    if (m) { ZS.save(); console.log('已迁移 %d 条截图标注到单张 key', m); }
+    /* 讲义截图：过去笔记绑在题目上（q090|k-img-59）→ 迁成按页共享（_lec|k-img-59）
+       这样在「缩略讲义」里写的和在题目里写的是同一份；同一页有多份就合并笔画 */
+    Object.keys(A).forEach(k => {
+      const mm = /^q\d+\|([ks])-img-(\d+)$/.exec(k);
+      if (!mm) return;
+      const src = A[k];
+      if (!src) return;
+      const nk = LECID + '|' + mm[1] + '-img-' + mm[2];
+      if (A[nk] && A[nk].strokes) {
+        const have = new Set(A[nk].strokes.map(s => JSON.stringify(s.p)));
+        (src.strokes || []).forEach(s => {
+          const sig = JSON.stringify(s.p);
+          if (!have.has(sig)) { A[nk].strokes.push(s); have.add(sig); }
+        });
+        A[nk].ts = Math.max(A[nk].ts || 0, src.ts || 0);
+      } else {
+        A[nk] = { ts: src.ts || Date.now(), strokes: (src.strokes || []).slice() };
+      }
+      delete A[k];
+      m++;
+    });
+    if (m) { ZS.save(); }
   }
 
   /* ---------- 夜间模式 ---------- */
@@ -911,6 +933,8 @@ const APP_VER = 102;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
 
   const PAGE_OFF = { a: 4, k: 8, s: 9, q: 6 };
+  /* 讲义截图笔记用「共享键」：不绑题目，只绑讲义页，题目里和缩略讲义里看到的是同一份 */
+  const LECID = '_lec';
   const PAGE_NAME = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
   const PDFFILE = { a: '解析册', k: '知识清单', s: '速成班讲义', q: '试题册' };
   const IMGEXT = { a: 'webp', k: 'jpg', s: 'jpg' };
@@ -994,10 +1018,10 @@ const APP_VER = 102;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       const ext = IMGEXT[kind] || 'webp';
       const pn = n - off;
       const lb = (PAGE_NAME[kind] || label) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + n + ' 页');
-      return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="${kind}-img" data-id="${id}" data-anno="${id}|${kind}-img-${n}">
+      return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="${kind}-img" data-id="${LECID}" data-anno="${LECID}|${kind}-img-${n}">
         <img loading="lazy" src="${KINDBASE[kind] || IMGBASE}img/${kind}/${nn}.${ext}" alt="${label} 第${n}页" data-label="${esc(lb)}" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
         <span class="pgno">${PAGE_NAME[kind] || ''} P${n - off >= 1 ? n - off : n}</span>
-        <button class="annobtn" onclick="ZS_ANNO('${id}','${kind}-img-${n}')" title="在这一页上做笔记">✍️</button>
+        <button class="annobtn" onclick="ZS_ANNO('${LECID}','${kind}-img-${n}')" title="在这一页上做笔记（与「缩略讲义」同一份）">✍️</button>
       </div>`;
     }).join('') + `<div class="pager">
       <button class="btn tiny" onclick="ZS_PG('${id}','${kind}',-1)">◀ 上一页</button>
@@ -1017,7 +1041,7 @@ const APP_VER = 102;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       let txt = (pages || []).map(n => dict[n] || '').join('\n').trim();
       if (!txt) txt = '（未检索到对应讲义文字，请以截图为准）';
       box.innerHTML = `<div class="pages">${pagesHtml(pages, t, q.id, t === 'k' ? '知识清单' : '速成班讲义')}</div>
-        <div class="acts"><button class="btn" onclick="ZS_ANNO('${q.id}','${t}-img-${(t === 'k' ? q.kPages : q.sPages)[0]}')">✍️ 在讲义截图上做笔记</button>
+        <div class="acts"><button class="btn" onclick="ZS_ANNO('${LECID}','${t}-img-${(t === 'k' ? q.kPages : q.sPages)[0]}')">✍️ 在讲义截图上做笔记</button>
         <button class="btn" onclick="ZS_ANNO('${q.id}','${t}-txt')">✍️ 在讲义文字上做笔记</button>
         ${pdfLink(t, S['pg_' + t + '_' + q.id] ? shiftList(pages, S['pg_' + t + '_' + q.id]) : pages, '打开《' + (t === 'k' ? '知识清单' : '速成班讲义') + '》PDF')}</div>
         <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">讲义文字（点开查看 · 可编辑）<span class="arw">›</span></div>
@@ -1269,8 +1293,15 @@ const APP_VER = 102;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         if (aRaw.includes(k)) push(q, '解析', highlight(cut(aRaw, k), k), 'a');
       }
       if (want('l')) {
-        (q.kPages || []).forEach(n => { const t = S.lk[n]; if (t && t.includes(k)) push(q, '知识清单 P' + n, highlight(cut(t, k), k), 'k:' + n); });
-        (q.sPages || []).forEach(n => { const t = S.ls[n]; if (t && t.includes(k)) push(q, '速成班 P' + n, highlight(cut(t, k), k), 's:' + n); });
+        /* n 是图片序号，页码显示和跳转都用「书页码」（= n - PAGE_OFF） */
+        (q.kPages || []).forEach(n => {
+          const t = S.lk[n], bp = n - (PAGE_OFF.k || 0);
+          if (t && t.includes(k)) push(q, '知识清单 P' + bp, highlight(cut(t, k), k), 'k:' + bp);
+        });
+        (q.sPages || []).forEach(n => {
+          const t = S.ls[n], bp = n - (PAGE_OFF.s || 0);
+          if (t && t.includes(k)) push(q, '速成班讲义 P' + bp, highlight(cut(t, k), k), 's:' + bp);
+        });
       }
       if (want('n')) {
         const nt = ZS.data.notes[q.id];
@@ -1400,6 +1431,24 @@ const APP_VER = 102;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         <span class="tiny muted" style="font-weight:400">${esc(r.txt.slice(0, 34))}${r.txt.length > 34 ? '…' : ''}</span></span>
       <span class="ebc" style="flex:0 0 auto">${r.an ? `✍️${r.an} ` : ''}${r.strokes ? `🖊${r.strokes} ` : ''}${r.pics ? `🖼${r.pics}` : ''}</span>
     </div>`).join('') + `</div>`;
+    /* 讲义截图批注：按「页」共享，不属于任何一题，单独列出来方便回看 */
+    const lecRows = [];
+    Object.keys(ZS.data.annos || {}).forEach(k => {
+      const mm = /^_lec\|([ks])-img-(\d+)$/.exec(k);
+      if (!mm) return;
+      const st = ((ZS.data.annos[k] || {}).strokes) || [];
+      if (st.length) lecRows.push({ kind: mm[1], n: +mm[2], cnt: st.length });
+    });
+    lecRows.sort((a, b) => a.kind === b.kind ? a.n - b.n : (a.kind === 'k' ? -1 : 1));
+    if (lecRows.length) {
+      h += `<div class="sec-title">📚 讲义截图批注（${lecRows.length} 页）</div>
+        <div class="card pad">` + lecRows.map(r => {
+        const bp = r.n - (PAGE_OFF[r.kind] || 0);
+        return `<div class="ebrow" style="cursor:pointer" onclick="ZS_GO('lect/${r.kind}/${bp}')">
+          <span class="ebl" style="flex:1">${PAGE_NAME[r.kind]} 第 ${bp} 页</span>
+          <span class="ebc" style="flex:0 0 auto">✍️ ${r.cnt} 笔</span></div>`;
+      }).join('') + `</div>`;
+    }
     h += `<div class="sec-title">🖨 错题本</div>
       <div class="card pad"><div class="tiny muted" style="line-height:1.8;margin-bottom:10px">把当前所有错题整理成一份可打印 / 存 PDF 的清单。</div>
         <div class="acts"><button class="btn main" onclick="ZS_PRINT()">生成错题本</button></div></div>`;
@@ -1454,7 +1503,7 @@ const APP_VER = 102;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   let TOC = null;
   async function needToc() {
     if (TOC) return TOC;
-    try { TOC = await (await fetch('data/toc.json?v=' + DATA_VER)).json(); }
+    try { TOC = await (await fetch('data/toc.json?v=' + TOC_VER)).json(); }
     catch (e) { TOC = { k: [], s: [] }; }
     return TOC;
   }
@@ -1480,7 +1529,7 @@ const APP_VER = 102;     // 每次改动前端都 +1，和 index.html 的 ?v= �
           <button class="btn tiny" onclick="ZS_THUMB()">${thumbMode() ? '📖 直读整页' : '🔳 缩略图'}</button>
         </div>
         <div id="tocBox" class="tocbox" style="display:none">
-          ${toc.length ? toc.map(t => `<div class="tocrow" onclick="ZS_LPJUMP('${kind}',${t.page})">
+          ${toc.length ? toc.map(t => `<div class="tocrow${t.mod ? ' mod' : ''}" onclick="ZS_LPJUMP('${kind}',${t.page})">
             <b>${esc(t.label)}</b><span>${esc(t.title)}</span><em>P${t.page}</em></div>`).join('')
             : '<div class="tiny muted" style="padding:8px">这本没有目录数据</div>'}
         </div>
@@ -1490,12 +1539,22 @@ const APP_VER = 102;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         const pn = pg - off;
         const nn = String(pg).padStart(4, '0');
         const lb = esc(name) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + pg + ' 页');
-        return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" id="lp${pg}">
+        return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" id="lp${pg}"
+            data-tgt="${kind}-img" data-id="${LECID}" data-anno="${LECID}|${kind}-img-${pg}">
           <img loading="lazy" style="aspect-ratio:${kind === 's' ? '2068/2924' : '2552/3438'}"
-            src="${KINDBASE[kind] || IMGBASE}img/${kind}/${nn}.${ext}" data-label="${lb}" onclick="ZS_ZOOM(this)">
-          <span class="pgno">${esc(name)} P${pn >= 1 ? pn : pg}</span></div>`;
+            src="${KINDBASE[kind] || IMGBASE}img/${kind}/${nn}.${ext}" data-label="${lb}"
+            onclick="ZS_ZOOM(this)">
+          <span class="pgno">${esc(name)} P${pn >= 1 ? pn : pg}</span>
+          <button class="annobtn" onclick="ZS_ANNO('${LECID}','${kind}-img-${pg}')" title="在这一页上做笔记">✍️</button></div>`;
       }).join('') + `</div>`;
     shell(h);
+    /* 批注层：图片加载完再画。用 JS 绑定而不是内联 onload——
+       这一页有 300 多张图，内联处理器会引发一串 WebKit 的「Script error」 */
+    ZS_ANNOSYNC();
+    $$('#view .pgwrap img').forEach(im => {
+      if (im.complete) return;
+      im.addEventListener('load', () => ZS_ANNOSYNC(), { once: true });
+    });
     if (startPage) {
       /* 图片是懒加载的，页面高度会边加载边变，得多定位几次。参数用「书页码」 */
       const sp = Number(startPage) + off;
