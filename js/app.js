@@ -1,6 +1,6 @@
 /* 720题 主应用 */
 const DATA_VER = 43;
-const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 99;      // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -37,7 +37,6 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   /* 「上次做到哪题」也进同步包 */
   function setLastQ(id) {
     try {
-      if (lastQId() === id) return;
       localStorage.setItem('zz720.last', id);
       ZS.data.session = Object.assign({}, ZS.data.session || {}, { last: id, ts: Date.now() });
       ZS.save();
@@ -53,7 +52,6 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     b.style.display = n ? 'block' : 'none';
   }
   function parkQ() {
-    if (!S.q && !S.sb) return;
     if (S.q) { S.q.sb = S.sb || S.q.sb; if (S.curId) { const k = S.q.ids.indexOf(S.curId); if (k >= 0) S.q.i = k; } }
     S.q = null; S.sb = null; saveSession(); updateQBadge();
   }
@@ -356,42 +354,6 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     });
   };
 
-  const SYNC_LABELS = { unconfigured: '☁️ 本机保存 · 尚未连接云端', offline: '📴 离线 · 联网后自动同步',
-    syncing: '☁️ 同步中…', error: '⚠️ 同步需要处理', pending: '☁️ 本机已保存 · 等待同步', synced: '☁️ 已同步' };
-  function updateSyncStatus() {
-    const status = ZS.status(), label = SYNC_LABELS[status.state];
-    const time = status.lastOkAt ? new Date(status.lastOkAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-    const el = $('#syncStatus');
-    if (el) {
-      el.dataset.state = status.state;
-      el.textContent = label + (status.state === 'synced' && time ? ' · ' + time : '');
-      el.title = status.error || (status.lastOkAt ? '最近成功：' + ZS.fmt(status.lastOkAt) : '点击查看同步设置');
-    }
-    const info = $('#mySyncState');
-    if (info) info.textContent = label + (status.lastOkAt ? ' · 最近成功 ' + ZS.fmt(status.lastOkAt) : '');
-    const error = $('#mySyncError'); if (error) { error.textContent = status.error; error.hidden = !status.error; }
-    const homeInfo = $('#syinfo'); if (homeInfo) homeInfo.textContent = label;
-  }
-  function flushEditors() {
-    if (window.ANNO && ANNO.flush) ANNO.flush();
-    if (nd && nd.cur) {
-      nd.strokes.push(nd.cur); nd.cur = null;
-      const note = ZS.data.notes[nd.id];
-      if (note) { note.strokes = nd.strokes; note.ts = Date.now(); ZS.save(); }
-    }
-  }
-  function applyRemoteView() {
-    updateSyncStatus();
-    // 当前题目与讲义保持原位；下一次主动导航时再装配新数据。
-    if (S.route.startsWith('q/') || S.route.startsWith('lect/')) {
-      S.remotePending = true;
-      const hint = $('#syncRemoteHint'); if (hint) hint.hidden = false;
-      return;
-    }
-    const y = window.scrollY;
-    loadSession(); route(); window.scrollTo(0, y);
-  }
-
   async function boot() {
     /* 没登录 → 只显示门禁，不加载任何内容 */
     applyTheme();
@@ -408,11 +370,8 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     migrateAnnoKeys();
     window.addEventListener('hashchange', route);
     route();
-    document.addEventListener('zs-state', updateSyncStatus);
-    document.addEventListener('zs-synced', updateSyncStatus);
-    document.addEventListener('zs-remote', applyRemoteView);
-    updateSyncStatus();
-    ZS.startSync();
+    if (ZS.cfg().token) { ZS.pull(true).then(() => { loadSession(); route(); }); }
+    document.addEventListener('zs-synced', () => { /* no-op */ });
     /* 自动同步失败不再静默：弹一次提示，引导去诊断 */
     let lastErrToast = 0;
     document.addEventListener('zs-error', () => {
@@ -422,11 +381,12 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     });
     /* 切走时推送；切回来时自动拉一次，保证换设备后接着用 */
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { flushEditors(); ZS.push(true); return; }
-      if (ZS.cfg().token) ZS.sync(true);
+      if (document.hidden) { ZS.push(true); return; }
+      if (ZS.cfg().token) ZS.pull(true).then(() => { route(); updateQBadge(); });
     });
     /* 安卓上 pagehide 比 visibilitychange 更可靠（切后台/锁屏/回桌面都可能只触发它） */
-    window.addEventListener('pagehide', () => { flushEditors(); ZS.push(true); });
+    window.addEventListener('pagehide', () => ZS.push(true));
+    window.addEventListener('beforeunload', () => ZS.push(true));
   }
 
   async function needLect() {
@@ -438,17 +398,6 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   /* ---------- 进度 ---------- */
   const P = id => ZS.data.progress[id] || null;
   const isDone = id => { const p = P(id); return !!(p && p.s); };
-  function savedSelection(id, p) {
-    if (!p) return null;
-    if (Array.isArray(p.sel)) return p.sel;
-    // v99 及更早版本只在作答历史里保存选择。仅当时间和对错与当前进度匹配时恢复，
-    // 避免多次作答或跨设备同步后把另一轮的选项当成当前选项。
-    const matching = (ZS.data.hist[id] || []).filter(x => typeof x.s === 'string' &&
-      /^[ABCD]+$/.test(x.s) && Math.abs((x.t || 0) - (p.ts || 0)) <= 2000 &&
-      !!x.r === (p.s === 'right'));
-    if (!matching.length) return null;
-    return matching.sort((a, b) => b.t - a.t)[0].s.split('');
-  }
   /* 艾宾浩斯复习间隔（天）：答对进下一档，答错回到第 1 档 */
   const EB = [1, 2, 4, 7, 15, 30];
   const DAY = 86400000;
@@ -462,7 +411,6 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     p.tries = (p.tries || 0) + 1;
     if (right) p.rights = (p.rights || 0) + 1;
     p.s = right ? 'right' : 'wrong';
-    p.sel = (sel || []).slice();
     p.guess = !!guess;
     p.ts = Date.now();
     if (right && !p.guess) { p.rv = Math.min((p.rv || 0) + 1, EB.length); p.due = Date.now() + EB[p.rv - 1] * DAY; }
@@ -470,8 +418,16 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     else { p.rv = 0; p.due = Date.now() + DAY / 2; }
     if (!right && autoStar()) { const f = ZS.data.flags[id] = ZS.data.flags[id] || { ts: 0 }; f.star = true; f.ts = Date.now(); }
     delete S['redo_' + id];
-    // 新作答按设备/标签页计数，历史记录使用唯一编号，跨设备合并不重复、不少算。
-    ZS.recordAnswer(id, right, sel);
+    /* 每日做题量（打卡用） */
+    const dl = ZS.data.daily = ZS.data.daily || {};
+    const dk = dayKey(Date.now());
+    const de = dl[dk] = dl[dk] || { n: 0, r: 0 };
+    de.n++; if (right) de.r++;
+    /* 作答历史 */
+    const H = ZS.data.hist = ZS.data.hist || {};
+    const arr = H[id] = H[id] || [];
+    arr.push({ t: Date.now(), r: right ? 1 : 0, s: (sel || []).join('') });
+    if (arr.length > 30) arr.splice(0, arr.length - 30);
     ZS.save();
   }
   const dueNow = id => { const p = P(id); return !p || !p.due || p.due <= Date.now(); };
@@ -514,10 +470,7 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   function route() {
     let h = location.hash.replace(/^#\/?/, '');
     try { h = decodeURIComponent(h); } catch (e) { }
-    if (S.remotePending) loadSession();
     S.route = h;
-    S.remotePending = false;
-    const remoteHint = $('#syncRemoteHint'); if (remoteHint) remoteHint.hidden = true;
     const [p, a] = h.split('/');
     /* 页面历史栈（供返回按钮用） */
     if (S.back[S.back.length - 1] !== h) S.back.push(h);
@@ -537,15 +490,7 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   const go = h => { location.hash = '#/' + h; };
 
   function shell(inner) {
-    flushEditors();
-    if (ANNO.on) ANNO.close();
-    if (S.openNoteId) { ZS.endEdit('notes', S.openNoteId); S.openNoteId = null; }
-    if (nd && nd.ro) nd.ro.disconnect(); nd = null;
-    document.body.classList.remove('notedraw');
     $('#view').innerHTML = inner;
-    S.remotePending = false;
-    const hint = $('#syncRemoteHint'); if (hint) hint.hidden = true;
-    updateSyncStatus();
     window.scrollTo(0, 0);
   }
 
@@ -639,6 +584,7 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         ${lastQ ? `<button class="btn main" onclick="ZS_GO('q/${last}')">继续上次</button>` : ''}
         <button class="btn" onclick="ZS_GO('l/first')">从头开始</button>
         <button class="btn" onclick="ZS_GO('s')">🔍 搜索</button>
+        <button class="btn" onclick="ZS_LECTPICK()">📚 缩略讲义</button>
       </div>
       <div class="acts">
         <button class="btn warn" onclick="ZS_PICK('wg','错题 & 蒙对')">❌ 错题 &amp; 蒙对 (${wgShowIds.length})</button>
@@ -733,8 +679,7 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const answered = inSb(id) ? !!sbRec : (!!(p && p.s) && !S['redo_' + id]);
     const revealed = answered || !!S['rev_' + id];
     if (revealed) { needLect().then(() => { if (S.cur === q && !q._lectDone) { q._lectDone = 1; paintLect(q); } }); }
-    const saved = answered && !sbRec ? savedSelection(id, p) : null;
-    const sel = sbRec ? sbRec.sel : answered ? (saved || []) : (S['sel_' + id] || []);
+    const sel = (sbRec ? sbRec.sel : (S['sel_' + id] || [])) || [];
     /* 模拟考计时器 */
     clearInterval(S._mt);
     if (S.q && S.q.mode === 'mock' && S.q.start) {
@@ -769,11 +714,10 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         const isRight = q.answer.includes(k), chose = sel.includes(k);
         if (isRight) cls += ' right';
         else if (chose) cls += ' wrong';
-        if (chose) cls += ' chosen';
       }
       h += `<div class="${cls}"${revealed ? '' : ` onclick="ZS_SEL('${id}','${k}')"`}>
         <span class="k">${k}</span><span class="v">${esc(v)}</span>
-        ${revealed ? `<span class="mk">${sel.includes(k) ? '你选' : ''}${q.answer.includes(k) ? ' ✔' : ''}</span>` : ''}
+        ${revealed ? `<span class="mk" style="color:${q.answer.includes(k) ? 'var(--ok)' : '#bbb'}">${q.answer.includes(k) ? '✔' : ''}</span>` : ''}
       </div>`;
     });
     h += `</div></div>`;
@@ -798,7 +742,7 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
             <button class="btn" onclick="ZS_SB_END()">结束并处理</button>
           </div>`;
       } else {
-        h += `<div class="res ${right ? 'ok' : 'bad'}">${right ? '✔ 做对了' : '✘ 做错了'} —— 正确答案：${esc(q.answer)}${sel.length ? '，你选了 ' + esc(sel.join('')) : '，此前作答选项未记录'}</div>
+        h += `<div class="res ${right ? 'ok' : 'bad'}">${right ? '✔ 做对了' : '✘ 做错了'} —— 正确答案：${esc(q.answer)}${sel.length ? '，你选了 ' + esc(sel.join('')) : ''}</div>
           <div class="tiny muted" style="margin:8px 2px 0">📊 这题已做 <b>${p.tries || 1}</b> 次，做对 <b>${p.rights || 0}</b> 次${dueText(p)}</div>
           <div class="acts">
             <button class="btn guess ${flag(id, 'guess') ? 'on' : ''}" onclick="ZS_GUESS('${id}')">${flag(id, 'guess') ? '已标记：蒙对的' : '标记为「蒙对」'}</button>
@@ -1056,16 +1000,13 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const box = $('#noteBox'); if (!box) return;
     const tg = $('#noteToggle');
     if (!force && box.innerHTML.trim()) {
-      flushEditors(); ZS.endEdit('notes', id); S.openNoteId = null;
       box.innerHTML = '';
       if (tg) tg.textContent = '打开';
       if (nd && nd.id === id) nd = null;
-      document.body.classList.remove('notedraw');
       return;
     }
     if (tg) tg.textContent = '收起';
-    const n = ZS.data.notes[id] || (ZS.data.notes[id] = { text: '', strokes: [], pics: [], ts: 0 });
-    ZS.beginEdit('notes', id, ['text', 'strokes', 'pics']); S.openNoteId = id;
+    const n = ZS.data.notes[id] || (ZS.data.notes[id] = { text: '', strokes: [], pics: [], ts: Date.now() });
     if (!n.strokes) n.strokes = [];
     if (!n.pics) n.pics = [];
     box.innerHTML = `<div id="notearea">
@@ -1096,16 +1037,12 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       </div></div>`;
     $('#noteText').innerHTML = n.text || '';
     $('#noteText').addEventListener('input', () => {
-      const current = ZS.data.notes[id] || (ZS.data.notes[id] = n);
-      current.text = $('#noteText').innerHTML; current.ts = Date.now(); ZS.save();
-      $('#noteSum').textContent = noteSummary(current);
+      n.text = $('#noteText').innerHTML; n.ts = Date.now(); ZS.save();
+      $('#noteSum').textContent = noteSummary(n);
     });
     $('#picIn').addEventListener('change', e => {
       const f = e.target.files[0]; if (!f) return;
-      shrinkImg(f, d => {
-        const current = ZS.data.notes[id] || (ZS.data.notes[id] = n);
-        current.pics.push(d); current.ts = Date.now(); ZS.save(); drawPics(id); $('#noteSum').textContent = noteSummary(current);
-      });
+      shrinkImg(f, d => { n.pics.push(d); n.ts = Date.now(); ZS.save(); drawPics(id); $('#noteSum').textContent = noteSummary(n); });
       e.target.value = '';
     });
     drawPics(id);
@@ -1192,9 +1129,8 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const end = () => {
       if (!nd.cur) return;
       nd.strokes.push(nd.cur); nd.cur = null;
-      const current = ZS.data.notes[id] || (ZS.data.notes[id] = n);
-      current.strokes = nd.strokes; current.ts = Date.now(); ZS.save();
-      $('#noteSum').textContent = noteSummary(current);
+      n.strokes = nd.strokes; n.ts = Date.now(); ZS.save();
+      $('#noteSum').textContent = noteSummary(n);
       resize();
     };
     cv.onpointerup = end; cv.onpointercancel = end; cv.onpointerleave = end;
@@ -1203,7 +1139,6 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
   function noteToolSync() {
     const dt = $('#drawTools'); if (!dt || !nd) return;
-    document.body.classList.toggle('notedraw', !nd.scroll && $('#noteCv').style.display !== 'none');
     const mb = dt.querySelector('#noteMode');
     if (mb) {
       mb.textContent = nd.scroll ? '🖐 滚动中（点此书写）' : '✍️ 书写中（点此滚动）';
@@ -1280,10 +1215,20 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const seen = new Set(), list = [];
     out.forEach(o => { const key = o.q.id + '|' + o.src; if (seen.has(key)) return; seen.add(key); list.push(o); });
     const head = `<div class="tiny muted" style="margin:6px 2px 10px">找到 ${list.length} 条结果${list.length > 300 ? '（只显示前 300 条）' : ''}</div>`;
-    res.innerHTML = head + `<div class="card">` + list.slice(0, 300).map(o =>
-      `<div class="hit" onclick="ZS_GO('q/${o.q.id}')">
-        <div class="h">${esc(o.q.chapter)} 第 ${o.q.no} 题 · ${esc(o.src)}</div>
-        <div class="s">${o.text}</div></div>`).join('') + `</div>`;
+    const LE = { k: '知识清单', s: '速成班讲义' };
+    res.innerHTML = head + `<div class="card">` + list.slice(0, 300).map(o => {
+      const body = `<div class="h">${esc(o.q.chapter)} 第 ${o.q.no} 题 · ${esc(o.src)}</div>
+        <div class="s">${o.text}</div>`;
+      const lc = /^([ks]):(\d+)$/.exec(o.field || '');
+      if (!lc) return `<div class="hit" onclick="ZS_GO('q/${o.q.id}')">${body}</div>`;
+      const kind = lc[1], pg = lc[2];
+      return `<div class="hit">
+        <div onclick="ZS_GO('q/${o.q.id}')">${body}</div>
+        <div class="hitnav">
+          <button class="btn tiny main" onclick="ZS_GO('q/${o.q.id}')">📝 去题目</button>
+          <button class="btn tiny" onclick="ZS_GO('lect/${kind}/${pg}')">📚 去讲义 P${pg}</button>
+        </div></div>`;
+    }).join('') + `</div>`;
   }
   const stripTags = h => String(h || '').replace(/<[^>]+>/g, ' ');
   function cut(t, k) {
@@ -1410,10 +1355,9 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       body += `<h2>${esc(k)}</h2>`;
       qs.forEach(q => {
         const p = P(q.id) || {};
-        const chosen = savedSelection(q.id, p);
         body += `<div class="q"><div class="stem">${esc(q.no)}. ${esc(q.stem)}</div>
           <div class="opts">${['A', 'B', 'C', 'D'].map(x => q.options[x] ? `<div>${x}. ${esc(q.options[x])}</div>` : '').join('')}</div>
-          <div class="ans">你的作答：<b>${chosen && chosen.length ? esc(chosen.join('')) : '此前未记录'}</b>　正确答案：<b>${esc(q.answer)}</b>　（做过 ${p.tries || 0} 次，对 ${p.rights || 0} 次）</div>
+          <div class="ans">正确答案：<b>${esc(q.answer)}</b>　（做过 ${p.tries || 0} 次，对 ${p.rights || 0} 次）</div>
           <div class="an">${esc((q.analysisRaw || '').slice(0, 260))}</div></div>`;
       });
     });
@@ -1520,6 +1464,24 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (pg) ZS.toast('已跳到 ' + pg.textContent, 1400);
   };
 
+  /* 缩略讲义：从首页一键进入整本讲义（缩略图浏览） */
+  window.ZS_LECTPICK = () => {
+    const m = document.getElementById('modal');
+    if (!m) return;
+    const items = [['k', '知识清单', 326], ['s', '速成班讲义', 197]];
+    m.innerHTML = `<div class="box" style="max-width:400px">
+      <div style="font-size:15.5px;font-weight:600;margin-bottom:4px">📚 缩略讲义</div>
+      <div class="tiny muted" style="margin-bottom:12px">整本翻页浏览，点图可放大看原页</div>
+      ${items.map(([k, nm, tot]) => `<div class="lecrow" onclick="ZS_GO('lect/${k}/1');ZS_CFGCLOSE()">
+        <img loading="lazy" src="${KINDBASE[k] || IMGBASE}img/${k}/0001.${IMGEXT[k] || 'webp'}" alt="">
+        <div><b>${esc(nm)}</b><span>全 ${tot} 页</span></div>
+        <em>›</em></div>`).join('')}
+      <div class="acts" style="justify-content:flex-end;margin-top:14px">
+        <button class="btn" onclick="ZS_CFGCLOSE()">关闭</button>
+      </div></div>`;
+    m.classList.add('show');
+  };
+
   function renderQueues() {
     showQNav(false);
     const list = S.qlist || [];
@@ -1571,40 +1533,6 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     saveSession(); updateQBadge();
     go('q/' + nq.ids[0]);
     ZS.toast('模拟考试开始：' + picked.length + ' 题，交卷后统一给分', 3000);
-  };
-
-  function conflictSection() {
-    const entries = Object.entries(ZS.data.sync.conflicts || {}).filter(([id]) => /^[a-f0-9]+-[a-f0-9]+$/.test(id));
-    if (!entries.length) return '';
-    const names = { notes: '笔记', annos: '手写批注', edit: '讲义修改', flags: '标记', progress: '做题状态' };
-    return '<div class="sec-title">保留的冲突版本 · ' + entries.length + '</div><div class="card pad">' +
-      '<div class="tiny muted">不同设备修改了同一处内容，另一份已保留。查看后可以恢复；恢复时也会保留当前版本。</div>' +
-      entries.slice(-20).reverse().map(([id, value]) => '<div style="padding-top:10px">' +
-        '<span class="tiny">' + esc(names[value.group] || '记录') + ' · ' + esc(value.key) + ' · ' +
-        esc(ZS.fmt(value.stamp && value.stamp.t)) + '</span> ' +
-        '<button class="btn" onclick="ZS_CVIEW(\'' + id + '\')">查看副本</button></div>').join('') +
-      (entries.length > 20 ? '<p class="tiny muted">这里显示最近 20 份，全部副本包含在导出备份中。</p>' : '') + '</div>';
-  }
-  window.ZS_CVIEW = id => {
-    const value = ZS.data.sync.conflicts[id]; if (!value) return;
-    const record = value.field === '$record' ? value.value || {} : { [value.field]: value.value };
-    const m = $('#modal');
-    const text = record.text || (value.group === 'edit' ? value.value : '');
-    m.innerHTML = '<div class="box"><h3>保留的副本 · ' + esc(value.key) + '</h3><div style="max-height:56vh;overflow:auto">' +
-      (text ? '<p style="white-space:pre-wrap">' + esc(String(text).replace(/<[^>]*>/g, '')) + '</p>' : '') +
-      (record.strokes ? '<canvas id="conflictCanvas" style="width:100%;height:240px"></canvas>' : '') +
-      (record.pics || []).filter(p => typeof p === 'string' && p.startsWith('data:image/')).map(p => '<img src="' + esc(p) + '">').join('') +
-      (!text && !record.strokes && !(record.pics || []).length ? '<p>' + esc(value.absent ? '这个版本移除了该项内容。' : JSON.stringify(value.value)) + '</p>' : '') +
-      '</div><div class="acts"><button class="btn main" onclick="ZS_CRESTORE(\'' + id + '\')">恢复这个副本</button>' +
-      '<button class="btn" onclick="ZS_CFGCLOSE()">关闭</button></div></div>';
-    m.classList.add('show');
-    const canvas = $('#conflictCanvas');
-    if (canvas) ANNO.paintOn(canvas, record.strokes, canvas.clientWidth || 300, 240);
-  };
-  window.ZS_CRESTORE = id => {
-    ZS.confirm('恢复这个副本？当前内容也会保留为副本，恢复后自动同步。', () => {
-      if (ZS.restoreConflict(id)) { ZS_CFGCLOSE(); route(); ZS.toast('已恢复副本，正在同步'); }
-    });
   };
 
   function renderMe() {
@@ -1662,19 +1590,18 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       <div class="sec-title">云端同步</div>
       <div class="card pad">
         <div class="tiny muted">数据仓库：${esc(cfg.owner)}/${esc(cfg.repo)} · 文件 ${esc(cfg.file)}<br>
-        本地数据量约 ${sz} KB<br><span id="mySyncState"></span><br>
-        <span id="mySyncError" style="color:var(--bad)" hidden></span></div>
+        本地数据量约 ${sz} KB　${ZS.lastSync ? '上次同步 ' + ZS.fmt(ZS.lastSync) : '尚未同步'}
+        ${ZS.lastErr ? `<br><span style="color:var(--bad)">⚠️ 最近一次同步失败：${esc(ZS.lastErr)}</span>` : ''}</div>
         <div class="acts">
           <button class="btn main" onclick="ZS_SYNC()">☁️ 立即同步</button>
           <button class="btn" onclick="ZS_CFG()">设置令牌</button>
-          <button class="btn" onclick="ZS_FORCE()">高级：以本机覆盖云端</button>
+          <button class="btn" onclick="ZS_FORCE()">⚠️ 以本机覆盖云端</button>
           <button class="btn" onclick="ZS_HIST()">🕘 历史版本</button>
           <button class="btn" onclick="ZS_SETPASS()">🔐 设置登录密码</button>
           <button class="btn" onclick="ZS_LOGOUT()">🚪 退出登录</button>
           <button class="btn" onclick="ZS_DIAG()">🩺 同步诊断</button>
         </div>
       </div>
-      ${conflictSection()}
       <div class="sec-title">使用帮助</div>
       <div class="card pad tiny muted" style="line-height:1.9">
         <b>三种做笔记的方式</b><br>
@@ -1741,7 +1668,7 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   /* 重做：保留历史次数与复习进度，只把本题切回「待作答」状态 */
   function doRedo(id) {
     S['redo_' + id] = true; delete S['rev_' + id]; S['sel_' + id] = [];
-    if ((ZS.data.flags[id] || {}).guess) { ZS.data.flags[id].guess = false; ZS.data.flags[id].ts = Date.now(); ZS.save(); }
+    if ((ZS.data.flags[id] || {}).guess) { ZS.data.flags[id].guess = false; ZS.save(); }
     renderQuestion(id);
     ZS.toast('已重置本题，可以重做（累计次数保留）');
   }
@@ -1775,7 +1702,7 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     ZS.confirm('确定要重做' + label + '吗？\n共 ' + list.length + ' 题，其中已做 ' + done + ' 题。\n（已做的结果会重置，累计次数、笔记和手写标注都保留）', () => {
       list.forEach(q => {
         const p = ZS.data.progress[q.id];
-        if (p) { delete p.s; delete p.guess; p.ts = Date.now(); }
+        if (p) { delete p.s; delete p.guess; }
         S['redo_' + q.id] = true; S['sel_' + q.id] = [];
       });
       ZS.save();
@@ -2001,7 +1928,6 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (w.style.display === 'none') noteDrawOn(id);
     else {
       w.style.display = 'none';
-      document.body.classList.remove('notedraw');
       const dt = $('#drawTools'); if (dt) dt.style.display = 'none';
       const bd = $('#btnDraw'); if (bd) bd.classList.remove('on');
       if (nd) { const n = ZS.data.notes[id]; n.strokes = nd.strokes; n.ts = Date.now(); ZS.save(); }
@@ -2046,7 +1972,6 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     ZS.confirm('删除本题的全部笔记（文字 + 手写 + 图片）？', () => {
       delete ZS.data.notes[id];
       if (nd && nd.id === id) nd = null;
-      document.body.classList.remove('notedraw');
       ZS.save(true); renderNote(id); ZS.toast('已删除');
     });
   };
@@ -2196,9 +2121,8 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const c = ZS.cfg();
     if (!c.token) return ZS_CFG();
     ZS.toast('同步中…');
-    flushEditors();
-    await ZS.sync(false);
-    updateSyncStatus();
+    await ZS.pull(true); loadSession(); route();
+    await ZS.push();
   };
   /* 应急：跳过合并，直接用本机这份把云端覆盖掉。
      只在你「故意在本机删了东西、想让云端也跟着删」时才用。 */
@@ -2247,7 +2171,7 @@ const APP_VER = 101;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       setTimeout(() => location.reload(), 700);
       return;
     }
-    await ZS.sync(false); loadSession(); route(); updateSyncStatus();
+    await ZS.pull(true); await ZS.push(); loadSession(); route();
     if (st === 'updated') ZS.toast('✅ 令牌已更新，登录密文也一起更新了', 3200);
     else if (st === 'old-format') ZS.toast('⚠️ 检测到旧格式的登录密文，换令牌后请到「🔐 设置登录密码」重设一次，以后就能自动更新了', 7000);
     else if (st === 'no-dek') ZS.toast('⚠️ 令牌换了，但登录密文没更新：请到「🔐 设置登录密码」重设一次，否则新设备会解锁出旧令牌', 7000);
