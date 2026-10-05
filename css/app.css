@@ -46,12 +46,6 @@ button{font:inherit;color:inherit}
 #topbar .row{max-width:820px;margin:0 auto;padding:8px 12px;display:flex;align-items:center;gap:8px}
 #topbar .brand{font-weight:700;letter-spacing:.02em;color:var(--teal);white-space:nowrap}
 #topbar .sp{flex:1}
-.sync-row{max-width:820px;margin:0 auto;padding:0 12px 7px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink3)}
-.sync-status{border:0;background:transparent;color:var(--ink3);padding:2px 0;text-align:left;font:inherit;cursor:pointer}
-.sync-status[data-state="synced"]{color:var(--teal)}
-.sync-status[data-state="error"]{color:var(--bad)}
-.sync-status[data-state="pending"],.sync-status[data-state="offline"]{color:var(--warn)}
-#syncRemoteHint{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .iconbtn{
   border:1px solid var(--line);background:var(--card);border-radius:10px;padding:6px 10px;
   font-size:14px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;gap:4px;
@@ -111,8 +105,6 @@ button{font:inherit;color:inherit}
 .opt.right{border-color:var(--ok);background:#eaf7f0}
 .opt.wrong{border-color:var(--bad);background:#fdeeec}
 .opt .mk{font-size:13px;font-weight:700}
-.opt.right .mk{color:var(--ok)}
-.opt.wrong .mk{color:var(--bad)}
 .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .btn{border:1px solid var(--line);background:var(--fill);border-radius:11px;padding:9px 16px;cursor:pointer;font-size:14.5px}
 .btn.main{background:var(--teal);color:#fff;border-color:var(--teal)}
@@ -145,12 +137,6 @@ button{font:inherit;color:inherit}
 .annohost{position:relative}
 .annohost>.anno-cv{position:absolute;left:0;top:0;width:100%;height:100%;z-index:5;pointer-events:none;touch-action:pan-y}
 .annohost>.anno-cv.editing{pointer-events:auto;touch-action:none;cursor:crosshair}
-/* 书写时关掉正文的长按选字；切到滚动或完成后恢复。 */
-body.annodraw #view,body.annodraw #view *,
-body.notedraw #view,body.notedraw #view *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-body.annodraw #view [contenteditable="true"],body.notedraw #view [contenteditable="true"]{
-  -webkit-user-select:text;user-select:text;-webkit-touch-callout:default
-}
 .anno-cv.drawing{cursor:crosshair}
 .pgwrap.zoomed img{max-height:78vh;object-fit:contain;background:#fff}
 #annobar{
@@ -183,12 +169,23 @@ body.annodraw #view [contenteditable="true"],body.notedraw #view [contenteditabl
 /* ---------- 搜索 ---------- */
 #searchbox{display:flex;gap:8px;margin:14px 0}
 #searchbox input{flex:1;padding:11px 13px;border:1px solid var(--line);border-radius:12px;font-size:16px;outline:none;background:var(--fill)}
-.hit{padding:11px 12px;border-bottom:1px solid #f0ece4;cursor:pointer}
+.hit{padding:11px 12px;border-bottom:1px solid var(--line);cursor:pointer}
 .hit:last-child{border-bottom:none}
 .hit .h{font-weight:600;color:var(--teal);font-size:13.5px;margin-bottom:3px}
-.hit .s{font-size:14px;color:#2b3a39;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.hit .s{font-size:14px;color:var(--ink);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 mark{background:#ffe9a8;padding:0 1px;border-radius:2px}
 .hit .src{font-size:11.5px;color:var(--ink3);margin-top:3px}
+/* 讲义搜索结果：题目 / 讲义 双入口 */
+.hit .hitnav{display:flex;gap:7px;margin-top:9px}
+.hit .hitnav .btn{flex:1;padding:6px 8px;border-radius:9px;font-size:12.5px;line-height:1.35}
+/* 缩略讲义选择行 */
+.lecrow{display:flex;align-items:center;gap:11px;padding:9px 6px;border-radius:12px;cursor:pointer}
+.lecrow:active{background:var(--fill2)}
+.lecrow img{width:46px;height:62px;object-fit:cover;border-radius:6px;border:1px solid var(--line);background:var(--fill);flex:none}
+.lecrow>div{flex:1;min-width:0}
+.lecrow b{display:block;font-size:14.5px;color:var(--ink);margin-bottom:2px}
+.lecrow span{font-size:12px;color:var(--ink3)}
+.lecrow em{font-style:normal;color:var(--ink3);font-size:20px;line-height:1}
 
 /* ---------- 底部导航 ---------- */
 #tabbar{
@@ -400,11 +397,6 @@ html[data-theme="dark"] .annobtn{background:rgba(33,44,47,.9);border-color:var(-
 html[data-theme="dark"] .tocrow:active{background:var(--fill2)}
 html[data-theme="dark"] #notearea .nhd{background:var(--fill2);border-bottom-color:var(--line)}
 html[data-theme="dark"] .btn.guess{background:#2a2440;border-color:#4a3d73;color:#bda9f5}
-html[data-theme="dark"] .opt.sel{background:#183734}
-html[data-theme="dark"] .opt.right,html[data-theme="dark"] .res.ok{background:#173b2e;color:var(--ink)}
-html[data-theme="dark"] .opt.wrong,html[data-theme="dark"] .res.bad{background:#482825;color:var(--ink)}
-html[data-theme="dark"] .opt.right .k,html[data-theme="dark"] .opt.right .mk,html[data-theme="dark"] .res.ok{color:#a7efd0}
-html[data-theme="dark"] .opt.wrong .k,html[data-theme="dark"] .opt.wrong .mk,html[data-theme="dark"] .res.bad{color:#ffb0a9}
 html[data-theme="dark"] mark{background:#7a6220;color:#f2e8cc}
 html[data-theme="dark"] .qbadge{color:#fff}
 /* 纸面（讲义截图 / 手写板 / 放大视图）在夜间保持浅色，不然黑色笔迹看不见 */
