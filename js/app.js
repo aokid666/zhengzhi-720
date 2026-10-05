@@ -1,7 +1,8 @@
 /* 720题 主应用 */
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
-const APP_VER = 104;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const QUESTION_VER = 44; // 修订选项文字时只刷新题库，不重新下载讲义文字
+const APP_VER = 105;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -209,7 +210,7 @@ const APP_VER = 104;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     m.classList.add('show');
     const msg = ZS.lastErr || '';
 
-    add('版本', '前端 v' + APP_VER + ' · 数据 v' + DATA_VER);
+    add('版本', '前端 v' + APP_VER + ' · 题库 v' + QUESTION_VER + ' · 讲义 v' + DATA_VER);
     add('令牌', tok ? '已配置（' + esc(tok.slice(0, 7)) + '…）' : '❌ <b>没配置</b>');
     add('仓库', esc(c.owner) + '/' + esc(c.repo) + ' @ ' + esc(c.branch));
     add('数据文件', esc(c.file));
@@ -420,7 +421,7 @@ const APP_VER = 104;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (window.matchMedia) { try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme); } catch (e) { } }
     if (needGate()) { showGate(); return; }
     try {
-      const r = await fetch('data/questions.json?v=' + DATA_VER);
+      const r = await fetch('data/questions.json?v=' + QUESTION_VER);
       S.qs = await r.json();
     } catch (e) { document.body.innerHTML = '<div class="empty">题库加载失败：' + esc(e.message) + '</div>'; return; }
     S.qs.forEach(q => S.byId[q.id] = q);
@@ -1733,7 +1734,7 @@ const APP_VER = 104;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       <div class="sec-title">关于</div>
       <div class="card pad">
         <div class="tiny muted">当前版本 <b style="color:var(--teal)">v${APP_VER}</b>（前端）
-        · 题库数据 v${DATA_VER}<br>
+        · 题库数据 v${QUESTION_VER}<br>
         如果功能跟预期不一致，多半是浏览器拿的是缓存版本 —— 用带 <code>?n=99</code> 的网址打开一次即可。</div>
       </div>
 
