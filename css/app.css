@@ -379,9 +379,16 @@ body.annomode #qfab{display:none}
 #zoomBar .iconbtn[disabled]{opacity:.3;pointer-events:none}
 
 /* ---------- 浏览整本：工具条 + 目录 ---------- */
-.lectbar{position:sticky;top:46px;z-index:6;margin-top:10px;
+.lectbar{position:sticky;top:calc(var(--topbar-height, 76px) + 4px);z-index:6;margin-top:10px;
   box-shadow:var(--sh);border:1px solid var(--line);background:var(--fill)}
+.lectbar-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:13.5px;color:var(--teal)}
+.lectbar-head .btn{flex:none}
+.lectbar.collapsed{padding:7px 10px}
+.lectbar.collapsed .lectbar-head{margin:0}
+.lectbar.collapsed .lectbar-body{display:none}
+.lectbar + .pages .pgwrap{scroll-margin-top:calc(var(--topbar-height, 76px) + var(--lectbar-height, 54px) + 12px)}
 .lectbar input{width:62px;text-align:center;font-size:16px;border:1px solid var(--line2);border-radius:8px;padding:4px 5px;background:var(--fill)}
+.lectbar .lect-find input{width:auto;text-align:left;font-size:14px;min-width:130px}
 .lectbar input::-webkit-outer-spin-button,.lectbar input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .tocbox{max-height:44vh;overflow:auto;margin-top:10px;border-top:1px solid var(--line);padding-top:6px}
 .tocrow{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13.5px}

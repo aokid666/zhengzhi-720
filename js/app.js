@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 107;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 108;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -565,6 +565,7 @@ const APP_VER = 107;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   function shell(inner) {
     flushEditors();
     if (ANNO.on) ANNO.close();
+    if (S.lectbarObserver) { S.lectbarObserver.disconnect(); S.lectbarObserver = null; }
     if (S.openNoteId) { ZS.endEdit('notes', S.openNoteId); S.openNoteId = null; }
     if (nd && nd.ro) nd.ro.disconnect(); nd = null;
     document.body.classList.remove('notedraw');
@@ -1596,8 +1597,12 @@ const APP_VER = 107;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const toc = (await needToc())[kind] || [];
     if (S.route.split('/')[0] !== 'lect') return;
     const find = S.docFind && S.docFind.kind === kind ? S.docFind : null;
+    const collapsed = localStorage.getItem('zz720.lectbarCollapsed') === '1';
     let h = `<div class="sec-title">📚 ${esc(name)} · 全 ${total} 页</div>
-      <div class="card pad lectbar">
+      <div class="card pad lectbar${collapsed ? ' collapsed' : ''}" id="lectbar">
+        <div class="lectbar-head"><strong>📚 ${esc(name)} · 工具栏</strong>
+          <button class="btn tiny" id="lectbarToggle" aria-expanded="${!collapsed}" aria-controls="lectbarBody" onclick="ZS_LECTBAR()">${collapsed ? '展开工具栏 ▾' : '收起工具栏 ▴'}</button></div>
+        <div id="lectbarBody" class="lectbar-body">
         <div class="acts" style="gap:7px;align-items:center;margin:0;flex-wrap:wrap">
           <button class="btn tiny" onclick="ZS_TOC()">📑 目录（${toc.length}）</button>
           <span class="tiny" style="display:inline-flex;align-items:center;gap:5px">跳到第
@@ -1619,6 +1624,7 @@ const APP_VER = 107;     // 每次改动前端都 +1，和 index.html 的 ?v= �
             <b>${esc(t.label)}</b><span>${esc(t.title)}</span><em>P${t.page}</em></div>`).join('')
             : '<div class="tiny muted" style="padding:8px">这本没有目录数据</div>'}
         </div>
+        </div>
       </div>
       <div class="pages">` +
       Array.from({ length: total }, (_, i) => i + 1).map(pg => {
@@ -1634,6 +1640,12 @@ const APP_VER = 107;     // 每次改动前端都 +1，和 index.html 的 ?v= �
           <button class="annobtn" onclick="ZS_ANNO('${LECID}','${kind}-img-${pg}')" title="在这一页上做笔记">✍️</button></div>`;
       }).join('') + `</div>`;
     shell(h);
+    updateLectLayout();
+    if (window.ResizeObserver) {
+      S.lectbarObserver = new ResizeObserver(updateLectLayout);
+      S.lectbarObserver.observe(document.getElementById('topbar'));
+      S.lectbarObserver.observe(document.getElementById('lectbar'));
+    }
     if (find && find.keyword) updateDocFind(kind, find.page || Number(startPage) + off);
     /* 批注层：图片加载完再画。用 JS 绑定而不是内联 onload——
        这一页有 300 多张图，内联处理器会引发一串 WebKit 的「Script error」 */
@@ -1651,7 +1663,7 @@ const APP_VER = 107;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         const el = document.getElementById('lp' + sp);
         if (el) {
           const top = el.getBoundingClientRect().top;
-          if (Math.abs(top - 60) > 12) el.scrollIntoView({ block: 'start' });
+          if (Math.abs(top - lectOffset()) > 12) el.scrollIntoView({ block: 'start' });
           else done++;              /* 连续几次都在位才算稳（图片加载会让高度变化） */
         }
         /* 到位后再复查几次；一直没到位就多试（图片慢时页面高度不够，滚动会被截断） */
@@ -1661,10 +1673,33 @@ const APP_VER = 107;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     }
   }
 
+  function updateLectLayout() {
+    const top = document.getElementById('topbar');
+    const bar = document.getElementById('lectbar');
+    document.documentElement.style.setProperty('--topbar-height', (top ? top.getBoundingClientRect().height : 76) + 'px');
+    document.documentElement.style.setProperty('--lectbar-height', (bar ? bar.getBoundingClientRect().height : 0) + 'px');
+  }
+  function lectOffset() {
+    const top = document.getElementById('topbar');
+    const bar = document.getElementById('lectbar');
+    return (top ? top.getBoundingClientRect().height : 76) + (bar ? bar.getBoundingClientRect().height : 0) + 16;
+  }
+  window.ZS_LECTBAR = () => {
+    const bar = document.getElementById('lectbar');
+    const button = document.getElementById('lectbarToggle');
+    if (!bar || !button) return;
+    const collapsed = bar.classList.toggle('collapsed');
+    button.setAttribute('aria-expanded', String(!collapsed));
+    button.textContent = collapsed ? '展开工具栏 ▾' : '收起工具栏 ▴';
+    localStorage.setItem('zz720.lectbarCollapsed', collapsed ? '1' : '0');
+    updateLectLayout();
+  };
+
   window.ZS_TOC = () => {
     const b = document.getElementById('tocBox');
     if (!b) return;
     b.style.display = b.style.display === 'none' ? 'block' : 'none';
+    updateLectLayout();
   };
   window.ZS_LPJUMP = (kind, v) => {
     const off = PAGE_OFF[kind] || 0;
@@ -1673,8 +1708,9 @@ const APP_VER = 107;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (!n || n < 1) return ZS.toast('请输入页码');
     const el = document.getElementById('lp' + (n + off));
     if (!el) return ZS.toast('没有第 ' + n + ' 页');
-    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
     const b = document.getElementById('tocBox'); if (b) b.style.display = 'none';
+    updateLectLayout();
+    requestAnimationFrame(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }));
     const pg = el.querySelector('.pgno');
     if (pg) ZS.toast('已跳到 ' + pg.textContent, 1400);
     if (S.docFind && S.docFind.kind === kind) updateDocFind(kind, n + off);
