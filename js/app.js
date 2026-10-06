@@ -1,8 +1,8 @@
 /* 720题 主应用 */
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
-const QUESTION_VER = 44; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 105;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
+const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -423,6 +423,9 @@ const APP_VER = 105;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     try {
       const r = await fetch('data/questions.json?v=' + QUESTION_VER);
       S.qs = await r.json();
+      const topicalResponse = await fetch('data/topical-exercises.json?v=' + QUESTION_VER);
+      if (!topicalResponse.ok) throw new Error('速成班专题题库加载失败');
+      S.qs.push(...await topicalResponse.json());
     } catch (e) { document.body.innerHTML = '<div class="empty">题库加载失败：' + esc(e.message) + '</div>'; return; }
     S.qs.forEach(q => S.byId[q.id] = q);
     ZS.load();
@@ -648,7 +651,7 @@ const APP_VER = 105;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     let h = `
       <div class="hero">
         <div class="ring"></div>
-        <h1>考研政治 · 全真模拟 785 题</h1>
+        <h1>考研政治 · 全真模拟 785 题 + 速成班专题 48 题</h1>
         <p>题目 · 解析 · 讲义 · 手写笔记 · 云端同步</p>
         <div class="prog">
           <div><b>${st.done}</b><span>已做 / ${st.total}</span></div>
@@ -668,6 +671,14 @@ const APP_VER = 105;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         <button class="btn warn" onclick="ZS_PICK('wg','错题 & 蒙对')">❌ 错题 &amp; 蒙对 (${wgShowIds.length})</button>
         <button class="btn" onclick="ZS_PICK('star','收藏')">★ 收藏 (${starIds.length})</button>
         <button class="btn ${incFix() ? 'main' : ''}" onclick="ZS_INCFIX()">${incFix() ? '☑' : '☐'} 含已订正 (${fixedIds.length})</button>
+      </div>
+      <div class="sec-title">📚 速成班讲义 · 习题检测练习</div>
+      <div class="card pad">
+        <div class="acts">
+          <button class="btn main" onclick="ZS_GO('l/5-重点会议')">重点会议习题检测练习 · 33 题</button>
+          <button class="btn main" onclick="ZS_GO('l/6-土地政策')">土地政策习题检测练习 · 15 题</button>
+        </div>
+        <div class="tiny muted">逐题附原讲义解析、对应知识清单和速成班讲义的文字与原页截图。</div>
       </div>
       <div class="sec-title">🔄 艾宾浩斯复习</div>
       <div class="card pad">
@@ -803,7 +814,7 @@ const APP_VER = 105;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     h += `</div></div>`;
     if (revealed) {
       h += `<div class="acts" style="margin-top:0"><button class="btn" onclick="ZS_ANNO('${id}','q-txt')">✍️ 在题目与选项上做笔记</button>
-        ${pdfLink('q', [q.qPage + PAGE_OFF.q], '打开《试题册》PDF')}</div>`;
+        ${q.source === 's' ? pdfLink('s', q.qPages, '打开原讲义题目页') : pdfLink('q', [q.qPage + PAGE_OFF.q], '打开《试题册》PDF')}</div>`;
     }
     if (!revealed) {
       h += `<div class="acts">
@@ -841,12 +852,12 @@ const APP_VER = 105;     // 每次改动前端都 +1，和 index.html 的 ?v= �
 
     if (revealed) {
       h += `<div class="acc open" id="accA">
-        <div class="hd" onclick="ZS_ACC(this)">📖 解析（对应解析册原页）<span class="arw">›</span></div>
+        <div class="hd" onclick="ZS_ACC(this)">📖 解析（${q.source === 's' ? '速成班讲义原页' : '对应解析册原页'}）<span class="arw">›</span></div>
         <div class="bd">
           <div class="pages" id="aPages">${aBoxHtml(q)}</div>
           <div class="acts"><button class="btn" onclick="ZS_ANNO('${id}','a-img-0')">✍️ 在解析截图上做笔记</button>
           <button class="btn" onclick="ZS_ANNO('${id}','a-txt')">✍️ 在解析文字上做笔记</button>
-          ${pdfLink('a', S['pg_a_' + id] ? shiftList(q.aPages, S['pg_a_' + id]) : q.aPages, '打开《解析册》PDF')}</div>
+          ${q.source === 's' ? pdfLink('s', q.aPages, '打开讲义解析原页') : pdfLink('a', S['pg_a_' + id] ? shiftList(q.aPages, S['pg_a_' + id]) : q.aPages, '打开《解析册》PDF')}</div>
           <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">解析文字（点开查看 · 可编辑）<span class="arw">›</span></div>
             <div class="bd" id="aText">
               <div class="txt" data-anno="${id}|a-txt" data-editkey="a">${editHtml(id, 'a', analysisHtml(q))}</div>
@@ -992,6 +1003,12 @@ const APP_VER = 105;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   };
   /* 解析区：直接显示「按本题裁切」的高清解析图 */
   function aBoxHtml(q) {
+    if (q.source === 's') {
+      return (q.aCrops || []).map((src, i) => `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="a-img" data-id="${q.id}" data-anno="${q.id}|a-img-${i}">
+        <img loading="lazy" src="${ACBASE}img/topical/${src}" alt="速成班讲义第 ${q.no} 题解析裁图 ${i + 1}" data-label="速成班讲义 第 ${q.no} 题解析（${i + 1}/${q.aCrops.length}）" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
+        <button class="annobtn" onclick="ZS_ANNO('${q.id}','a-img-${i}')" title="在解析截图上做笔记">✍️</button>
+      </div>`).join('') + '<div class="tiny muted">按题裁切自速成班讲义原页，可点击放大核对。</div>';
+    }
     const has = (q.aCrops || []).length;
     if (!has) {
       return `<div class="hint" style="padding:14px">本题解析图尚未生成，可点下方「解析册 PDF」查看。</div>`;
