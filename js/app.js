@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 107;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -1263,12 +1263,25 @@ const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   async function renderSearch() {
     showQNav(false);
     await needLect();
+    if (S.route !== 's') return;
+    if (S.searchScope === 'l') S.searchScope = 'all';
     const mi = S.searchMi === undefined ? '' : S.searchMi;
     const sc = S.searchScope || 'all';
-    shell(`<div id="searchbox"><input id="sq" placeholder="搜索题目 / 解析 / 讲义 / 笔记" value="${esc(S.searchQ)}">
+    const mode = S.searchMode || 'questions';
+    const dk = S.searchDocKind || 'k';
+    shell(`<div class="acts search-modes" role="tablist" aria-label="搜索方式">
+      <button role="tab" aria-selected="${mode === 'questions'}" class="btn ${mode === 'questions' ? 'main' : ''}" onclick="ZS_SEARCHMODE('questions')">📝 题目与关联讲义</button>
+      <button role="tab" aria-selected="${mode === 'documents'}" class="btn ${mode === 'documents' ? 'main' : ''}" onclick="ZS_SEARCHMODE('documents')">📚 整本讲义内搜索</button>
+    </div>
+    <div class="tiny muted search-help">${mode === 'documents' ? '像在文档里查找：搜索整本讲义的文字，按命中页定位原页，与题目无关。' : '查找题目、解析、笔记，或仅查与题目关联的讲义页。'}</div>
+    <div id="searchbox"><input id="sq" aria-label="搜索关键词" placeholder="${mode === 'documents' ? '输入讲义中的词语' : '搜索题目 / 解析 / 关联讲义 / 笔记'}" value="${esc(mode === 'documents' ? (S.docSearchQ || '') : (S.searchQ || ''))}">
       <button class="btn main" onclick="ZS_DOSEARCH()">搜索</button></div>
+    ${mode === 'documents' ? `<div class="acts search-filters" aria-label="选择讲义">
+      <button class="btn tiny ${dk === 'k' ? 'main' : ''}" onclick="ZS_SEARCHSET('doc','k')">知识清单</button>
+      <button class="btn tiny ${dk === 's' ? 'main' : ''}" onclick="ZS_SEARCHSET('doc','s')">速成班讲义</button>
+    </div>` : `
       <div class="acts" style="gap:6px;margin:8px 2px 2px">
-        ${['all:全部', 'q:题干选项', 'a:解析', 'l:讲义', 'n:我的笔记'].map(x => {
+        ${['all:全部', 'q:题干选项', 'a:解析', 'lk:关联知识清单', 'ls:关联速成班讲义', 'n:我的笔记'].map(x => {
           const k = x.split(':')[0];
           return `<button class="btn tiny ${sc === k ? 'main' : ''}" onclick="ZS_SEARCHSET('scope','${k}')">${x.split(':')[1]}</button>`;
         }).join('')}
@@ -1276,24 +1289,67 @@ const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       <div class="acts" style="gap:6px;margin:6px 2px 2px">
         <button class="btn tiny ${mi === '' ? 'main' : ''}" onclick="ZS_SEARCHSET('mi','')">全部模块</button>
         ${Array.from(new Set(S.qs.map(q => q.moduleIdx))).map(m => {
-          const nm = (S.qs.filter(q => q.moduleIdx == m)[0] || {}).module || '';
-          return `<button class="btn tiny ${String(mi) === String(m) ? 'main' : ''}" onclick="ZS_SEARCHSET('mi','${m}')">${esc(nm.slice(0, 6))}</button>`;
+          const first = S.qs.find(q => q.moduleIdx == m) || {};
+          const nm = first.moduleIdx >= 5 ? first.chapter : first.module;
+          return `<button class="btn tiny ${String(mi) === String(m) ? 'main' : ''}" onclick="ZS_SEARCHSET('mi','${m}')">${esc((nm || '').slice(0, 9))}</button>`;
         }).join('')}
-      </div>
+      </div>`}
       <div id="sres"></div>`);
     const inp = $('#sq');
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
     inp.addEventListener('input', debounce(() => doSearch(), 350));
-    if (S.searchQ) doSearch(); else $('#sres').innerHTML = '<div class="empty">输入关键词开始搜索<br><span class="tiny">例：空想社会主义 / 生产力 / 矛盾</span></div>';
+    if (inp.value.trim()) doSearch(); else $('#sres').innerHTML = '<div class="empty">输入关键词开始搜索<br><span class="tiny">例：空想社会主义 / 生产力 / 矛盾</span></div>';
     setTimeout(() => inp.focus(), 80);
   }
   function debounce(f, ms) { let t; return function () { clearTimeout(t); t = setTimeout(f, ms); }; }
+  function docPageResults(kind, keyword) {
+    if (!keyword) return [];
+    const dict = kind === 'k' ? S.lk : S.ls;
+    return Object.keys(dict).map(Number).sort((a, b) => a - b).flatMap(n => {
+      const t = dict[n] || '';
+      const count = t.split(keyword).length - 1;
+      return count ? [{ n, count, text: t }] : [];
+    });
+  }
+  window.ZS_SEARCHMODE = mode => {
+    const inp = $('#sq');
+    if (inp) {
+      if ((S.searchMode || 'questions') === 'documents') S.docSearchQ = inp.value;
+      else S.searchQ = inp.value;
+    }
+    S.searchMode = mode;
+    S.searchLimit = 80;
+    renderSearch();
+  };
+  window.ZS_SEARCHMORE = () => {
+    S.searchLimit = (S.searchLimit || 80) + 80;
+    doSearch();
+  };
+  window.ZS_OPENLECHIT = (kind, page) => {
+    S.docFind = { kind, keyword: (S.docSearchQ || '').trim(), page };
+    go('lect/' + kind + '/' + (page - (PAGE_OFF[kind] || 0)));
+  };
   function doSearch() {
     const kw = ($('#sq') || {}).value || '';
-    S.searchQ = kw;
     const res = $('#sres'); if (!res) return;
     const k = kw.trim();
-    if (k.length < 1) { res.innerHTML = ''; return; }
+    if ((S.searchMode || 'questions') === 'documents') {
+      S.docSearchQ = kw;
+      const kind = S.searchDocKind || 'k';
+      if (!k) { res.innerHTML = '<div class="empty">输入关键词查找整本讲义</div>'; return; }
+      const hits = docPageResults(kind, k);
+      const occurrences = hits.reduce((sum, hit) => sum + hit.count, 0);
+      const off = PAGE_OFF[kind] || 0, name = PAGE_NAME[kind];
+      res.innerHTML = `<div class="tiny muted search-count">${esc(name)} · ${hits.length} 页命中，${occurrences} 处匹配</div>` +
+        (hits.length ? `<div class="card">${hits.slice(0, S.searchLimit || 80).map(hit => `<div class="hit doc-hit" onclick="ZS_OPENLECHIT('${kind}',${hit.n})">
+          <div class="h">${esc(name)} · 第 ${hit.n - off > 0 ? hit.n - off : hit.n} 页 <span class="tiny muted">${hit.count} 处匹配</span></div>
+          <div class="s">${highlight(cut(hit.text, k), k)}</div>
+        </div>`).join('')}</div>${hits.length > (S.searchLimit || 80) ? `<button class="btn search-more" onclick="ZS_SEARCHMORE()">显示更多（剩余 ${hits.length - (S.searchLimit || 80)} 页）</button>` : ''}`
+        : '<div class="empty">这本讲义没有找到匹配的文字</div>');
+      return;
+    }
+    S.searchQ = kw;
+    if (!k) { res.innerHTML = '<div class="empty">输入关键词搜索题目</div>'; return; }
     const out = [];
     const push = (q, src, text, field) => out.push({ q: q, src: src, text: text, field: field });
     const SC = S.searchScope || 'all', MI = (S.searchMi === undefined ? '' : S.searchMi);
@@ -1307,16 +1363,16 @@ const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         parts.forEach(p => push(q, p[0], highlight(p[1], k), 'q'));
       }
       if (want('a')) {
-        const aRaw = q.analysisRaw || '';
+        const aRaw = q.analysisRaw || (q.analysis || []).map(part => part.t || '').join('\n');
         if (aRaw.includes(k)) push(q, '解析', highlight(cut(aRaw, k), k), 'a');
       }
-      if (want('l')) {
+      if (want('lk') || want('ls')) {
         /* n 是图片序号，页码显示和跳转都用「书页码」（= n - PAGE_OFF） */
-        (q.kPages || []).forEach(n => {
+        if (want('lk')) (q.kPages || []).forEach(n => {
           const t = S.lk[n], bp = n - (PAGE_OFF.k || 0);
           if (t && t.includes(k)) push(q, '知识清单 P' + bp, highlight(cut(t, k), k), 'k:' + bp);
         });
-        (q.sPages || []).forEach(n => {
+        if (want('ls')) (q.sPages || []).forEach(n => {
           const t = S.ls[n], bp = n - (PAGE_OFF.s || 0);
           if (t && t.includes(k)) push(q, '速成班讲义 P' + bp, highlight(cut(t, k), k), 's:' + bp);
         });
@@ -1330,13 +1386,16 @@ const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const seen = new Set(), list = [];
     out.forEach(o => { const key = o.q.id + '|' + o.src; if (seen.has(key)) return; seen.add(key); list.push(o); });
     const head = `<div class="tiny muted" style="margin:6px 2px 10px">找到 ${list.length} 条结果${list.length > 300 ? '（只显示前 300 条）' : ''}</div>`;
-    const LE = { k: '知识清单', s: '速成班讲义' };
     res.innerHTML = head + `<div class="card">` + list.slice(0, 300).map(o => {
-      const body = `<div class="h">${esc(o.q.chapter)} 第 ${o.q.no} 题 · ${esc(o.src)}</div>
+      const related = /^([ks]):(\d+)$/.exec(o.field || '');
+      const p = P(o.q.id);
+      const status = related ? `<div class="search-status">${isWrongNow(o.q.id) ? '<span class="search-badge bad">错题</span>' : ''}${flag(o.q.id, 'star') ? '<span class="search-badge">★ 已收藏</span>' : ''}<span class="search-badge">已做 ${p && p.tries || 0} 次</span></div>` : '';
+      const chapter = [o.q.chapter, o.q.chapterTitle].filter(Boolean).join(' ');
+      const body = `<div class="h">${esc(o.q.module)} · ${esc(chapter)} · 第 ${o.q.no} 题 · ${esc(o.src)}</div>
+        ${status}
         <div class="s">${o.text}</div>`;
-      const lc = /^([ks]):(\d+)$/.exec(o.field || '');
-      if (!lc) return `<div class="hit" onclick="ZS_GO('q/${o.q.id}')">${body}</div>`;
-      const kind = lc[1], pg = lc[2];
+      if (!related) return `<div class="hit" onclick="ZS_GO('q/${o.q.id}')">${body}</div>`;
+      const kind = related[1], pg = related[2];
       return `<div class="hit">
         <div onclick="ZS_GO('q/${o.q.id}')">${body}</div>
         <div class="hitnav">
@@ -1535,6 +1594,8 @@ const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const off = PAGE_OFF[kind] || 0;
     const lastP = total - off;
     const toc = (await needToc())[kind] || [];
+    if (S.route.split('/')[0] !== 'lect') return;
+    const find = S.docFind && S.docFind.kind === kind ? S.docFind : null;
     let h = `<div class="sec-title">📚 ${esc(name)} · 全 ${total} 页</div>
       <div class="card pad lectbar">
         <div class="acts" style="gap:7px;align-items:center;margin:0;flex-wrap:wrap">
@@ -1546,6 +1607,13 @@ const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= �
           <span style="flex:1"></span>
           <button class="btn tiny" onclick="ZS_THUMB()">${thumbMode() ? '📖 直读整页' : '🔳 缩略图'}</button>
         </div>
+        <div class="lect-find">
+          <input id="lectFindInput" aria-label="在本讲义中搜索" placeholder="在这本讲义中查找" value="${esc(find ? find.keyword : '')}" onkeydown="if(event.key==='Enter')ZS_LECTFIND('${kind}')">
+          <button class="btn tiny main" onclick="ZS_LECTFIND('${kind}')">查找</button>
+          <button class="btn tiny" onclick="ZS_DOCNAV(-1)">上一个</button>
+          <button class="btn tiny" onclick="ZS_DOCNAV(1)">下一个</button>
+        </div>
+        <div id="lectFindStatus" class="tiny muted" aria-live="polite"></div>
         <div id="tocBox" class="tocbox" style="display:none">
           ${toc.length ? toc.map(t => `<div class="tocrow${t.mod ? ' mod' : ''}" onclick="ZS_LPJUMP('${kind}',${t.page})">
             <b>${esc(t.label)}</b><span>${esc(t.title)}</span><em>P${t.page}</em></div>`).join('')
@@ -1566,6 +1634,7 @@ const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= �
           <button class="annobtn" onclick="ZS_ANNO('${LECID}','${kind}-img-${pg}')" title="在这一页上做笔记">✍️</button></div>`;
       }).join('') + `</div>`;
     shell(h);
+    if (find && find.keyword) updateDocFind(kind, find.page || Number(startPage) + off);
     /* 批注层：图片加载完再画。用 JS 绑定而不是内联 onload——
        这一页有 300 多张图，内联处理器会引发一串 WebKit 的「Script error」 */
     ZS_ANNOSYNC();
@@ -1608,6 +1677,45 @@ const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const b = document.getElementById('tocBox'); if (b) b.style.display = 'none';
     const pg = el.querySelector('.pgno');
     if (pg) ZS.toast('已跳到 ' + pg.textContent, 1400);
+    if (S.docFind && S.docFind.kind === kind) updateDocFind(kind, n + off);
+  };
+
+  function updateDocFind(kind, page) {
+    const find = S.docFind;
+    const box = $('#lectFindStatus');
+    if (!box || !find || find.kind !== kind || !find.keyword) return;
+    const hits = docPageResults(kind, find.keyword);
+    const index = hits.findIndex(hit => hit.n === page);
+    find.page = page;
+    const old = $('#view .doc-current'); if (old) old.classList.remove('doc-current');
+    const current = document.getElementById('lp' + page);
+    if (index >= 0 && current) current.classList.add('doc-current');
+    const occurrences = hits.reduce((sum, hit) => sum + hit.count, 0);
+    box.innerHTML = hits.length
+      ? `${hits.length} 页命中 · ${occurrences} 处匹配 · ${index >= 0 ? `第 ${index + 1}/${hits.length} 个命中页（本页 ${hits[index].count} 处）<div class="lect-find-snippet">${highlight(cut(hits[index].text, find.keyword), find.keyword)}</div>` : '当前页未命中，可点上一个或下一个'}`
+      : '这本讲义没有找到匹配的文字';
+  }
+  window.ZS_LECTFIND = kind => {
+    const keyword = (($('#lectFindInput') || {}).value || '').trim();
+    S.docFind = { kind, keyword, page: 0 };
+    S.docSearchQ = keyword; S.searchDocKind = kind;
+    if (!keyword) {
+      const old = $('#view .doc-current'); if (old) old.classList.remove('doc-current');
+      const box = $('#lectFindStatus'); if (box) box.textContent = '输入关键词开始查找';
+      return;
+    }
+    const hits = docPageResults(kind, keyword);
+    if (!hits.length) { updateDocFind(kind, 0); return; }
+    ZS_LPJUMP(kind, hits[0].n - (PAGE_OFF[kind] || 0));
+  };
+  window.ZS_DOCNAV = d => {
+    const find = S.docFind;
+    if (!find || !find.keyword) return ZS.toast('先输入关键词');
+    const hits = docPageResults(find.kind, find.keyword);
+    if (!hits.length) return ZS.toast('没有匹配页');
+    const index = hits.findIndex(hit => hit.n === find.page);
+    const next = index < 0 ? (d > 0 ? 0 : hits.length - 1) : (index + d + hits.length) % hits.length;
+    ZS_LPJUMP(find.kind, hits[next].n - (PAGE_OFF[find.kind] || 0));
   };
 
   /* 缩略讲义：从首页一键进入整本讲义（缩略图浏览） */
@@ -2164,7 +2272,17 @@ const APP_VER = 106;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     });
   };
   window.ZS_DOSEARCH = doSearch;
-  window.ZS_SEARCHSET = (k, v) => { if (k === 'mi') S.searchMi = v; else S.searchScope = v; renderSearch(); };
+  window.ZS_SEARCHSET = (k, v) => {
+    const inp = $('#sq');
+    if (inp) {
+      if ((S.searchMode || 'questions') === 'documents') S.docSearchQ = inp.value;
+      else S.searchQ = inp.value;
+    }
+    if (k === 'mi') S.searchMi = v;
+    else if (k === 'doc') S.searchDocKind = v;
+    else S.searchScope = v;
+    renderSearch();
+  };
   window.ZS_PG = (id, kind, d) => {
     const q = S.byId[id];
     const pages = kind === 'a' ? q.aPages : (kind === 'k' ? q.kPages : q.sPages);

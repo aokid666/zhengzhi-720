@@ -183,6 +183,12 @@ body.annodraw #view [contenteditable="true"],body.notedraw #view [contenteditabl
 /* ---------- 搜索 ---------- */
 #searchbox{display:flex;gap:8px;margin:14px 0}
 #searchbox input{flex:1;padding:11px 13px;border:1px solid var(--line);border-radius:12px;font-size:16px;outline:none;background:var(--fill)}
+.search-modes{margin-top:14px;gap:8px}
+.search-modes .btn{flex:1;white-space:normal}
+.search-help{margin:8px 2px 2px;line-height:1.55}
+.search-filters{margin:8px 2px;gap:7px}
+.search-count{margin:9px 2px}
+.search-more{display:block;margin:12px auto}
 .hit{padding:11px 12px;border-bottom:1px solid var(--line);cursor:pointer}
 .hit:last-child{border-bottom:none}
 .hit .h{font-weight:600;color:var(--teal);font-size:13.5px;margin-bottom:3px}
@@ -192,6 +198,13 @@ mark{background:#ffe9a8;padding:0 1px;border-radius:2px}
 /* 讲义搜索结果：题目 / 讲义 双入口 */
 .hit .hitnav{display:flex;gap:7px;margin-top:9px}
 .hit .hitnav .btn{flex:1;padding:6px 8px;border-radius:9px;font-size:12.5px;line-height:1.35}
+.search-status{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 5px}
+.search-badge{border:1px solid var(--line);border-radius:20px;color:var(--ink2);font-size:11px;padding:2px 7px}
+.search-badge.bad{border-color:var(--bad);color:var(--bad)}
+.lect-find{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 6px}
+.lect-find input{flex:1;min-width:130px;padding:7px 9px;border:1px solid var(--line);border-radius:9px;background:var(--fill);color:var(--ink);font-size:14px}
+.lect-find-snippet{margin:5px 0 0;line-height:1.55;color:var(--ink);font-size:13px}
+.pgwrap.doc-current{outline:3px solid var(--teal);outline-offset:3px}
 /* 缩略讲义选择行 */
 .lecrow{display:flex;align-items:center;gap:11px;padding:9px 6px;border-radius:12px;cursor:pointer}
 .lecrow:active{background:var(--fill2)}

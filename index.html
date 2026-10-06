@@ -12,7 +12,7 @@ document.documentElement.setAttribute('data-theme',d?'dark':'light');
 var iv=localStorage.getItem('zz720.invert')||'auto';
 document.documentElement.setAttribute('data-invert',(iv==='on'||(iv==='auto'&&d))?'on':'off');}catch(e){}})();
 </script>
-<link rel="stylesheet" href="css/app.css?v=105">
+<link rel="stylesheet" href="css/app.css?v=107">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>📕</text></svg>">
 </head>
 <body>
@@ -60,7 +60,7 @@ window.addEventListener('error', e=>{
 </script>
 <script src="js/store.js?v=105"></script>
 <script src="js/annotate.js?v=105"></script>
-<script src="js/app.js?v=106"></script>
+<script src="js/app.js?v=107"></script>
 <script>
 document.querySelectorAll('#tabbar button').forEach(b=>b.onclick=()=>ZS_GO(b.dataset.go));
 // 高亮当前 tab
