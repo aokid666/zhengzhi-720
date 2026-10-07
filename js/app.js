@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 110;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -428,6 +428,8 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       S.qs.push(...await topicalResponse.json());
     } catch (e) { document.body.innerHTML = '<div class="empty">题库加载失败：' + esc(e.message) + '</div>'; return; }
     S.qs.forEach(q => S.byId[q.id] = q);
+    try { S.sprintQs = await MANUAL.load(); S.sprintQs.forEach(q => S.byId[q.id] = q); }
+    catch(e) { S.sprintQs = []; console.error(e); }
     ZS.load();
     loadSession();
     migrateGuess();
@@ -550,6 +552,7 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (S.back.length > 40) S.back.splice(0, S.back.length - 40);
     /* 离开题目页 → 队列「暂存」，可随时从「队列」页继续 */
     if (p !== 'q') parkQ();
+    if (p === 'sprint' || (p === 'l' && a && a.startsWith('7-'))) return MANUAL.render(p === 'l' ? 'sprint/questions' : h, {shell,showQNav,P,flag,isWrongNow,isDone,S});
     if (p === 'l' && a) return renderChapter(a);
     if (p === 'q' && a) return renderQuestion(a);
     if (p === 's') return renderSearch();
@@ -563,6 +566,7 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   const go = h => { location.hash = '#/' + h; };
 
   function shell(inner) {
+    MANUAL.leave();
     flushEditors();
     if (ANNO.on) ANNO.close();
     if (S.lectbarObserver) { S.lectbarObserver.disconnect(); S.lectbarObserver = null; }
@@ -584,10 +588,10 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const info = document.getElementById('qnavInfo');
     const Q = S.q;
     const qk = Q ? Q.ids.indexOf(S.curId) : -1;
-    if (info) info.textContent = on ? (qk >= 0 ? (qk + 1) + ' / ' + Q.ids.length : (idx + 1) + ' / ' + S.qs.length) : '';
+    if (info) info.textContent = on ? (qk >= 0 ? (qk + 1) + ' / ' + Q.ids.length : (idx + 1) + ' / ' + qPool(S.curId).length) : '';
     const pv = document.getElementById('qnavPrev'), nx = document.getElementById('qnavNext');
     const atFirst = qk >= 0 ? qk <= 0 : idx <= 0;
-    const atLast = qk >= 0 ? qk >= Q.ids.length - 1 : idx >= S.qs.length - 1;
+    const atLast = qk >= 0 ? qk >= Q.ids.length - 1 : idx >= qPool(S.curId).length - 1;
     if (pv) pv.disabled = !on || atFirst;
     if (nx) nx.disabled = !on || atLast;
     const rd = document.getElementById('qnavRedo');
@@ -612,8 +616,9 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (i < 0) return;
     const n = i + d;
     if (n < 0) return ZS.toast('已经是第一题');
-    if (n >= S.qs.length) return ZS.toast('已经是最后一题');
-    go('q/' + S.qs[n].id);
+    const pool = qPool(S.curId);
+    if (n >= pool.length) return ZS.toast('已经是最后一题');
+    go('q/' + pool[n].id);
   };
 
   /* ---------- 首页 ---------- */
@@ -681,6 +686,8 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         </div>
         <div class="tiny muted">逐题附原讲义解析、对应知识清单和速成班讲义的文字与原页截图。</div>
       </div>
+      <div class="sec-title">🚀 冲刺板块</div>
+      <div class="card pad"><div class="acts"><button class="btn main" onclick="ZS_GO('sprint')">背诵手册 · 123 个专题挖空</button><button class="btn" onclick="ZS_GO('sprint/questions')">习题190 · 193 题</button></div><div class="tiny muted">原图与文字按原书位置挖空，点拨、命题分析、干扰项专项背诵。</div></div>
       <div class="sec-title">🔄 艾宾浩斯复习</div>
       <div class="card pad">
         <div class="tiny muted" style="margin-bottom:6px">答对：复习间隔按 1 / 2 / 4 / 7 / 15 / 30 天递增；答错：回到第 1 档，半天后再来。</div>
@@ -756,7 +763,8 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
 
   /* ---------- 题目 ---------- */
-  function qIndexOf(id) { return S.qs.findIndex(q => q.id === id); }
+  function qPool(id) { return S.byId[id] && S.byId[id].source === 'm' ? (S.sprintQs || []) : S.qs; }
+  function qIndexOf(id) { return qPool(id).findIndex(q => q.id === id); }
 
   function renderQuestion(id) {
     const q = S.byId[id];
@@ -815,7 +823,7 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     h += `</div></div>`;
     if (revealed) {
       h += `<div class="acts" style="margin-top:0"><button class="btn" onclick="ZS_ANNO('${id}','q-txt')">✍️ 在题目与选项上做笔记</button>
-        ${q.source === 's' ? pdfLink('s', q.qPages, '打开原讲义题目页') : pdfLink('q', [q.qPage + PAGE_OFF.q], '打开《试题册》PDF')}</div>`;
+        ${q.source === 'm' ? MANUAL.questionPdf(q, 'question') : q.source === 's' ? pdfLink('s', q.qPages, '打开原讲义题目页') : pdfLink('q', [q.qPage + PAGE_OFF.q], '打开《试题册》PDF')}</div>`;
     }
     if (!revealed) {
       h += `<div class="acts">
@@ -853,12 +861,12 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
 
     if (revealed) {
       h += `<div class="acc open" id="accA">
-        <div class="hd" onclick="ZS_ACC(this)">📖 解析（${q.source === 's' ? '速成班讲义原页' : '对应解析册原页'}）<span class="arw">›</span></div>
+        <div class="hd" onclick="ZS_ACC(this)">📖 解析（${q.source === 'm' ? '背诵手册参考答案原页' : q.source === 's' ? '速成班讲义原页' : '对应解析册原页'}）<span class="arw">›</span></div>
         <div class="bd">
           <div class="pages" id="aPages">${aBoxHtml(q)}</div>
           <div class="acts"><button class="btn" onclick="ZS_ANNO('${id}','a-img-0')">✍️ 在解析截图上做笔记</button>
           <button class="btn" onclick="ZS_ANNO('${id}','a-txt')">✍️ 在解析文字上做笔记</button>
-          ${q.source === 's' ? pdfLink('s', q.aPages, '打开讲义解析原页') : pdfLink('a', S['pg_a_' + id] ? shiftList(q.aPages, S['pg_a_' + id]) : q.aPages, '打开《解析册》PDF')}</div>
+          ${q.source === 'm' ? MANUAL.questionPdf(q, 'key') : q.source === 's' ? pdfLink('s', q.aPages, '打开讲义解析原页') : pdfLink('a', S['pg_a_' + id] ? shiftList(q.aPages, S['pg_a_' + id]) : q.aPages, '打开《解析册》PDF')}</div>
           <div class="acc" style="margin-top:10px"><div class="hd" onclick="ZS_ACC(this)">解析文字（点开查看 · 可编辑）<span class="arw">›</span></div>
             <div class="bd" id="aText">
               <div class="txt" data-anno="${id}|a-txt" data-editkey="a">${editHtml(id, 'a', analysisHtml(q))}</div>
@@ -872,9 +880,11 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
           <div class="tabs">
             <span class="tab on" data-t="k" onclick="ZS_TAB(this,'k')">知识清单</span>
             <span class="tab" data-t="s" onclick="ZS_TAB(this,'s')">速成班讲义</span>
+            <span class="tab" data-t="m" onclick="ZS_TAB(this,'m')">背诵手册</span>
           </div>
           <div id="lectK" class="lectbox"></div>
           <div id="lectS" class="lectbox" style="display:none"></div>
+          <div id="lectM" class="lectbox" style="display:none"></div>
         </div></div>`;
 
       h += `<div id="noteSection"></div>`;
@@ -1004,6 +1014,7 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   };
   /* 解析区：直接显示「按本题裁切」的高清解析图 */
   function aBoxHtml(q) {
+    if (q.source === 'm') return MANUAL.questionPages(q, 'key');
     if (q.source === 's') {
       return (q.aCrops || []).map((src, i) => `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" data-tgt="a-img" data-id="${q.id}" data-anno="${q.id}|a-img-${i}">
         <img loading="lazy" src="${ACBASE}img/topical/${src}" alt="速成班讲义第 ${q.no} 题解析裁图 ${i + 1}" data-label="速成班讲义 第 ${q.no} 题解析（${i + 1}/${q.aCrops.length}）" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)">
@@ -1028,7 +1039,7 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   window.ZS_AMODE = () => {};
 
   function pagesHtml(pages, kind, id, label) {
-    if (!pages || !pages.length) return '<div class="tiny muted">未匹配到对应页</div>';
+    if (!pages || !pages.length) return '<div class="tiny muted">没找到对应内容。</div>';
     const cur = S['pg_' + kind + '_' + id];
     const off = PAGE_OFF[kind] || 0;
     if (cur && pages.indexOf(cur) < 0) pages = pages.concat([cur]).sort((x, y) => x - y);
@@ -1052,10 +1063,12 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
 
   function paintLect(q) {
+    MANUAL.paintQuestion(q);
     ['k', 's'].forEach(t => {
       const box = $('#lect' + t.toUpperCase());
       if (!box) return;
       const pages = t === 'k' ? q.kPages : q.sPages;
+      if (q.source === 'm' && (!pages || !pages.length)) { box.innerHTML = '<div class="hint">没找到'+(t === 'k' ? '知识清单' : '速成班讲义')+'中的相应内容。</div>'; return; }
       const dict = t === 'k' ? S.lk : S.ls;
       let txt = (pages || []).map(n => dict[n] || '').join('\n').trim();
       if (!txt) txt = '（未检索到对应讲义文字，请以截图为准）';
@@ -1957,6 +1970,7 @@ const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     el.classList.add('on');
     $('#lectK').style.display = t === 'k' ? '' : 'none';
     $('#lectS').style.display = t === 's' ? '' : 'none';
+    const manualBox = $('#lectM'); if(manualBox) manualBox.style.display = t === 'm' ? '' : 'none';
   };
   window.ZS_SEL = (id, k) => {
     /* 已经作答 / 已经看过答案的题，不允许再改选项，以免改掉「你选了 X」的记录 */
