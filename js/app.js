@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 108;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 109;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -1444,10 +1444,10 @@ const APP_VER = 108;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const today = daily[dayKey(Date.now())] || { n: 0, r: 0 };
     let h = `<div class="sec-title">📊 学习统计</div>
       <div class="card pad">
-        <div class="prog" style="color:var(--ink)">
-          <div style="background:#f1f5f4"><b>${st.done}</b><span>已做</span></div>
-          <div style="background:#f1f5f4"><b>${st.right}</b><span>做对</span></div>
-          <div style="background:#f1f5f4"><b>${st.wrong}</b><span>做错</span></div>
+        <div class="prog stat-prog">
+          <div><b>${st.done}</b><span>已做</span></div>
+          <div><b>${st.right}</b><span>做对</span></div>
+          <div><b>${st.wrong}</b><span>做错</span></div>
         </div>
         <div class="tiny muted" style="margin-top:10px">正确率 <b>${st.done ? (st.right / st.done * 100).toFixed(1) : '—'}%</b>　
           累计作答 <b>${all.reduce((a, id) => a + (((P(id) || {}).tries) || 0), 0)}</b> 次<br>
@@ -1461,7 +1461,7 @@ const APP_VER = 108;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       h += `<div class="sec-title">🎯 最该补的章节（正确率最低）</div><div class="card pad">` +
         weak.map(c => `<div class="ebrow">
           <span class="ebl" style="min-width:0;flex:1">${esc(c.ch)} <span class="tiny muted">${esc(c.mod)}</span></span>
-          <span class="ebc">正确率 <b style="color:#c0392b">${(c.acc * 100).toFixed(0)}%</b><br>做过 ${c.done}/${c.ids.length} · 错题 ${c.wrong}</span>
+          <span class="ebc">正确率 <b style="color:var(--bad)">${(c.acc * 100).toFixed(0)}%</b><br>做过 ${c.done}/${c.ids.length} · 错题 ${c.wrong}</span>
           <button class="btn tiny main" onclick="ZS_GO('l/${c.mi}-${encodeURIComponent(c.ch)}')">去看</button>
         </div>`).join('') + `</div>`;
     }
@@ -1480,7 +1480,7 @@ const APP_VER = 108;     // 每次改动前端都 +1，和 index.html 的 ?v= �
           <span class="cn">${esc(c.ch)}</span>
           <span class="cbar"><i style="width:${c.ids.length ? Math.round(c.done / c.ids.length * 100) : 0}%"></i></span>
           <span class="tiny muted" style="min-width:76px;text-align:right">${c.done}/${c.ids.length}${
-            c.wrong ? ` · 错<b style="color:#c0392b">${c.wrong}</b>` : ''}${c.acc >= 0 ? ` · ${(c.acc * 100).toFixed(0)}%` : ''}</span>
+            c.wrong ? ` · 错<b style="color:var(--bad)">${c.wrong}</b>` : ''}${c.acc >= 0 ? ` · ${(c.acc * 100).toFixed(0)}%` : ''}</span>
         </div>`).join('') + `</div>`;
     });
     shell(h);
@@ -1866,10 +1866,10 @@ const APP_VER = 108;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const sz = (JSON.stringify(ZS.data).length / 1024).toFixed(0);
     shell(`<div class="sec-title">学习统计</div>
       <div class="card pad">
-        <div class="prog" style="color:var(--ink)">
-          <div style="background:#f1f5f4"><b>${st.done}</b><span>已做</span></div>
-          <div style="background:#f1f5f4"><b>${st.right}</b><span>做对</span></div>
-          <div style="background:#f1f5f4"><b>${st.wrong}</b><span>做错</span></div>
+        <div class="prog stat-prog">
+          <div><b>${st.done}</b><span>已做</span></div>
+          <div><b>${st.right}</b><span>做对</span></div>
+          <div><b>${st.wrong}</b><span>做错</span></div>
         </div>
         <div class="tiny muted" style="margin-top:10px">正确率 ${st.done ? (st.right / st.done * 100).toFixed(1) : '—'}%　蒙对 ${st.guess} 题　收藏 ${all.filter(id => flag(id, 'star')).length} 题<br>
           累计作答 <b>${all.reduce((a, id) => a + (((P(id) || {}).tries) || 0), 0)}</b> 次　今日待复习 <b>${all.filter(id => isDone(id) && dueNow(id)).length}</b> 题</div>

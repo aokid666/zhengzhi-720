@@ -81,6 +81,8 @@ button{font:inherit;color:inherit}
 .prog div{flex:1;background:rgba(255,255,255,.13);border-radius:10px;padding:8px 10px}
 .prog b{display:block;font-size:19px;line-height:1.2}
 .prog span{font-size:11.5px;opacity:.8}
+.stat-prog{color:var(--ink)}
+.stat-prog div{background:var(--fill2)}
 .bar{height:6px;border-radius:4px;background:var(--fill2);overflow:hidden;margin-top:8px}
 .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--orange),var(--teal2))}
 .mod{margin-top:12px}
@@ -362,8 +364,8 @@ body.annomode #qfab{display:none}
 .bar i{display:block;width:100%;background:linear-gradient(180deg,#2e8b83,#0c514e);border-radius:3px 3px 0 0;min-height:1px}
 .ch-row{display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13.5px}
 .ch-row:last-child{border-bottom:none}
-.ch-row .cn{flex:0 0 auto;min-width:96px;color:#33454a}
-.ch-row .cbar{flex:1;height:7px;background:#eef3f2;border-radius:4px;overflow:hidden}
+.ch-row .cn{flex:0 0 auto;min-width:96px;color:var(--ink)}
+.ch-row .cbar{flex:1;height:7px;background:var(--fill2);border-radius:4px;overflow:hidden}
 .ch-row .cbar i{display:block;height:100%;background:var(--teal);border-radius:4px}
 
 /* ---------- 缩略图预览模式 ---------- */
@@ -443,7 +445,7 @@ html[data-theme="dark"] .opt.right .k,html[data-theme="dark"] .opt.right .mk,htm
 html[data-theme="dark"] .opt.wrong .k,html[data-theme="dark"] .opt.wrong .mk,html[data-theme="dark"] .res.bad{color:#ffb0a9}
 html[data-theme="dark"] mark{background:#7a6220;color:#f2e8cc}
 html[data-theme="dark"] .qbadge{color:#fff}
-/* 纸面（讲义截图 / 手写板 / 放大视图）在夜间保持浅色，不然黑色笔迹看不见 */
+/* 手写板保持浅色；讲义及放大截图由截图反转偏好控制 */
 html[data-theme="dark"] .ncanvas{background:#fff;border-color:#c9bcae}
 html[data-theme="dark"] #notearea{border-color:var(--line)}
 
@@ -453,6 +455,7 @@ input::placeholder,textarea::placeholder{color:var(--ink3);opacity:1}
 /* ---------- 截图夜间反转（只反转纸面，笔迹在独立画布层不受影响）---------- */
 html[data-invert="on"] .pgwrap{background:#000}
 html[data-invert="on"] .pgwrap img,
-html[data-invert="on"] .pgwrap.zoomed img{filter:invert(1) hue-rotate(180deg)}
+html[data-invert="on"] .pgwrap.zoomed img,
+html[data-invert="on"] #zoomImg{filter:invert(1) hue-rotate(180deg)}
 /* 书写时页面保持反转，笔色由 annotate.js 的 DMAP 自动换成亮色
    （黑笔在黑底上看不见，所以黑→白；存储里仍是原色，导出/打印不受影响） */
