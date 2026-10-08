@@ -22,7 +22,7 @@ window.MANUAL = (() => {
   }
   async function load() {
     const result=await Promise.all(['manual-index','manual-questions','manual-matches','manual-study'].map(async n => {
-      const r=await fetch('data/'+n+'.json?v=117'); if(!r.ok) throw new Error('背诵手册数据加载失败'); return r.json();
+      const r=await fetch('data/'+n+'.json?v=118'); if(!r.ok) throw new Error('背诵手册数据加载失败'); return r.json();
     }));
     [data,questions,matches,study]=result;
     byPage=Object.fromEntries(data.pages.map(p=>[p.id,p]));byBlock=Object.fromEntries(study.blocks.map(b=>[b.id,b]));return questions;
@@ -42,16 +42,19 @@ window.MANUAL = (() => {
     return '<div class="pgwrap m-source" data-id="'+annoId+'" data-tgt="m-img" data-anno="'+annoId+'|'+area+'"><img loading="lazy" src="'+src(id)+'" alt="'+esc(label(p))+'" data-label="'+esc(label(p))+'" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)"><span class="pgno">'+esc(label(p))+'</span><button class="annobtn" onclick="ZS_ANNO(\''+annoId+'\',\''+area+'\')">✍️</button></div><div class="acts"><button class="btn tiny" onclick="ZS_ZOOMSRC(\''+src(id)+'\')">放大原图</button>'+pdf(id)+'<button class="btn tiny" onclick="ZS_GO(\'sprint/page/'+id+'\')">进入本页挖空背诵</button></div><details><summary>本页文字</summary><div class="txt m-plain">'+esc(p.text)+'</div></details>';
   }
   function blockHtml(block,annoId='_lec') {
-    return block.refs.map((r,i)=>{
+    const images=block.refs.map((r,i)=>{
       const p=byPage[r.page],area=annoId==='_lec'?'m-block-'+block.id+'-'+r.page:'a-img-'+i;
-      return '<div class="tiny m-source-label">'+esc(label(p)+' · '+block.kind)+'</div><div class="pgwrap m-source m-clip m-evidence" style="height:0;padding-top:'+r.b[3]/r.b[2]*100+'%" data-id="'+annoId+'" data-tgt="'+(annoId==='_lec'?'m-img':'a-img')+'" data-anno="'+annoId+'|'+area+'"><img loading="eager" decoding="async" width="'+p.width+'" height="'+p.height+'" src="'+src(r.page)+'" style="'+imageStyle(p,r.b)+'" alt="'+esc(block.kind+'原文片段')+'" data-label="'+esc(label(p))+'" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)"><button class="annobtn" onclick="ZS_ANNO(\''+annoId+'\',\''+area+'\')">✍️</button></div><div class="acts"><button class="btn tiny" onclick="ZS_GO(\'sprint/block/'+block.id+'/'+r.page+'\')">本片段挖空背诵</button><button class="btn tiny" onclick="ZS_ZOOMSRC(\''+src(r.page)+'\')">查看完整原图</button>'+pdf(r.page)+'</div><details><summary>本片段文字</summary><div class="txt m-plain">'+esc(r.lines.map(l=>l.t).join('\n'))+'</div></details>';
+      return '<div class="pgwrap m-source m-clip m-evidence" style="height:0;padding-top:'+r.b[3]/r.b[2]*100+'%" data-id="'+annoId+'" data-tgt="'+(annoId==='_lec'?'m-img':'a-img')+'" data-anno="'+annoId+'|'+area+'"><img loading="eager" decoding="async" width="'+p.width+'" height="'+p.height+'" src="'+src(r.page)+'" style="'+imageStyle(p,r.b)+'" alt="'+esc(block.kind+'原文片段 '+(i+1))+'" data-label="'+esc(label(p))+'" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)"><button class="annobtn" onclick="ZS_ANNO(\''+annoId+'\',\''+area+'\')">✍️</button></div>';
     }).join('');
+    const originals=block.refs.map(r=>'<div class="m-original-row"><span>'+esc(label(byPage[r.page]))+'</span><div class="acts"><button class="btn tiny" onclick="ZS_ZOOMSRC(\''+src(r.page)+'\')">查看完整原图</button>'+pdf(r.page)+'</div></div>').join('');
+    const text=block.refs.map(r=>r.lines.map(l=>l.t).join('\n')).join('\n');
+    return '<section class="m-evidence-group"><div class="tiny m-source-label">'+esc(block.kind+' · '+block.refs.map(r=>label(byPage[r.page])).join(' / '))+'</div><div class="m-evidence-stack">'+images+'</div><div class="m-evidence-tools"><div class="acts"><button class="btn tiny" onclick="ZS_GO(\'sprint/block/'+block.id+'/'+block.refs[0].page+'\')">本片段挖空背诵</button></div><details><summary>完整原图与原 PDF'+(block.refs.length>1?' · '+block.refs.length+' 页':'')+'</summary>'+originals+'</details><details><summary>本片段文字</summary><div class="txt m-plain">'+esc(text)+'</div></details></div></section>';
   }
   function questionPages(q,which) {
     if(q.blockId&&byBlock[q.blockId])return blockHtml(byBlock[q.blockId],q.id);
     return ((which==='key'?q.keyRefs:q.qRefs)||[]).map((id,i)=>pageHtml(id,q.id,'a-img-'+i)).join('');
   }
-  function questionPdf(q,which) {return ((which==='key'?q.keyRefs:q.qRefs)||[]).map(pdf).join('');}
+  function questionPdf(q,which) {if(q.blockId&&which==='key')return '';return ((which==='key'?q.keyRefs:q.qRefs)||[]).map(pdf).join('');}
   function paintQuestion(q) {
     const box=document.getElementById('lectM');if(!box)return;
     if(!data){box.innerHTML='<div class="hint">背诵手册加载失败，请刷新重试。</div>';return;}
