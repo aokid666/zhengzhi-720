@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 119;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -654,10 +654,10 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   };
 
   /* ---------- 首页 ---------- */
-  function chapters() {
+  function chapters(pool=S.qs) {
     const map = new Map();
-    S.qs.forEach(q => {
-      const k = q.moduleIdx + '|' + q.chapter;
+    pool.forEach(q => {
+      const k = q.module + '|' + q.chapter;
       if (!map.has(k)) map.set(k, { mi: q.moduleIdx, mod: q.module, ch: q.chapter, title: q.chapterTitle, ids: [] });
       map.get(k).ids.push(q.id);
     });
@@ -668,7 +668,13 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     ids.forEach(id => { const p = P(id); if (p && p.s) { done++; if (p.s === 'right') right++; } if (flag(id, 'guess')) guess++; });
     return { done, right, wrong: done - right, guess, total: ids.length };
   }
-  function renderHome() {
+  const reviewBank=()=>localStorage.getItem('zz720.reviewBank')||'original';
+  const reviewPool=()=>reviewBank()==='cf'?['cf-upper','cf-lower'].flatMap(id=>PRACTICE.books.get(id)?.questions||[]):reviewBank()==='manual190'?S.sprintQs:S.qs;
+  const reviewChooser=()=>'<label class="review-bank">复习题库 <select onchange="ZS_REVIEWBANK(this.value)">'+[['original','720题 / 原题库'],['cf','乘风肖1000题笔记'],['manual190','背诵手册 · 习题190']].map(([id,label])=>'<option value="'+id+'" '+(reviewBank()===id?'selected':'')+'>'+label+'</option>').join('')+'</select></label>';
+  window.ZS_REVIEWBANK=async value=>{if(!['original','cf','manual190'].includes(value))return;try{if(value==='cf')await PRACTICE.reviewQuestions(S);localStorage.setItem('zz720.reviewBank',value);if(S.route==='stat')return renderStat();else if(S.route==='me')return renderMe();else return renderHome();}catch(e){ZS.toast(e.message);}};
+  async function renderHome() {
+    if(reviewBank()==='cf'){try{await PRACTICE.reviewQuestions(S);}catch(e){ZS.toast(e.message);}if(S.route!=='home'&&S.route!=='')return;}
+
     showQNav(false);
     const chs = chapters();
     const all = S.qs.map(q => q.id);
@@ -679,11 +685,10 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const wgIds = all.filter(id => isWrongNow(id) || flag(id, 'guess'));
     const wgShowIds = all.filter(id => isWrongNow(id) || flag(id, 'guess') || (incFix() && isFixed(id)));
     const starIds = all.filter(id => flag(id, 'star'));
-    const doneIds = all.filter(id => isDone(id));
-    const dueAll = doneIds.filter(dueNow);
-    const dueWrong = wrongIds.filter(dueNow);
-    const dueFixed = fixedIds.filter(dueNow);
-    const dueStar = starIds.filter(dueNow);
+    const reviewIds=reviewPool().map(q=>q.id),doneIds=reviewIds.filter(isDone);
+    const dueAll=doneIds.filter(dueNow),reviewWrong=reviewIds.filter(id=>isWrongNow(id)||flag(id,'guess'));
+    const reviewFixed=reviewIds.filter(isFixed),reviewStar=reviewIds.filter(id=>flag(id,'star'));
+    const dueWrong=reviewWrong.filter(dueNow),dueFixed=reviewFixed.filter(dueNow),dueStar=reviewStar.filter(dueNow);
     const last = lastQId();
     const lastQ = last ? S.byId[last] : null;
     let h = `
@@ -721,16 +726,16 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       <div class="sec-title">🚀 冲刺板块</div>
       <div class="card sprint-home"><div class="sprint-home-heading"><b>背诵、练题与易混点复盘</b><a href="#/sprint">查看全部 →</a></div><div class="sprint-home-links"><a href="#/sprint/topics"><b>专题挖空</b><span>123 个专题 →</span></a><a href="#/sprint/practice"><b>选择题 / 笔记</b><span>1389 道练习 →</span></a><a href="#/sprint/questions"><b>手册习题190</b><span>193 道题 →</span></a></div></div>
       <div class="sec-title">🔄 艾宾浩斯复习</div>
-      <div class="card pad">
+      <div class="card pad">${reviewChooser()}
         <div class="tiny muted" style="margin-bottom:6px">答对：复习间隔按 1 / 2 / 4 / 7 / 15 / 30 天递增；答错：回到第 1 档，半天后再来。</div>
         <div class="ebrow"><span class="ebl">全部题目</span><span class="ebc">待复习 <b>${dueAll.length}</b> / 已练 ${doneIds.length}</span><button class="btn tiny" onclick="ZS_PICK('due_all','全部题目 · 今日待复习')">开始复习</button></div>
-        <div class="ebrow"><span class="ebl">错题 &amp; 蒙对</span><span class="ebc">待复习 <b>${dueWrong.length}</b> / 共 ${wrongIds.length}</span><button class="btn tiny" onclick="ZS_PICK('due_wgr','错题 & 蒙对 · 今日待复习')">开始复习</button></div>
+        <div class="ebrow"><span class="ebl">错题 &amp; 蒙对</span><span class="ebc">待复习 <b>${dueWrong.length}</b> / 共 ${reviewWrong.length}</span><button class="btn tiny" onclick="ZS_PICK('due_wgr','错题 & 蒙对 · 今日待复习')">开始复习</button></div>
         <div class="ebsub">
           <button class="chk ${incFix() ? 'on' : ''}" onclick="ZS_INCFIX()">${incFix() ? '✓' : ''}</button>
-          <span>本次也把 <b>已订正</b>（${fixedIds.length} 题）一起做</span>
+          <span>本次也把 <b>已订正</b>（${reviewFixed.length} 题）一起做</span>
           <span class="tiny muted">待复习 ${dueFixed.length}</span>
         </div>
-        <div class="ebrow"><span class="ebl">收藏</span><span class="ebc">待复习 <b>${dueStar.length}</b> / 收藏 ${starIds.length}</span><button class="btn tiny" onclick="ZS_PICK('due_star','收藏 · 今日待复习')">开始复习</button></div>
+        <div class="ebrow"><span class="ebl">收藏</span><span class="ebc">待复习 <b>${dueStar.length}</b> / 收藏 ${reviewStar.length}</span><button class="btn tiny" onclick="ZS_PICK('due_star','收藏 · 今日待复习')">开始复习</button></div>
       </div>
       <div class="sec-title">分模块练习</div>`;
     const mods = new Map();
@@ -762,7 +767,7 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         <button class="btn" onclick="ZS_CFG()">设置</button>
         <span class="tiny muted" id="syinfo" style="align-self:center">${ZS.cfg().token ? (ZS.lastSync ? '上次 ' + ZS.fmt(ZS.lastSync) : '尚未同步') : '未配置令牌'}</span></div>
       </div>`;
-    shell(h);
+    shell(h);$('.review-bank select').value=reviewBank();
     $$('#view .modhd').forEach((_, i) => { });
   }
 
@@ -830,7 +835,7 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const idx = qIndexOf(id);
     let h = `<div class="card" style="margin-top:12px">
       <div class="qhd">
-        <button class="iconbtn" onclick="ZS_GO('${q.source === 'p' ? 'sprint/practice/'+q.bookId : q.exerciseKind === 'judgement' ? 'sprint/judgements/all/'+q.blockId : q.source === 'm' ? 'sprint/questions' : 'l/'+q.moduleIdx+'-'+q.chapter}')" title="返回题目目录">☰</button>
+        <button class="iconbtn" onclick="ZS_GO('${q.source === 'p' ? 'sprint/practice/'+PRACTICE.collectionId(q.bookId) : q.exerciseKind === 'judgement' ? 'sprint/judgements/all/'+q.blockId : q.source === 'm' ? 'sprint/questions' : 'l/'+q.moduleIdx+'-'+q.chapter}')" title="返回题目目录">☰</button>
         <span class="idx">${q.source === 'p' ? esc(q.module+' · '+q.chapter)+' · 原题 '+q.originalNo : esc(q.chapter)+' 第 '+q.no+' 题'}</span>
         <span class="chip">${esc(q.section)}</span>
         ${S.q ? `<span class="qchip">${QMODES[S.q.mode] || '📖 复习'} ${S.q.ids.indexOf(id) + 1}/${S.q.ids.length}${S.q.mode === 'mock' ? ' · <b id="mockTime">00:00</b>' : ''}<button onclick="ZS_QEXIT()" title="离开队列（可在底部「队列」继续）">✕</button></span>` : ''}
@@ -1468,10 +1473,11 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
 
   /* ---------- 我的 ---------- */
-  function renderStat() {
+  async function renderStat() {
+    if(reviewBank()==='cf'){try{await PRACTICE.reviewQuestions(S);}catch(e){return ZS.toast(e.message);}if(S.route!=='stat')return;}
     showQNav(false);
-    const all = S.qs.map(q => q.id), st = statOf(all);
-    const chs = chapters().map(c => {
+    const all = reviewPool().map(q => q.id), st = statOf(all);
+    const chs = chapters(reviewPool()).map(c => {
       const done = c.ids.filter(isDone).length;
       const right = c.ids.filter(id => { const p = P(id); return p && p.s === 'right'; }).length;
       const wrong = c.ids.filter(isWrongNow).length;
@@ -1495,7 +1501,7 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const mx = Math.max(1, ...last30.map(d => d.n));
     const today = daily[dayKey(Date.now())] || { n: 0, r: 0 };
     let h = `<div class="sec-title">📊 学习统计</div>
-      <div class="card pad">
+      <div class="card pad">${reviewChooser()}
         <div class="prog stat-prog">
           <div><b>${st.done}</b><span>已做</span></div>
           <div><b>${st.right}</b><span>做对</span></div>
@@ -1503,9 +1509,9 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         </div>
         <div class="tiny muted" style="margin-top:10px">正确率 <b>${st.done ? (st.right / st.done * 100).toFixed(1) : '—'}%</b>　
           累计作答 <b>${all.reduce((a, id) => a + (((P(id) || {}).tries) || 0), 0)}</b> 次<br>
-          今天做了 <b>${today.n}</b> 题（对 ${today.r}）　连续打卡 <b>${streak}</b> 天</div>
+          所有题库今天做了 <b>${today.n}</b> 题（对 ${today.r}）　连续打卡 <b>${streak}</b> 天</div>
       </div>
-      <div class="sec-title">📅 最近 30 天</div>
+      <div class="sec-title">📅 最近 30 天 · 所有题库</div>
       <div class="card pad"><div class="bars">${last30.map(d =>
         `<div class="bar" title="${d.k}：${d.n} 题"><i style="height:${Math.round(d.n / mx * 100)}%"></i><em></em></div>`).join('')}</div>
         <div class="tiny muted" style="margin-top:6px">峰值 ${mx} 题/天　柱子越高做得越多</div></div>`;
@@ -1514,11 +1520,11 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         weak.map(c => `<div class="ebrow">
           <span class="ebl" style="min-width:0;flex:1">${esc(c.ch)} <span class="tiny muted">${esc(c.mod)}</span></span>
           <span class="ebc">正确率 <b style="color:var(--bad)">${(c.acc * 100).toFixed(0)}%</b><br>做过 ${c.done}/${c.ids.length} · 错题 ${c.wrong}</span>
-          <button class="btn tiny main" onclick="ZS_GO('l/${c.mi}-${encodeURIComponent(c.ch)}')">去看</button>
+          <button class="btn tiny main" onclick="ZS_GO('${reviewBank()==='cf'?'sprint/practice/cf':reviewBank()==='manual190'?'sprint/questions':'l/'+c.mi+'-'+encodeURIComponent(c.ch)}')">去看</button>
         </div>`).join('') + `</div>`;
     }
     const mods = new Map();
-    chs.forEach(c => { if (!mods.has(c.mi)) mods.set(c.mi, []); mods.get(c.mi).push(c); });
+    chs.forEach(c => { if (!mods.has(c.mod)) mods.set(c.mod, []); mods.get(c.mod).push(c); });
     h += `<div class="sec-title">📚 全部章节进度</div>`;
     mods.forEach((list, mi) => {
       const tot = list.reduce((a, c) => a + c.ids.length, 0);
@@ -1528,14 +1534,14 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
           <b style="color:var(--teal);font-size:15px">${esc(list[0].mod)}</b>
           <span class="sp" style="flex:1"></span>
           <span class="tiny muted">${dn}/${tot}</span></div>` +
-        list.map(c => `<div class="ch-row" onclick="ZS_GO('l/${c.mi}-${encodeURIComponent(c.ch)}')">
+        list.map(c => `<div class="ch-row" onclick="ZS_GO('${reviewBank()==='cf'?'sprint/practice/cf':reviewBank()==='manual190'?'sprint/questions':'l/'+c.mi+'-'+encodeURIComponent(c.ch)}')">
           <span class="cn">${esc(c.ch)}</span>
           <span class="cbar"><i style="width:${c.ids.length ? Math.round(c.done / c.ids.length * 100) : 0}%"></i></span>
           <span class="tiny muted" style="min-width:76px;text-align:right">${c.done}/${c.ids.length}${
             c.wrong ? ` · 错<b style="color:var(--bad)">${c.wrong}</b>` : ''}${c.acc >= 0 ? ` · ${(c.acc * 100).toFixed(0)}%` : ''}</span>
         </div>`).join('') + `</div>`;
     });
-    shell(h);
+    shell(h);$('.review-bank select').value=reviewBank();
   }
 
   function renderNotes() {
@@ -2101,7 +2107,7 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     go('q/' + list[0].id);
   };
   function pickList(f) {
-    let list = S.qs;
+    let list = f.startsWith('due_') ? reviewPool() : S.qs;
     if (f === 'wrong') list = list.filter(q => isWrongNow(q.id));
     if (f === 'fixed') list = list.filter(q => isFixed(q.id));
     if (f === 'guess') list = list.filter(q => flag(q.id, 'guess'));
@@ -2129,21 +2135,21 @@ const APP_VER = 118;     // 每次改动前端都 +1，和 index.html 的 ?v= �
 
   /* 选择复习方式：先按 模块 > 章节 勾选范围，再选 复习 / 原题重做 / 重做区 */
   let PICK = null;   // { scope, title, list }
-  const pickKey = q => q.moduleIdx + '|' + q.chapter;
+  const pickKey = q => q.module + '|' + q.chapter;
 
   function buildPickTree() {
     const mods = new Map();
     PICK.list.forEach(q => {
-      if (!mods.has(q.moduleIdx)) mods.set(q.moduleIdx, { name: q.module, chs: new Map() });
-      const m = mods.get(q.moduleIdx);
+      if (!mods.has(q.module)) mods.set(q.module, { name: q.module, chs: new Map() });
+      const m = mods.get(q.module);
       if (!m.chs.has(q.chapter)) m.chs.set(q.chapter, 0);
       m.chs.set(q.chapter, m.chs.get(q.chapter) + 1);
     });
     return Array.from(mods).map(([mi, m]) => `
       <div class="pkgrp">
-        <label class="pk mod"><input type="checkbox" class="pkmi" data-mi="${mi}" checked onchange="ZS_PK_MOD(this)">
+        <label class="pk mod"><input type="checkbox" class="pkmi" data-mi="${esc(mi)}" checked onchange="ZS_PK_MOD(this)">
           <b>${esc(m.name)}</b><span class="tiny muted">${Array.from(m.chs.values()).reduce((a, b) => a + b, 0)} 题</span></label>
-        ${Array.from(m.chs).map(([ch, c]) => `<label class="pk ch"><input type="checkbox" class="pkch" data-mi="${mi}" data-ch="${esc(ch)}" checked onchange="ZS_PK_CH(this)">
+        ${Array.from(m.chs).map(([ch, c]) => `<label class="pk ch"><input type="checkbox" class="pkch" data-mi="${esc(mi)}" data-ch="${esc(ch)}" checked onchange="ZS_PK_CH(this)">
           <span>${esc(ch)}</span><span class="tiny muted">${c}</span></label>`).join('')}
       </div>`).join('');
   }

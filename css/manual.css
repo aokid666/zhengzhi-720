@@ -136,3 +136,6 @@ html[data-theme="dark"] .m-mask.revealed{background:transparent}
 .m-evidence-tools{margin-top:12px;padding:0 2px;color:var(--ink2);font-size:12px}.m-evidence-tools>.acts{margin:0 0 10px}
 .m-evidence-tools>details{border-top:1px solid var(--line);padding:10px 0}.m-evidence-tools summary{cursor:pointer;font-size:12px;line-height:1.7}
 .m-original-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap}.m-original-row>span{font-size:11px}.m-original-row .acts{margin:0;gap:6px}
+
+/* Compact question directories share the original question-bank status colours. */
+.sprint-view-toggle{display:flex;gap:8px;margin:14px 0}.sprint-number-section{margin:18px 0 24px}.sprint-number-section h2{font-size:15px;margin:0 0 12px;color:var(--ink)}.sprint-number-grid{display:flex;flex-wrap:wrap;gap:8px;padding:16px;background:var(--card);border:1px solid var(--line);border-radius:14px}.sprint-number-grid .chip{min-width:40px;padding:8px 10px;text-align:center;cursor:pointer;font:inherit;font-size:14px}.review-bank{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;font-size:14px}.review-bank select{max-width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:9px;color:var(--ink);background:var(--card)}

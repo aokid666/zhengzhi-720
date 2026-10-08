@@ -108,18 +108,22 @@ window.MANUAL = (() => {
       document.querySelectorAll('.sprint-topic-group').forEach(el=>el.ontoggle=()=>{topicState.open=Array.from(document.querySelectorAll('.sprint-topic-group[open] summary>span')).map(s=>s.textContent);});
     };document.getElementById('mTopicSearch').oninput=update;select.onchange=update;update();
   }
+  function listToggle(prefix){return '<div class="sprint-view-toggle" role="group" aria-label="目录显示方式"><button class="btn tiny" id="'+prefix+'ListMode">题目列表</button><button class="btn tiny" id="'+prefix+'NumberMode">仅题号</button></div>';}
+  function bindListToggle(prefix,key,update){const paint=()=>{const numbered=localStorage.getItem('zz720.listMode.'+key)==='numbers';['List','Number'].forEach((mode,i)=>{const el=document.getElementById(prefix+mode+'Mode');el.classList.toggle('main',numbered===!!i);el.setAttribute('aria-pressed',String(numbered===!!i));el.onclick=()=>{localStorage.setItem('zz720.listMode.'+key,i?'numbers':'list');paint();update();};});};paint();}
+  function numberGrid(qs,c){const groups=new Map();qs.forEach(q=>{const key=q.module+' · '+q.chapter+(q.chapter!==q.section?' · '+q.section:'');if(!groups.has(key))groups.set(key,[]);groups.get(key).push(q);});return [...groups].map(([title,list])=>'<section class="sprint-number-section"><h2>'+esc(title)+'</h2><div class="sprint-number-grid">'+list.map(q=>'<button class="chip '+(c.P(q.id)?.s==='right'?'ok':c.P(q.id)?.s==='wrong'?'bad':'')+'" onclick="ZS_GO(\'q/'+q.id+'\')" aria-label="'+esc(title+' 第'+(q.originalNo||q.no)+'题')+'">'+esc(q.originalNo||q.no)+(c.flag(q.id,'star')?' ★':'')+(c.flag(q.id,'guess')?' 蒙':'')+'</button>').join('')+'</div></section>').join('')+(qs.length?'':'<div class="empty">没有符合条件的题目。</div>');}
   function listQuestions(filter,judge=false,blockId) {
     const pool=judge?study.questions:questions;
     const qs=pool.filter(q=>(!blockId||q.blockId===blockId)&&(filter==='wrong'?ctx.isWrongNow(q.id):filter==='star'?ctx.flag(q.id,'star'):filter==='undone'?!ctx.isDone(q.id):true));
     ctx.S.manualJudgeIds=judge&&blockId?qs.map(q=>q.id):null;
     const route=judge?'sprint/judgements/':'sprint/questions/',stateKey=route+(filter||'all')+'/'+(blockId||'');let page=listPages.get(stateKey)||1;const size=20;
-    frame('<div class="sprint-page"><a class="sprint-back" href="#/sprint">‹ 冲刺板块</a><div class="hero sprint-hero"><span class="sprint-eyebrow">背诵手册</span><h1>'+(judge?'概念辨析判断练习':'习题190')+'</h1><p>'+(judge?'根据原书干扰项与辨析练习，提交后核对原文。':'原书实际收录193题，保留原编号；提交后查看解析与资料对照。')+'</p></div><div class="sprint-list-tools">'+[['all','全部'],['wrong','错题'],['star','收藏'],['undone','未做']].map(([k,v])=>'<button class="btn '+(filter===k?'main':'')+'" onclick="ZS_GO(\''+route+k+(blockId?'/'+blockId:'')+'\')">'+v+'</button>').join('')+'<a href="#/sprint/points">点拨与易混考点 →</a></div><div id="mQuestionList"></div></div>');
+    frame('<div class="sprint-page"><a class="sprint-back" href="#/sprint">‹ 冲刺板块</a><div class="hero sprint-hero"><span class="sprint-eyebrow">背诵手册</span><h1>'+(judge?'概念辨析判断练习':'习题190')+'</h1><p>'+(judge?'根据原书干扰项与辨析练习，提交后核对原文。':'原书实际收录193题，保留原编号；提交后查看解析与资料对照。')+'</p></div><div class="sprint-list-tools">'+[['all','全部'],['wrong','错题'],['star','收藏'],['undone','未做']].map(([k,v])=>'<button class="btn '+(filter===k?'main':'')+'" onclick="ZS_GO(\''+route+k+(blockId?'/'+blockId:'')+'\')">'+v+'</button>').join('')+'<a href="#/sprint/points">点拨与易混考点 →</a></div>'+(!judge?listToggle('m'):'')+'<div id="mQuestionList"></div></div>');
     const update=()=>{
+      if(!judge&&localStorage.getItem('zz720.listMode.manual190')==='numbers'){document.getElementById('mQuestionList').innerHTML='<div class="sprint-result-count">'+qs.length+' 道练习</div>'+numberGrid(qs,ctx);return;}
       page=Math.min(page,Math.max(1,Math.ceil(qs.length/size)));listPages.set(stateKey,page);
       const pages=Math.max(1,Math.ceil(qs.length/size)),start=(page-1)*size,visible=qs.slice(start,start+size);
       document.getElementById('mQuestionList').innerHTML='<div class="sprint-result-count">'+qs.length+' 道练习'+(qs.length?' · 显示 '+(start+1)+'–'+(start+visible.length):'')+'</div>'+visible.map(q=>'<button class="card pad m-qrow" onclick="ZS_GO(\'q/'+q.id+'\')"><b>'+esc(judge?q.chapter:q.module+' · '+q.section+' · 原题 '+q.no)+'</b><span>'+esc(q.stem)+'</span><small>'+badge(q)+'</small></button>').join('')+(qs.length>size?'<div class="sprint-pager"><button class="btn" id="mPrevList" '+(page<=1?'disabled':'')+'>上一页</button><span>'+page+' / '+pages+' 页</span><button class="btn" id="mNextList" '+(page>=pages?'disabled':'')+'>下一页</button></div>':'')+(qs.length?'':'<div class="empty">这里还没有题目。</div>');
       const prev=document.getElementById('mPrevList'),next=document.getElementById('mNextList');if(prev)prev.onclick=()=>{page--;update();document.getElementById('mQuestionList').scrollIntoView({block:'start',behavior:'smooth'});};if(next)next.onclick=()=>{page++;update();document.getElementById('mQuestionList').scrollIntoView({block:'start',behavior:'smooth'});};
-    };update();
+    };if(!judge)bindListToggle('m','manual190',update);update();
   }
   function excerpt(b) {
     return b.text.split('\n').filter(t=>!/(命题分析|考查频率|^点拨$)/.test(t)).join('').replace(/^经典干扰项[：:]/,'').slice(0,160);
@@ -229,5 +233,5 @@ window.MANUAL = (() => {
       },0);
     };
   }
-  return {load,render,leave,pageHtml,questionPages,questionPdf,paintQuestion,src,get questions(){return questions;},get judgements(){return study?study.questions:[];},get study(){return study;},get data(){return data;}};
+  return {listToggle,bindListToggle,numberGrid,load,render,leave,pageHtml,questionPages,questionPdf,paintQuestion,src,get questions(){return questions;},get judgements(){return study?study.questions:[];},get study(){return study;},get data(){return data;}};
 })();
