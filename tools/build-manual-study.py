@@ -235,3 +235,7 @@ study={'version':111,'blocks':blocks,'questions':exercises}
 (DATA/'manual-index.json').write_text(json.dumps(index,ensure_ascii=False,separators=(',',':'))+'\n')
 (DATA/'manual-study.json').write_text(json.dumps(study,ensure_ascii=False,separators=(',',':'))+'\n')
 print(json.dumps({'blocks':dict(collections.Counter(b['kind'] for b in blocks)),'judgements':len(exercises),'true':sum(q['answer']=='A' for q in exercises),'false':sum(q['answer']=='B' for q in exercises),'recommendedMasks':sum(len(p['masks']) for p in pages),'testedMasks':sum(bool(m['questionIds']) for p in pages for m in p['masks'])},ensure_ascii=False))
+
+# Rebuild recommendation tiers from complete facts and native OCR word boxes.
+import subprocess,sys
+subprocess.run([sys.executable,str(ROOT/'tools/refine-manual-clozes.py')],check=True)

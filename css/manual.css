@@ -14,7 +14,7 @@
 .m-sheet[data-mode="text"] #mWords span{user-select:text;-webkit-user-select:text;cursor:text}
 .m-sheet[data-mode="text"] #mWords span::selection{background:#168aad70;color:transparent}
 .m-sheet[data-mode="image"]{touch-action:none;cursor:crosshair}
-.m-mask{position:absolute;padding:0;background:#ffefcb;border:1px dashed #be8538;pointer-events:auto;cursor:pointer;border-radius:2px}
+.m-mask{position:absolute;box-sizing:border-box;padding:0;background:#ffefcb;border:1px dashed #be8538;pointer-events:auto;cursor:pointer;border-radius:2px}
 .m-mask.revealed{background:transparent;border:1px dashed #9f813b55}
 .m-sheet[data-mode="text"] .m-mask,.m-sheet[data-mode="image"] .m-mask{pointer-events:none}
 #mDraft{position:absolute;border:2px dashed #cb7b17;background:#ffaa3330;pointer-events:none}
