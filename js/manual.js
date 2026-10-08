@@ -53,7 +53,7 @@ window.MANUAL = (() => {
     const box=document.getElementById('lectM');if(!box)return;
     if(!data){box.innerHTML='<div class="hint">背诵手册加载失败，请刷新重试。</div>';return;}
     if(q.blockId&&byBlock[q.blockId]){box.innerHTML=blockHtml(byBlock[q.blockId]);return;}
-    const refs=(q.source==='m'?q.mRefs:(matches[q.id]||[]).map(h=>h.page))||[];
+    const refs=(['m','p'].includes(q.source)?q.mRefs:(matches[q.id]||[]).map(h=>h.page))||[];
     const ids=Array.from(new Set((q.source==='m'?q.qRefs:[]).concat(refs)));
     box.innerHTML=ids.length?'<div class="tiny muted">'+(refs.length?'相关内容按文字匹配定位，请结合原页核对。':'本题原页如下；没找到对应的理论讲解页。')+'</div>'+ids.map(id=>pageHtml(id)).join(''):'<div class="hint">没找到背诵手册中的相应内容。</div>';
   }
@@ -77,7 +77,7 @@ window.MANUAL = (() => {
   }
   function home() {
     const modules=Array.from(new Set(data.topics.map(t=>t.module)));
-    frame('<div class="hero"><h1>冲刺板块</h1><p>背诵手册 · 专题挖空 · 点拨与干扰项 · 习题190</p></div><div class="acts"><button class="btn main" onclick="ZS_GO(\'sprint/questions\')">习题190 · '+questions.length+'题</button><button class="btn" onclick="ZS_GO(\'sprint/points\')">点拨 / 命题分析 / 干扰项</button><button class="btn" onclick="ZS_GO(\'sprint/judgements\')">概念辨析 · 判断练习</button><button class="btn" onclick="ZS_GO(\'sprint/book\')">目录与手册全文搜索</button></div><div class="hint">推荐挖空优先选择已有题目考查的完整考点，保留上下文；可切换「核心 / 考点 / 加强」，也可自己选词或框选。点拨专项只展示原书对应片段，干扰项可直接做判断练习。</div>'+modules.map(m=>'<details class="card pad" open><summary>'+esc(m)+'</summary><div class="m-topics">'+data.topics.filter(t=>t.module===m&&t.pages.length).map(t=>'<button class="btn" onclick="ZS_GO(\'sprint/topic/'+t.id+'\')">'+esc(t.title)+'</button>').join('')+'</div></details>').join(''));
+    frame('<div class="hero"><h1>冲刺板块</h1><p>背诵手册 · 选择题 / 笔记合集 · 专题挖空 · 点拨与干扰项 · 习题190</p></div><div class="acts"><button class="btn main" onclick="ZS_GO(\'sprint/practice\')">10份选择题 / 笔记 · 1389道练习</button><button class="btn" onclick="ZS_GO(\'sprint/questions\')">习题190 · '+questions.length+'题</button><button class="btn" onclick="ZS_GO(\'sprint/points\')">点拨 / 命题分析 / 干扰项</button><button class="btn" onclick="ZS_GO(\'sprint/judgements\')">概念辨析 · 判断练习</button><button class="btn" onclick="ZS_GO(\'sprint/book\')">目录与手册全文搜索</button></div><div class="hint">推荐挖空优先选择已有题目考查的完整考点，保留上下文；可切换「核心 / 考点 / 加强」，也可自己选词或框选。点拨专项只展示原书对应片段，干扰项可直接做判断练习。</div>'+modules.map(m=>'<details class="card pad" open><summary>'+esc(m)+'</summary><div class="m-topics">'+data.topics.filter(t=>t.module===m&&t.pages.length).map(t=>'<button class="btn" onclick="ZS_GO(\'sprint/topic/'+t.id+'\')">'+esc(t.title)+'</button>').join('')+'</div></details>').join(''));
   }
   function listQuestions(filter,judge=false,blockId) {
     const pool=judge?study.questions:questions;
