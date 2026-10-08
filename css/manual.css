@@ -22,11 +22,21 @@
 html[data-theme="dark"] .m-toolbar{background:var(--card,#1f282c);color:var(--ink)}
 html[data-invert="on"] .m-mask{background:#273137;border-color:#cf994c}
 html[data-invert="on"] .m-mask.revealed{background:transparent}
-@media(max-width:600px){.m-toolbar .btn{font-size:12px;padding:7px 9px}.m-toolbar{padding:8px}.m-topics{grid-template-columns:1fr}}
+@media(max-width:600px){.m-toolbar .btn{font-size:12px;padding:7px 9px}.m-toolbar{padding:8px}.m-topics{grid-template-columns:1fr}.m-guide-head{align-items:flex-start}.m-guide-head>small{max-width:58%}.m-cue{padding:11px 12px}}
 
 .m-study-card{color:var(--ink);margin:12px 0}
 .m-study-card p{line-height:1.8;margin:10px 0}
 .m-source-label,.m-mode-hint{color:var(--ink2);line-height:1.65;margin:8px 0}
+.m-cloze-guide{margin:10px 0 14px;color:var(--ink)}
+.m-guide-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 2px 8px}
+.m-guide-head>b{font-size:14px}.m-guide-head>small{font-size:11px;color:var(--ink2);text-align:right}
+.m-cue-list{display:grid;gap:8px}
+.m-cue{display:grid;gap:7px;width:100%;padding:12px 14px;text-align:left;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;cursor:pointer}
+.m-cue-top{display:flex;align-items:center;gap:7px;min-width:0}.m-cue-top i{display:grid;place-items:center;width:21px;height:21px;flex:0 0 21px;border-radius:50%;font-size:11px;font-style:normal;color:var(--teal);background:var(--fill2)}
+.m-cue-top b{font-size:12px}.m-cue-top small{margin-left:auto;font-size:10px;color:var(--teal);white-space:nowrap}
+.m-cue-prompt{font-size:13px;line-height:1.7;overflow-wrap:anywhere}.m-cue-answer{font-size:11px;color:var(--ink2)}
+.m-cue.revealed{border-color:color-mix(in srgb,var(--teal) 45%,var(--line));background:color-mix(in srgb,var(--teal) 6%,var(--card))}.m-cue.revealed .m-cue-answer{color:var(--teal);font-weight:600}
+@media(hover:hover){.m-cue:hover{border-color:var(--teal)}}
 .m-plain{color:var(--ink)}
 .pgwrap.m-clip{position:relative;overflow:hidden;width:100%;padding:0;background:#fff}
 .pgwrap.m-clip>img{position:absolute;display:block;max-width:none;height:auto;margin:0}

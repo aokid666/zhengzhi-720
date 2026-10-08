@@ -45,7 +45,7 @@ test('judgments have explicit source evidence, true counterparts, and no comment
   assert.ok(!study.questions.some(q=>q.stem==='非公有制经济是为社会主义服务的经济成分'));
 });
 
-test('recommended clozes use complete exam facts and precise bounded rectangles', () => {
+test('recommended clozes are exam-linked, clueable and use precise bounded rectangles', () => {
   const filler=/^(作为|相对的|绝对的|无条件的|有条件的|必然性|偶然性|假象|首要任务)$/;
   const broken=/(命题特点|考查频率|本专题|高频考点|分析题|选择题|可以是|也可以|虽然不$|与一$|在经济$|和生产$)/;
   for(const id of ['u001','u238','u239','l001','l167','l168'])assert.deepEqual(pages[id].masks,[]);
@@ -58,24 +58,29 @@ test('recommended clozes use complete exam facts and precise bounded rectangles'
     const seen=[];
     for(const m of p.maskCandidates) {
       assert.ok(m.text.trim(),p.id);
-      assert.ok(['题目考查','概念辨析','结构考点'].includes(m.reason),p.id+' '+m.text);
+      assert.ok(['题目考查','题库同源','概念辨析','结构考点','限定词辨析'].includes(m.reason),p.id+' '+m.text);
       assert.ok(['question','term','relation'].includes(m.source),p.id+' '+m.text);
       assert.doesNotMatch(m.text,/考查频率|^专题|^第.*部分/,p.id);
       assert.doesNotMatch(m.text,filler,p.id);
       assert.doesNotMatch(m.text,broken,p.id+' '+m.text);
+      assert.ok(m.examTag&&m.examPrompt.includes('____'),p.id+' missing exam cue '+m.text);
+      assert.doesNotMatch(m.examPrompt,/命题特点|考查频率|经典干扰项/,p.id+' meta cue '+m.examPrompt);
+      assert.equal(m.questionCount,m.questionIds.length,p.id+' question count');
       assert.ok(m.b[0]>=0&&m.b[1]>=0&&m.b[2]>0&&m.b[3]>0,p.id);
       assert.ok(m.b[0]+m.b[2]<=p.width+4&&m.b[1]+m.b[3]<=p.height+4,p.id);
       const n=m.text.replace(/[^\u4e00-\u9fffA-Za-z0-9]/g,'');
       assert.ok(!seen.some(x=>x.includes(n)||n.includes(x)),p.id+' duplicate '+m.text);
       seen.push(n);
-      if(m.reason==='题目考查')assert.ok(m.questionIds.length,p.id);
+      if(m.reason==='题目考查'||m.reason==='题库同源')assert.ok(m.questionIds.length,p.id);
     }
   }
-  assert.deepEqual(pages.u011.masks.map(m=>m.text),['不依赖于人类的意识而存在','客观实在性','主观唯心主义和客观唯心主义']);
-  assert.deepEqual(pages.l140.masks.map(m=>m.text),['资本积累','剩余价值','物质交往']);
+  assert.deepEqual(pages.u011.masks.map(m=>m.text),['客观实在性','不以人的意志为转移','主观唯心主义和客观唯心主义']);
+  assert.deepEqual(pages.l140.masks.map(m=>m.text),['无产阶级','资本主义生产方式的基本矛盾','物质交往的产物']);
   assert.ok(!pages.u012.maskCandidates.some(m=>m.text==='个别与一'));
   assert.ok(!pages.l100.maskCandidates.some(m=>/金融寡头在经济|科学技术的进步和生产/.test(m.text)));
   for(const b of study.blocks)for(const list of Object.values(b.masksByPage||{}))for(const m of list){assert.doesNotMatch(m.text,filler,b.id);assert.doesNotMatch(m.text,broken,b.id+' '+m.text);}
+  const defaults=index.pages.flatMap(p=>p.masks);
+  assert.ok(defaults.filter(m=>m.questionIds.length).length/defaults.length>.7,'most defaults should trace to correct options');
   assert.equal(read('questions').length+read('topical-exercises').length,833);
   assert.equal(read('manual-questions').length,193);
 });
