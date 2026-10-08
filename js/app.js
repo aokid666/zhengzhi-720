@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 112;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 113;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -690,7 +690,7 @@ const APP_VER = 112;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         <div class="tiny muted">逐题附原讲义解析、对应知识清单和速成班讲义的文字与原页截图。</div>
       </div>
       <div class="sec-title">🚀 冲刺板块</div>
-      <div class="card pad"><div class="acts"><button class="btn main" onclick="ZS_GO('sprint')">背诵手册 · 123 个专题挖空</button><button class="btn main" onclick="ZS_GO('sprint/practice')">选择题 / 笔记合集 · 1389 道练习</button><button class="btn" onclick="ZS_GO('sprint/questions')">习题190 · 193 题</button></div><div class="tiny muted">原图与文字按原书位置挖空，点拨、命题分析、干扰项专项背诵。</div></div>
+      <div class="card sprint-home"><div class="sprint-home-heading"><b>背诵、练题与易混点复盘</b><a href="#/sprint">查看全部 →</a></div><div class="sprint-home-links"><a href="#/sprint/topics"><b>专题挖空</b><span>123 个专题 →</span></a><a href="#/sprint/practice"><b>选择题 / 笔记</b><span>1389 道练习 →</span></a><a href="#/sprint/questions"><b>手册习题190</b><span>193 道题 →</span></a></div></div>
       <div class="sec-title">🔄 艾宾浩斯复习</div>
       <div class="card pad">
         <div class="tiny muted" style="margin-bottom:6px">答对：复习间隔按 1 / 2 / 4 / 7 / 15 / 30 天递增；答错：回到第 1 档，半天后再来。</div>
