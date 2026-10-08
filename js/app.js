@@ -540,7 +540,7 @@ const APP_VER = 114;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   const flag = (id, k) => (ZS.data.flags[id] || {})[k];
 
   // Keep browsing positions across routes; loading placeholders must not replace them.
-  if('scrollRestoration' in window.history)window.history.scrollRestoration='manual';
+  if(window.history && 'scrollRestoration' in window.history)window.history.scrollRestoration='manual';
   const browsePositions = new Map();
   let renderedRoute = null, stopRestore = () => {};
   function restoreBrowsing(y) {
