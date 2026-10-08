@@ -301,3 +301,24 @@ test('constant edits are uploaded by the maximum-wait deadline', async () => {
   for(let i=0;i<8;i++){a.ZS.data.notes.q1=note('edit '+i);a.ZS.save();await a.advance(2000);}
   assert.ok(cloud.uploads.length>=1);
 });
+
+
+test('matching pairs and multiline material answers sync with their saved selections and drafts', async () => {
+  const cloud = server(), a = client(cloud), b = client(cloud);
+  const records = [
+    ['pr-match', 'match:{"A":["1","3"],"B":["3"]}'],
+    ['pr-written', 'written:第一问：实践决定认识。\n第二问：认识反作用于实践。']
+  ];
+  for (const [id, answer] of records) {
+    a.ZS.data.progress[id] = { tries: 0, rights: 0, s: 'right', ts: 10, sel: [answer] };
+    a.ZS.recordAnswer(id, true, [answer]);
+  }
+  a.ZS.data.edit['pr-match'] = { practiceMatch: { A: ['1','3'], B: ['3'] }, ts: 10 };
+  a.ZS.save(); await a.ZS.push(true); await b.ZS.pull(true);
+  for (const [id, answer] of records) {
+    assert.equal(b.ZS.data.progress[id].sel[0], answer);
+    assert.equal(b.ZS.data.hist[id][0].s, answer);
+    assert.equal(b.ZS.data.progress[id].tries, 1);
+  }
+  assert.equal(JSON.stringify(b.ZS.data.edit['pr-match'].practiceMatch), '{"A":["1","3"],"B":["3"]}');
+});
