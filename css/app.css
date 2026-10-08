@@ -133,7 +133,7 @@ button{font:inherit;color:inherit}
 .acc.open>.hd .arw{transform:rotate(90deg)}
 .acc>.bd{display:none;padding:0 12px 12px}
 .acc.open>.bd{display:block}
-.txt{white-space:pre-wrap;font-size:14.5px;line-height:1.85;color:#22302f}
+.txt{white-space:pre-wrap;font-size:14.5px;line-height:1.85;color:var(--ink)}
 .txt .lbl{font-weight:700;color:var(--teal);display:inline-block;margin-right:4px}
 .pages{display:flex;flex-direction:column;gap:10px}
 .pgwrap{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}

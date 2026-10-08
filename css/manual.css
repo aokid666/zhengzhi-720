@@ -1,10 +1,10 @@
 .m-topics{display:grid;gap:8px;margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
 .m-topics .btn{text-align:left;white-space:normal}
 .m-qrow{display:flex;flex-direction:column;gap:8px;width:100%;text-align:left;color:var(--ink);font:inherit;cursor:pointer;margin:10px 0}
-.m-qrow small{color:var(--ink3)}
+.m-qrow small{color:var(--ink2)}
 .m-toolbar{position:sticky;top:90px;z-index:25;background:var(--card,#fff);border:1px solid var(--line,#ddd);padding:10px;border-radius:12px;margin:12px 0;box-shadow:0 3px 12px #0001}
-.m-toolbar input{max-width:100%;min-width:160px;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
-.m-toolbar select{padding:8px;background:var(--bg);color:var(--ink);border-radius:8px}
+.m-toolbar input{max-width:100%;min-width:160px;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--fill);color:var(--ink)}
+.m-toolbar select{max-width:100%;padding:8px;background:var(--fill);color:var(--ink);border-radius:8px}
 .m-toolbar .acts{margin:6px 0;gap:6px}.m-toolbar [hidden]{display:none!important}
 .m-sheet{position:relative;container-type:inline-size;width:100%;max-width:100%;overflow:hidden;touch-action:pan-y;background:#fff;user-select:none;-webkit-user-select:none}
 .m-sheet>img{width:100%;display:block;pointer-events:none}
@@ -23,3 +23,12 @@ html[data-theme="dark"] .m-toolbar{background:var(--card,#1f282c);color:var(--in
 html[data-invert="on"] .m-mask{background:#273137;border-color:#cf994c}
 html[data-invert="on"] .m-mask.revealed{background:transparent}
 @media(max-width:600px){.m-toolbar .btn{font-size:12px;padding:7px 9px}.m-toolbar{padding:8px}.m-topics{grid-template-columns:1fr}}
+
+.m-study-card{color:var(--ink);margin:12px 0}
+.m-study-card p{line-height:1.8;margin:10px 0}
+.m-source-label,.m-mode-hint{color:var(--ink2);line-height:1.65;margin:8px 0}
+.m-plain{color:var(--ink)}
+.pgwrap.m-clip{position:relative;overflow:hidden;width:100%;padding:0;background:#fff}
+.pgwrap.m-clip>img{position:absolute;display:block;max-width:none;height:auto;margin:0}
+html[data-theme="dark"] .m-mask{background:#273137;border-color:#cf994c}
+html[data-theme="dark"] .m-mask.revealed{background:transparent}

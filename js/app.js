@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 110;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 111;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -428,8 +428,8 @@ const APP_VER = 110;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       S.qs.push(...await topicalResponse.json());
     } catch (e) { document.body.innerHTML = '<div class="empty">题库加载失败：' + esc(e.message) + '</div>'; return; }
     S.qs.forEach(q => S.byId[q.id] = q);
-    try { S.sprintQs = await MANUAL.load(); S.sprintQs.forEach(q => S.byId[q.id] = q); }
-    catch(e) { S.sprintQs = []; console.error(e); }
+    try { S.sprintQs = await MANUAL.load(); S.judgeQs = MANUAL.judgements; S.sprintQs.concat(S.judgeQs).forEach(q => S.byId[q.id] = q); }
+    catch(e) { S.sprintQs = []; S.judgeQs = []; console.error(e); }
     ZS.load();
     loadSession();
     migrateGuess();
@@ -552,7 +552,7 @@ const APP_VER = 110;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (S.back.length > 40) S.back.splice(0, S.back.length - 40);
     /* 离开题目页 → 队列「暂存」，可随时从「队列」页继续 */
     if (p !== 'q') parkQ();
-    if (p === 'sprint' || (p === 'l' && a && a.startsWith('7-'))) return MANUAL.render(p === 'l' ? 'sprint/questions' : h, {shell,showQNav,P,flag,isWrongNow,isDone,S});
+    if (p === 'sprint' || (p === 'l' && a && /^[78]-/.test(a))) return MANUAL.render(p === 'l' ? (a.startsWith('8-') ? 'sprint/judgements' : 'sprint/questions') : h, {shell,showQNav,P,flag,isWrongNow,isDone,S});
     if (p === 'l' && a) return renderChapter(a);
     if (p === 'q' && a) return renderQuestion(a);
     if (p === 's') return renderSearch();
@@ -763,7 +763,7 @@ const APP_VER = 110;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
 
   /* ---------- 题目 ---------- */
-  function qPool(id) { return S.byId[id] && S.byId[id].source === 'm' ? (S.sprintQs || []) : S.qs; }
+  function qPool(id) { const q=S.byId[id]; return q && q.exerciseKind === 'judgement' ? (S.manualJudgeIds && S.manualJudgeIds.includes(id) ? S.manualJudgeIds.map(k=>S.byId[k]).filter(Boolean) : (S.judgeQs || [])) : q && q.source === 'm' ? (S.sprintQs || []) : S.qs; }
   function qIndexOf(id) { return qPool(id).findIndex(q => q.id === id); }
 
   function renderQuestion(id) {
@@ -805,7 +805,7 @@ const APP_VER = 110;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         <div id="qbox" data-anno="${id}|q-txt">
         <div class="stem">${esc(q.stem)}</div>
         <div id="opts">`;
-    ['A','B','C','D'].forEach(k => {
+    Object.keys(q.options).sort().forEach(k => {
       const v = q.options[k];
       let cls = 'opt';
       if (!revealed && sel.includes(k)) cls += ' sel';
