@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 113;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 114;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -539,17 +539,43 @@ const APP_VER = 113;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
   const flag = (id, k) => (ZS.data.flags[id] || {})[k];
 
+  // Keep browsing positions across routes; loading placeholders must not replace them.
+  if('scrollRestoration' in window.history)window.history.scrollRestoration='manual';
+  const browsePositions = new Map();
+  let renderedRoute = null, stopRestore = () => {};
+  function restoreBrowsing(y) {
+    stopRestore();
+    let cancelled = false;
+    const view = $('#view'), apply = () => { if(!cancelled)window.scrollTo(0, y); };
+    const cancel = () => { cancelled = true; observer?.disconnect(); view.removeEventListener('load', apply, true); ['wheel','touchstart','pointerdown','keydown'].forEach(k=>window.removeEventListener(k,cancel)); clearTimeout(timer); };
+    const observer = window.ResizeObserver ? new ResizeObserver(apply) : null;
+    if(observer)observer.observe(view);
+    view.addEventListener('load', apply, true);
+    ['wheel','touchstart','pointerdown','keydown'].forEach(k=>window.addEventListener(k,cancel,{passive:true}));
+    const timer = setTimeout(cancel, 2500);
+    stopRestore = cancel;
+    apply();
+    requestAnimationFrame(()=>{if(renderedRoute===S.route)apply();});
+  }
   /* ---------- 路由 ---------- */
   function route() {
     let h = location.hash.replace(/^#\/?/, '');
     try { h = decodeURIComponent(h); } catch (e) { }
     if (S.remotePending) loadSession();
+    if (h !== S.route) {
+      if(renderedRoute === S.route)browsePositions.set(S.route, window.scrollY);
+      stopRestore();
+      if(browsePositions.size>80)browsePositions.delete(browsePositions.keys().next().value);
+    }
     S.route = h;
     S.remotePending = false;
     const remoteHint = $('#syncRemoteHint'); if (remoteHint) remoteHint.hidden = true;
     const [p, a] = h.split('/');
     /* 页面历史栈（供返回按钮用） */
-    if (S.back[S.back.length - 1] !== h) S.back.push(h);
+    if (S.back[S.back.length - 1] !== h) {
+      const previous = S.back.lastIndexOf(h);
+      if(previous >= 0) S.back.splice(previous + 1); else S.back.push(h);
+    }
     if (S.back.length > 40) S.back.splice(0, S.back.length - 40);
     /* 离开题目页 → 队列「暂存」，可随时从「队列」页继续 */
     if (p !== 'q') parkQ();
@@ -567,7 +593,9 @@ const APP_VER = 113;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
   const go = h => { location.hash = '#/' + h; };
 
-  function shell(inner) {
+  function shell(inner, loading = false) {
+    const y = renderedRoute === S.route ? window.scrollY : (browsePositions.get(S.route) || 0);
+    stopRestore();
     MANUAL.leave();
     PRACTICE.leave();
     flushEditors();
@@ -580,7 +608,8 @@ const APP_VER = 113;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     S.remotePending = false;
     const hint = $('#syncRemoteHint'); if (hint) hint.hidden = true;
     updateSyncStatus();
-    window.scrollTo(0, 0);
+    if(loading) { browsePositions.set(S.route,y); renderedRoute=null; }
+    else { renderedRoute = S.route; restoreBrowsing(y); }
   }
 
   function showQNav(on, idx) {
@@ -772,7 +801,7 @@ const APP_VER = 113;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   function renderQuestion(id) {
     const q = S.byId[id];
     if (!q && id.startsWith('pr-')) {
-      shell('<div class="empty">正在加载本题资料…</div>');
+      shell('<div class="empty">正在加载本题资料…</div>', true);
       PRACTICE.ensureQuestion(id,S).then(() => { if (S.route === 'q/'+id) { if (S.byId[id]) renderQuestion(id); else shell('<div class="empty">题目不存在</div>'); } }).catch(e => { if(S.route==='q/'+id) shell('<div class="empty">'+esc(e.message)+'，请刷新重试。</div>'); }); return;
     }
     if (!q) { shell('<div class="empty">题目不存在</div>'); return; }

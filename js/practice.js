@@ -25,7 +25,7 @@ window.PRACTICE = (() => {
   const questionPdf=(q,which)=>Array.from(new Set((which==='key'?q.keyRefs:q.qRefs).map(r=>r.page))).map(n=>pdf(q.bookId,n,'打开资料对应原页')).join('');
   const badge=(q,c)=>(c.isWrongNow(q.id)?'❌ 错题 · ':'')+(c.flag(q.id,'star')?'★ 收藏 · ':'')+'已做 '+(c.P(q.id)?.tries||0)+' 次';
   async function render(route,c){
-    c.showQNav(false);c.shell('<div class="empty">正在加载冲刺资料…</div>');
+    c.showQNav(false);c.shell('<div class="empty">正在加载冲刺资料…</div>', true);
     try{
       await load();if(c.S.route!==route)return;const parts=route.split('/'),id=parts[2];
       if(!id){collection(c);return;}
