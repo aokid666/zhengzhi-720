@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 116;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 117;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -830,7 +830,7 @@ const APP_VER = 116;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const idx = qIndexOf(id);
     let h = `<div class="card" style="margin-top:12px">
       <div class="qhd">
-        <button class="iconbtn" onclick="ZS_GO('${q.source === 'p' ? 'sprint/practice/'+q.bookId : 'l/'+q.moduleIdx+'-'+q.chapter}')">☰</button>
+        <button class="iconbtn" onclick="ZS_GO('${q.source === 'p' ? 'sprint/practice/'+q.bookId : q.exerciseKind === 'judgement' ? 'sprint/judgements/all/'+q.blockId : q.source === 'm' ? 'sprint/questions' : 'l/'+q.moduleIdx+'-'+q.chapter}')" title="返回题目目录">☰</button>
         <span class="idx">${q.source === 'p' ? esc(q.module+' · '+q.chapter)+' · 原题 '+q.originalNo : esc(q.chapter)+' 第 '+q.no+' 题'}</span>
         <span class="chip">${esc(q.section)}</span>
         ${S.q ? `<span class="qchip">${QMODES[S.q.mode] || '📖 复习'} ${S.q.ids.indexOf(id) + 1}/${S.q.ids.length}${S.q.mode === 'mock' ? ' · <b id="mockTime">00:00</b>' : ''}<button onclick="ZS_QEXIT()" title="离开队列（可在底部「队列」继续）">✕</button></span>` : ''}

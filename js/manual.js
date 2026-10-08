@@ -22,7 +22,7 @@ window.MANUAL = (() => {
   }
   async function load() {
     const result=await Promise.all(['manual-index','manual-questions','manual-matches','manual-study'].map(async n => {
-      const r=await fetch('data/'+n+'.json?v=116'); if(!r.ok) throw new Error('背诵手册数据加载失败'); return r.json();
+      const r=await fetch('data/'+n+'.json?v=117'); if(!r.ok) throw new Error('背诵手册数据加载失败'); return r.json();
     }));
     [data,questions,matches,study]=result;
     byPage=Object.fromEntries(data.pages.map(p=>[p.id,p]));byBlock=Object.fromEntries(study.blocks.map(b=>[b.id,b]));return questions;
@@ -44,7 +44,7 @@ window.MANUAL = (() => {
   function blockHtml(block,annoId='_lec') {
     return block.refs.map((r,i)=>{
       const p=byPage[r.page],area=annoId==='_lec'?'m-block-'+block.id+'-'+r.page:'a-img-'+i;
-      return '<div class="tiny m-source-label">'+esc(label(p)+' · '+block.kind)+'</div><div class="pgwrap m-source m-clip" style="aspect-ratio:'+r.b[2]+'/'+r.b[3]+'" data-id="'+annoId+'" data-tgt="m-img" data-anno="'+annoId+'|'+area+'"><img loading="lazy" src="'+src(r.page)+'" style="'+imageStyle(p,r.b)+'" alt="'+esc(block.kind+'原文片段')+'" data-label="'+esc(label(p))+'" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)"><button class="annobtn" onclick="ZS_ANNO(\''+annoId+'\',\''+area+'\')">✍️</button></div><div class="acts"><button class="btn tiny" onclick="ZS_GO(\'sprint/block/'+block.id+'/'+r.page+'\')">本片段挖空背诵</button><button class="btn tiny" onclick="ZS_ZOOMSRC(\''+src(r.page)+'\')">查看完整原图</button>'+pdf(r.page)+'</div><details><summary>本片段文字</summary><div class="txt m-plain">'+esc(r.lines.map(l=>l.t).join('\n'))+'</div></details>';
+      return '<div class="tiny m-source-label">'+esc(label(p)+' · '+block.kind)+'</div><div class="pgwrap m-source m-clip m-evidence" style="height:0;padding-top:'+r.b[3]/r.b[2]*100+'%" data-id="'+annoId+'" data-tgt="'+(annoId==='_lec'?'m-img':'a-img')+'" data-anno="'+annoId+'|'+area+'"><img loading="eager" decoding="async" width="'+p.width+'" height="'+p.height+'" src="'+src(r.page)+'" style="'+imageStyle(p,r.b)+'" alt="'+esc(block.kind+'原文片段')+'" data-label="'+esc(label(p))+'" onload="ZS_ANNOSYNC()" onclick="ZS_ZOOM(this)"><button class="annobtn" onclick="ZS_ANNO(\''+annoId+'\',\''+area+'\')">✍️</button></div><div class="acts"><button class="btn tiny" onclick="ZS_GO(\'sprint/block/'+block.id+'/'+r.page+'\')">本片段挖空背诵</button><button class="btn tiny" onclick="ZS_ZOOMSRC(\''+src(r.page)+'\')">查看完整原图</button>'+pdf(r.page)+'</div><details><summary>本片段文字</summary><div class="txt m-plain">'+esc(r.lines.map(l=>l.t).join('\n'))+'</div></details>';
     }).join('');
   }
   function questionPages(q,which) {
@@ -81,6 +81,9 @@ window.MANUAL = (() => {
   }
   function home() {
     const lastId=ZS.data.session&&ZS.data.session.last,last=lastId&&ctx.S.byId[lastId];
+    const sprintIds=Array.from(new Set(Object.values(ctx.S.byId).filter(q=>['m','p'].includes(q.source)).map(q=>q.id).concat(Object.keys(ZS.data.progress),Object.keys(ZS.data.flags)))).filter(id=>/^(pr-|ms\d|mj)/.test(id));
+    const learned=sprintIds.filter(id=>ctx.isDone(id)).length,wrong=sprintIds.filter(id=>ctx.isWrongNow(id)).length,starred=sprintIds.filter(id=>ctx.flag(id,'star')).length;
+    const overview='<div class="sprint-overview"><div><strong>'+learned+'</strong><span>已练习</span></div><div><strong>'+wrong+'</strong><span>冲刺错题</span></div><div><strong>'+starred+'</strong><span>冲刺收藏</span></div></div>';
     const resume=last&&['m','p'].includes(last.source)?'<a class="sprint-resume card" href="#/q/'+lastId+'"><span><small>继续上次学习</small><b>'+esc(last.module+' · '+last.chapter)+'</b></span><span aria-hidden="true">继续 →</span></a>':'';
     const entries=[
       ['sprint/topics','背诵','专题挖空背诵',data.topics.length+' 个专题','按模块选专题，在原图或定位文字上挖空。'],
@@ -88,7 +91,7 @@ window.MANUAL = (() => {
       ['sprint/questions','真题型练习','背诵手册 · 习题190',questions.length+' 道题','保留原书题号，做完对照解析与三份资料。'],
       ['sprint/points','辨析','点拨与易混考点',study.blocks.length+' 个片段','点拨、命题分析、干扰项，结合原文辨析。']
     ];
-    frame('<div class="sprint-page"><div class="hero sprint-hero"><span class="sprint-eyebrow">最后一轮 · 系统复习</span><h1>冲刺板块</h1><p>先选学习内容，再进入练习或背诵。</p></div>'+resume+'<div class="sprint-section-head"><h2>学习入口</h2><span>按内容选择</span></div><div class="sprint-entry-grid">'+entries.map(([route,tag,title,count,desc])=>'<a class="card sprint-entry" href="#/'+route+'"><div class="sprint-entry-top"><span class="sprint-kind">'+tag+'</span><span>'+count+'</span></div><h2>'+title+'</h2><p>'+desc+'</p><span class="sprint-entry-action">进入学习 <span aria-hidden="true">→</span></span></a>').join('')+'</div><div class="sprint-section-head"><h2>快捷工具</h2></div><div class="sprint-quick"><a href="#/sprint/judgements"><b>概念辨析判断题</b><span>'+study.questions.length+' 道 · 查漏补缺 →</span></a><a href="#/sprint/book"><b>背诵手册全文搜索</b><span>查词语、找原页 →</span></a></div><p class="sprint-footnote">原图、解析、资料对照和学习记录，都保留在对应的题目或专题中。</p></div>');
+    frame('<div class="sprint-page sprint-dashboard"><div class="hero sprint-hero"><span class="sprint-eyebrow">最后一轮 · 系统复习</span><h1>冲刺板块</h1><p>把知识记牢，把易错点练透。</p>'+overview+'</div>'+resume+'<div class="sprint-section-head"><h2>开始学习</h2><span>背诵 · 练习 · 辨析</span></div><div class="sprint-entry-grid">'+entries.map(([route,tag,title,count,desc],i)=>'<a class="card sprint-entry" href="#/'+route+'"><div class="sprint-entry-top"><span class="sprint-kind">'+tag+'</span><span>'+count+'</span></div><span class="sprint-entry-mark" aria-hidden="true">'+['记','练','题','辨'][i]+'</span><h2>'+title+'</h2><p>'+desc+'</p><span class="sprint-entry-action">进入学习 <span aria-hidden="true">↗</span></span></a>').join('')+'</div><div class="sprint-section-head"><h2>快速查找与复习</h2></div><div class="sprint-quick"><a href="#/sprint/judgements"><b>概念辨析判断题</b><span>'+study.questions.length+' 道 · 查漏补缺 →</span></a><a href="#/sprint/book"><b>背诵手册全文搜索</b><span>查词语、找原页 →</span></a></div><p class="sprint-footnote">原图、解析、资料对照和学习记录，随题目与专题一起保留。</p></div>');
   }
   function topicLibrary(moduleIndex) {
     const modules=Array.from(new Set(data.topics.map(t=>t.module)));
@@ -120,15 +123,15 @@ window.MANUAL = (() => {
   }
   function studyLibrary() {
     const modules=Array.from(new Set(study.blocks.map(b=>b.module)));
-    frame('<div class="hero sprint-hero"><h1>点拨 / 命题分析 / 干扰项</h1><p>按原书片段学习；判断练习保留原书依据，作答后揭晓。</p></div><div class="m-toolbar"><div class="acts"><button class="btn" onclick="ZS_GO(\'sprint\')">专题目录</button><button class="btn" onclick="ZS_GO(\'sprint/judgements\')">全部判断练习</button></div><input id="mSearch" type="search" placeholder="搜索这些片段"><select id="mKind"><option value="">全部类型</option>'+['点拨','命题分析','干扰项'].map(k=>'<option>'+k+'</option>').join('')+'</select><select id="mModule"><option value="">全部模块</option>'+modules.map(m=>'<option>'+esc(m)+'</option>').join('')+'</select></div><div id="mResults"></div>');
+    frame('<div class="sprint-page"><a class="sprint-back" href="#/sprint">‹ 冲刺板块</a><div class="hero sprint-hero"><span class="sprint-eyebrow">辨析 · 查漏补缺</span><h1>点拨与易混考点</h1><p>点拨、命题分析、干扰项。读原文、练判断，再核对依据。</p><a class="sprint-hero-link" href="#/sprint/judgements">全部判断练习 · '+study.questions.length+' 题 →</a></div><div class="sprint-filter card m-study-filter"><label class="m-filter-query">查找考点<input id="mSearch" type="search" placeholder="搜索知识点或原文"></label><label>内容类型<select id="mKind"><option value="">全部类型</option>'+['点拨','命题分析','干扰项'].map(k=>'<option>'+k+'</option>').join('')+'</select></label><label>学习模块<select id="mModule"><option value="">全部模块</option>'+modules.map(m=>'<option>'+esc(m)+'</option>').join('')+'</select></label></div><div id="mResults" class="m-study-grid"></div></div>');
     document.getElementById('mSearch').value=studyState.query;document.getElementById('mKind').value=studyState.kind;document.getElementById('mModule').value=studyState.module;
     const update=()=>{
       const query=document.getElementById('mSearch').value.trim(),kind=document.getElementById('mKind').value,mod=document.getElementById('mModule').value;
       Object.assign(studyState,{query,kind,module:mod});
       const found=study.blocks.filter(b=>(!kind||b.kind===kind)&&(!mod||b.module===mod)&&(!query||b.text.includes(query)));
       studyState.ids=found.map(b=>b.id);
-      document.getElementById('mResults').innerHTML='<div class="tiny muted">'+found.length+'个原文片段</div>'+found.map(b=>'<article class="card pad m-study-card"><b>'+esc(b.kind+' · '+(b.topic||'经典干扰项总结'))+'</b><div class="tiny m-source-label">'+esc(b.module+' · '+b.refs.map(r=>label(byPage[r.page])).join(' / '))+'</div><p>'+esc(excerpt(b))+'</p><div class="acts"><button class="btn" onclick="ZS_GO(\'sprint/block/'+b.id+'\')">原文截图 + 挖空</button>'+(b.questionIds.length?'<button class="btn main" onclick="ZS_GO(\'sprint/judgements/all/'+b.id+'\')">判断练习 · '+b.questionIds.length+'题</button>':'')+'</div></article>').join('');
-    };['mSearch','mKind','mModule'].forEach(id=>document.getElementById(id)[id==='mSearch'?'oninput':'onchange']=update);update();fitBar(document.querySelector('.m-toolbar'));
+      document.getElementById('mResults').innerHTML='<div class="sprint-result-count">'+found.length+' 个原文片段</div>'+found.map(b=>'<article class="card pad m-study-card"><span class="sprint-kind">'+esc(b.kind)+'</span><b>'+esc(b.topic||'经典干扰项总结')+'</b><div class="tiny m-source-label">'+esc(b.module+' · '+b.refs.map(r=>label(byPage[r.page])).join(' / '))+'</div><p>'+esc(excerpt(b))+'</p><div class="acts"><button class="btn" onclick="ZS_GO(\'sprint/block/'+b.id+'\')">读原文 / 挖空</button>'+(b.questionIds.length?'<button class="btn main" onclick="ZS_GO(\'sprint/judgements/all/'+b.id+'\')">判断练习 · '+b.questionIds.length+' 题</button>':'')+'</div></article>').join('')+(found.length?'':'<div class="empty">没有找到匹配的片段，试试其他筛选条件。</div>');
+    };['mSearch','mKind','mModule'].forEach(id=>document.getElementById(id)[id==='mSearch'?'oninput':'onchange']=update);update();
   }
   function library() {
     frame('<div class="hero sprint-hero"><h1>背诵手册全文搜索</h1><p>搜索手册原文，结果定位到原页。</p></div><div class="m-toolbar"><button class="btn" onclick="ZS_GO(\'sprint\')">专题目录</button><input id="mSearch" type="search" placeholder="输入词语，搜索本书原文"><select id="mVolume"><option value="">上下册</option><option value="upper">上册</option><option value="lower">下册</option></select></div><div id="mResults"></div>');

@@ -30,3 +30,12 @@
 .p-toolbar .p-search-hit{font-size:12px;background:var(--fill2);padding:8px 10px}
 @media(hover:hover){.p-qrow.card:hover{border-color:var(--line2);background:var(--fill2)}}
 @media(max-width:540px){.p-book-grid{grid-template-columns:1fr}.p-book h3{min-height:0}.p-filters{grid-template-columns:1fr}.p-qrow.card{padding:13px;gap:9px;grid-template-columns:30px minmax(0,1fr) 10px}.p-row-snippet{font-size:13px}.p-book-progress{margin-bottom:14px}}
+
+/* Shared sprint visual rhythm, including the ten source collections. */
+.p-book-grid{gap:14px}.p-book-grid .p-book{border-radius:16px;padding:22px;background:var(--card)}
+.p-book-type{align-self:flex-start;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--fill2);font-size:10px;margin-bottom:16px}
+.p-book h3{font-size:16px;line-height:1.7}.p-book-meta{font-size:11px;gap:8px 14px}.p-book-progress{padding-top:20px;margin-bottom:18px}.p-book-progress .bar{height:5px;border-radius:8px;overflow:hidden}
+.p-book-actions{border-top:1px solid var(--line);padding-top:14px}.p-book-actions .btn{border-radius:8px;min-height:36px}
+.p-collection-group+.p-collection-group{margin-top:30px}.p-list-chapter{padding:8px 0;font-size:12px;letter-spacing:.03em}
+.p-qrow.card{border-radius:12px;padding:18px;gap:14px}.p-row-number{font-size:11px;border:1px solid var(--line);background:var(--fill2);font-weight:600}.p-row-content{gap:7px}.p-row-content b{font-size:12px;color:var(--ink2)}
+@media(max-width:540px){.p-book-grid .p-book{padding:18px}.p-qrow.card{padding:14px;gap:10px}.p-book-actions .btn{font-size:12px}}
