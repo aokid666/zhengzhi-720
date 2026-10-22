@@ -864,6 +864,10 @@ const APP_VER = 121;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       </div>`;
     });
     h += `</div></div>`;
+    if(q.source==='p'&&PRACTICE.index.books.find(b=>b.id===q.bookId).kind==='pastpaper'){
+      const figure=/下图|漫画|图示|如图|下表|表中/.test(q.stem);
+      h+=`<details class="card pad p-question-source" ${figure?'open':''}><summary>${figure?'题目原图（含图表）':'查看原始题面'}</summary>${PRACTICE.questionPages(q,'question')}</details>`;
+    }
     if (revealed) {
       h += `<div class="acts" style="margin-top:0"><button class="btn" onclick="ZS_ANNO('${id}','q-txt')">✍️ 在题目与选项上做笔记</button>
         ${q.source === 'p' ? PRACTICE.questionPdf(q, 'question') : q.source === 'm' ? MANUAL.questionPdf(q, 'question') : q.source === 's' ? pdfLink('s', q.qPages, '打开原讲义题目页') : pdfLink('q', [q.qPage + PAGE_OFF.q], '打开《试题册》PDF')}</div>`;
