@@ -39,3 +39,5 @@
 .p-collection-group+.p-collection-group{margin-top:30px}.p-list-chapter{padding:8px 0;font-size:12px;letter-spacing:.03em}
 .p-qrow.card{border-radius:12px;padding:18px;gap:14px}.p-row-number{font-size:11px;border:1px solid var(--line);background:var(--fill2);font-weight:600}.p-row-content{gap:7px}.p-row-content b{font-size:12px;color:var(--ink2)}
 @media(max-width:540px){.p-book-grid .p-book{padding:18px}.p-qrow.card{padding:14px;gap:10px}.p-book-actions .btn{font-size:12px}}
+
+.p-evidence-stack{display:grid;gap:8px}.p-evidence-stack .pgwrap{margin:0;border-radius:3px}.p-evidence-tools{margin:12px 0;color:var(--ink2);font-size:13px}.p-evidence-tools summary{cursor:pointer}.p-evidence-tools .acts{padding:8px 0;border-bottom:1px solid var(--line)}
