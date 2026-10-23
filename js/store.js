@@ -4,7 +4,7 @@
 window.ZS = (function () {
   const P = 'zz720.v1.';
   const OWNER = 'aokid666', REPO = 'zhengzhi-720', BRANCH = 'userdata', FILE = 'userdata.json';
-  const K = { data: P + 'data', cfg: P + 'cfg', meta: P + 'syncmeta', device: P + 'device' };
+  const K = { data: P + 'data', cfg: P + 'cfg', meta: P + 'syncmeta', device: P + 'device', backend: P + 'backend', notice: P + 'notice' };
   const MAPS = ['progress', 'notes', 'annos', 'flags', 'edit'];
   const clone = o => o === undefined ? undefined : JSON.parse(JSON.stringify(o));
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o || {}, k);
@@ -20,6 +20,8 @@ window.ZS = (function () {
   const blank = () => ({ v: 2, updated: 0, progress: {}, notes: {}, annos: {}, flags: {}, edit: {}, sync: syncBlank() });
   let data = blank(), observed = clone(data);
   let dirty = false, pushTimer = null, maxTimer = null, retryTimer = null, syncing = false, lastSync = 0;
+  let localError = '', localErrorAt = 0, backend = 'localStorage', localBytes = 0;
+  let db = null, readyWork = null, dbWork = null, dbWanted = false, localEpoch = 0, replaceDb = false, channel = null;
   let lastErr = '', lastErrAt = 0, lastOkAt = 0, failCount = 0, corruptLocal = false;
   let meta = { rev: 0, ack: 0, lastOkAt: 0 }, clock = 0, serial = Promise.resolve(), running = false;
   const randomId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() :
@@ -77,31 +79,153 @@ window.ZS = (function () {
     try { document.dispatchEvent(new CustomEvent(type, { detail: detail })); } catch (e) { }
   }
   function persistMeta() {
-    const other = readMeta();
+    const other = readMeta(),pendingBefore=meta.rev>meta.ack;
     meta.rev = Math.max(meta.rev, other.rev); meta.ack = Math.max(meta.ack, other.ack);
+    if(pendingBefore&&meta.rev<=meta.ack)meta.rev=meta.ack+1;
     meta.lastOkAt = lastOkAt; meta.lastErr = lastErr; meta.lastErrAt = lastErrAt;
+    meta.localError=localError;meta.localErrorAt=localErrorAt;
     localStorage.setItem(K.meta, JSON.stringify(meta));
     dirty = meta.rev > meta.ack;
   }
+  function storageError(message) {
+    localError = message; localErrorAt = Date.now();
+    try { persistMeta(); } catch (e) { }
+    emit('zs-error', localError); emit('zs-state');
+  }
+  function clearStorageError() {
+    localError = ''; localErrorAt = 0;
+  }
+  function openDatabase() {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => finish(null, new Error('本机数据库打开超时')), 8000);
+      const finish = (value, error) => { if(settled){if(value)value.close();return;} settled=true;clearTimeout(timer);error?reject(error):resolve(value); };
+      let request;
+      try { request = indexedDB.open('zz720-learning', 1); } catch(e) { finish(null,e);return; }
+      request.onupgradeneeded = () => { if(!request.result.objectStoreNames.contains('records'))request.result.createObjectStore('records'); };
+      request.onerror = () => finish(null, request.error || new Error('本机数据库无法打开'));
+      request.onblocked = () => finish(null, new Error('本机数据库被其他页面占用'));
+      request.onsuccess = () => finish(request.result);
+    });
+  }
+  function readDatabase() {
+    return new Promise((resolve,reject) => {
+      const tx=db.transaction('records','readonly'),request=tx.objectStore('records').get('snapshot');let value;
+      const timer=setTimeout(()=>{try{tx.abort();}catch(e){}},15000);
+      request.onsuccess=()=>{value=request.result;};
+      tx.oncomplete=()=>{clearTimeout(timer);resolve(value);};tx.onabort=tx.onerror=()=>{clearTimeout(timer);reject(tx.error||new Error('本机数据库读取失败'));};
+    });
+  }
+  function adoptLocalMeta(other, changed) {
+    const pendingBefore=meta.rev>meta.ack;
+    meta.rev=Math.max(meta.rev,other.rev||0);meta.ack=Math.max(meta.ack,other.ack||0);
+    if((pendingBefore||changed)&&meta.rev<=meta.ack)meta.rev=meta.ack+1;
+    lastOkAt=Math.max(lastOkAt,other.lastOkAt||0);lastSync=lastOkAt;dirty=meta.rev>meta.ack;
+  }
+  function commitDatabase() {
+    const epoch=localEpoch;
+    return new Promise((resolve,reject)=>{
+      let tx,legacyRaw,committed=false,obsolete=false;
+      try { tx=db.transaction('records','readwrite',{durability:'strict'}); }
+      catch(e){try{tx=db.transaction('records','readwrite');}catch(error){reject(error);return;}}
+      const timer=setTimeout(()=>{try{tx.abort();}catch(e){}},15000);
+      const store=tx.objectStore('records'),request=store.get('snapshot');
+      request.onsuccess=()=>{
+        if(epoch!==localEpoch){obsolete=true;tx.abort();return;}
+        try {
+          const stored=request.result;
+          // Capture any edit made while the transaction was waiting, before merging another tab.
+          if(!equal(data,observed)){meta.rev=Math.max(meta.rev,readMeta().rev)+1;if(captureChanges())dirty=true;}
+          if(!replaceDb&&stored){merge(JSON.parse(stored.text));adoptLocalMeta(stored.meta||{},!equal(data,JSON.parse(stored.text)));}
+          try {legacyRaw=localStorage.getItem(K.data);}catch(e){}
+          if(!replaceDb&&legacyRaw)merge(JSON.parse(legacyRaw));
+          const text=JSON.stringify(data);localBytes=text.length*2;observed=clone(data);
+          store.put({text:text,meta:Object.assign({},meta,{lastOkAt:lastOkAt}),updated:Date.now()},'snapshot');committed=true;
+        } catch(e){reject(e);tx.abort();}
+      };
+      tx.oncomplete=()=>{
+        clearTimeout(timer);
+        if(epoch===localEpoch&&committed){
+          replaceDb=false;clearStorageError();
+          // Release the old small-quota slot only after the full database transaction commits.
+          // A legacy tab that wrote during the transaction keeps its copy until the next merge.
+          try{if(legacyRaw&&localStorage.getItem(K.data)===legacyRaw)localStorage.removeItem(K.data);}catch(e){}
+          try{localStorage.setItem(K.backend,'indexedDB');persistMeta();localStorage.setItem(K.notice,randomId());}catch(e){}
+          try{if(channel)channel.postMessage(writer);}catch(e){}
+        }
+        resolve(true);
+      };
+      tx.onabort=tx.onerror=()=>{clearTimeout(timer);obsolete?resolve(false):reject(tx.error||new Error('本机数据库写入失败'));};
+    });
+  }
+  function queueDatabase() {
+    dbWanted=true;
+    if(!dbWork){
+      dbWork=Promise.resolve().then(async()=>{while(dbWanted){dbWanted=false;await commitDatabase();}return true;})
+        .catch(()=>{storageError('本机保存失败：数据库空间不足或浏览器限制。记录仍在当前页面，可继续云端同步；请导出备份。');return false;})
+        .finally(()=>{dbWork=null;emit('zs-state');});
+    }
+    return dbWork;
+  }
+  async function ready() {
+    if(readyWork)return readyWork;
+    readyWork=(async()=>{
+      if(corruptLocal)return false;
+      if(typeof indexedDB==='undefined'){try{if(localStorage.getItem(K.backend)==='indexedDB'){corruptLocal=true;setErr('本机数据库不可用，已停止上传。请恢复浏览器存储权限后重试。');}}catch(e){}return false;}
+      try{
+        db=await openDatabase();db.onversionchange=()=>{db.close();};
+        const stored=await readDatabase();
+        if(stored){merge(JSON.parse(stored.text));adoptLocalMeta(stored.meta||{},false);}
+        backend='indexedDB';observed=clone(data);clock=Math.max(clock,data.updated||0);
+        await queueDatabase();return !localError;
+      }catch(e){
+        if(db){try{db.close();}catch(error){}db=null;}
+        backend='localStorage';
+        // If the primary database is inaccessible, never replace its records with a blank upload.
+        try{if(localStorage.getItem(K.backend)==='indexedDB'){corruptLocal=true;setErr('本机数据库无法读取，已停止上传。请恢复浏览器存储权限后重试。');}}
+        catch(error){}
+        return false;
+      }
+    })();return readyWork;
+  }
+  async function flushLocal() {
+    await ready();if(corruptLocal)return false;
+    if(backend==='indexedDB')return await (dbWork||queueDatabase());
+    return persist();
+  }
+  async function refreshLocal() {
+    if(backend!=='indexedDB'||corruptLocal)return;
+    try{
+      const stored=await readDatabase();if(!stored)return;
+      if(!equal(data,observed)){meta.rev=Math.max(meta.rev,readMeta().rev)+1;captureChanges();}
+      const before=stable(data);merge(JSON.parse(stored.text));adoptLocalMeta(stored.meta||{},false);observed=clone(data);
+      if(!equal(data,JSON.parse(stored.text)))queueDatabase();
+      emit('zs-state');if(before!==stable(data))emit('zs-remote');if(dirty)schedule(250);
+    }catch(e){storageError('本机数据库暂时无法读取，记录仍保留在当前页面；请导出备份。');}
+  }
   function persist() {
+    if(backend==='indexedDB'){
+      observed=clone(data);try{persistMeta();}catch(e){}queueDatabase();emit('zs-state');return true;
+    }
     try {
-      // 先写待同步标记，防止在两次写入之间关闭页面导致队列消失。
-      persistMeta(); localStorage.setItem(K.data, JSON.stringify(data));
-      observed = clone(data); emit('zs-state'); return true;
+      persistMeta();const text=JSON.stringify(data);localStorage.setItem(K.data,text);localBytes=text.length*2;
+      observed=clone(data);clearStorageError();try{persistMeta();}catch(e){}emit('zs-state');return true;
     } catch (e) {
-      dirty = meta.rev > meta.ack;
-      setErr('本机保存失败：存储空间不足或浏览器限制。请先导出备份，勿关闭页面。');
-      return false;
+      dirty=meta.rev>meta.ack;
+      storageError('本机保存失败：存储空间不足或浏览器限制。请先导出备份，勿关闭页面。');return false;
     }
   }
   function pending() {
     meta.rev = Math.max(meta.rev, readMeta().rev) + 1; dirty = true;
   }
   function load() {
+    if(backend==='indexedDB')return data;
     meta = readMeta(); lastOkAt = meta.lastOkAt || 0; lastSync = lastOkAt;
     lastErr = meta.lastErr || ''; lastErrAt = meta.lastErrAt || 0;
+    localError=meta.localError||'';localErrorAt=meta.localErrorAt||0;
+    if(/^本机保存失败/.test(lastErr)){localError=lastErr;localErrorAt=lastErrAt;lastErr='';lastErrAt=0;}
     try {
-      const raw = localStorage.getItem(K.data);
+      const raw = localStorage.getItem(K.data);localBytes=(raw||'').length*2;
       data = normalize(Object.assign(blank(), JSON.parse(raw || '{}')));
       if (!localStorage.getItem(K.meta) && raw && hasRecords(data)) pending();
       clock = data.updated || 0;
@@ -589,6 +713,7 @@ window.ZS = (function () {
     serial = next; return next;
   }
   async function doPush(silent, force, reconcile) {
+    await ready();await flushLocal();
     const c = cfg();
     if (!c.token || corruptLocal) { if (!silent) toast(corruptLocal ? lastErr : '还没填 GitHub 令牌'); return false; }
     if (silent && meta.blocked) return false;
@@ -601,7 +726,7 @@ window.ZS = (function () {
         const result = remote.exists && !force ? applyRemote(remote.data) : null;
         if (remote.exists && !force && !result.differs) {
           acknowledge(meta.rev);
-          if (!silent) toast('已同步到云端 ✓');
+          if (!silent) toast((localError?'云端已同步；本机保存失败，请导出备份':'已同步到云端 ✓'));
           return true;
         }
         if (!remote.exists && !hasRecords(data)) { acknowledge(meta.rev); return true; }
@@ -616,7 +741,7 @@ window.ZS = (function () {
           acknowledge(revision);
           // 请求发出去以后新增的修改，不能被这次响应误标为“已同步”。
           if (dirty) schedule(250);
-          if (!silent) toast(dirty ? '本次已上传，新修改正在补传…' : '已同步到云端 ✓');
+          if (!silent) toast(dirty ? '本次已上传，新修改正在补传…' : (localError?'云端已同步；本机保存失败，请导出备份':'已同步到云端 ✓'));
           return true;
         }
         if (response.status === 409 && round < 4) {
@@ -637,6 +762,7 @@ window.ZS = (function () {
   function sync(silent) { return enqueue(() => doPush(silent, false, true)); }
   function pull(silent) {
     return enqueue(async () => {
+      await ready();await flushLocal();
       const c = cfg(); if (!c.token || !online() || corruptLocal) return null;
       syncing = true; emit('zs-state');
       try {
@@ -653,8 +779,9 @@ window.ZS = (function () {
   }
   function status() {
     let state = !cfg().token ? 'unconfigured' : !online() ? 'offline' : syncing ? 'syncing' :
-                lastErr ? 'error' : dirty ? 'pending' : lastOkAt ? 'synced' : 'pending';
-    return { state: state, dirty: dirty, lastOkAt: lastOkAt, error: lastErr,
+                lastErr ? 'error' : localError ? 'local-error' : dirty ? 'pending' : lastOkAt ? 'synced' : 'pending';
+    if(localError&&!lastErr&&!syncing)state='local-error';
+    return { state: state, dirty: dirty, lastOkAt: lastOkAt, error: lastErr||localError, local: {backend:backend,pending:!!dbWork,error:localError,bytes:localBytes},
              conflicts: Object.keys(data.sync.conflicts).length };
   }
   let started = false, pollTimer = null;
@@ -663,11 +790,13 @@ window.ZS = (function () {
     const resume = () => { emit('zs-state'); if (cfg().auto && cfg().token && !meta.blocked) sync(true); };
     window.addEventListener('online', resume);
     window.addEventListener('offline', () => emit('zs-state'));
+    try{if(typeof BroadcastChannel!=='undefined'){channel=new BroadcastChannel(P+'local');channel.onmessage=()=>refreshLocal();}}catch(e){}
     window.addEventListener('storage', e => {
+      if(e.key===K.notice||e.key===K.backend){refreshLocal();return;}
       if (e.key !== K.data || !e.newValue || corruptLocal) return;
       try {
         const before = stable(data); merge(JSON.parse(e.newValue)); meta = readMeta();
-        dirty = meta.rev > meta.ack; observed = clone(data);
+        dirty = meta.rev > meta.ack; observed = clone(data);if(backend==='indexedDB')persist();
         emit('zs-state'); if (before !== stable(data)) emit('zs-remote');
         if (dirty) schedule(250);
       } catch (error) { setErr('其他标签页的记录无法读取'); }
@@ -746,19 +875,19 @@ window.ZS = (function () {
   }
 
   return {
-    load, save, cfg, setCfg, pull, push, sync, startSync, status, recordAnswer, restoreConflict,
+    load, ready, flushLocal, save, cfg, setCfg, pull, push, sync, startSync, status, recordAnswer, restoreConflict,
     beginEdit, endEdit, toast, fmt, ensureBranch,
     forcePush: silent => push(silent, true),   // 跳过合并，直接用本机数据覆盖云端
     history, fetchVersion, restore, summarize,
-    get lastErr() { return lastErr; },
-    get lastErrAt() { return lastErrAt; },
+    get lastErr() { return lastErr||localError; },
+    get lastErrAt() { return lastErr?lastErrAt:localErrorAt; },
     get lastOkAt() { return lastOkAt; },
     explain,
     fetchLogin, makeLogin, saveLogin, unlock, upgradeLogin, refreshLogin, forgetDek,
     get data() { return data; },
     get dirty() { return dirty; },
     get lastSync() { return lastSync; },
-    reset() { data = blank(); observed = clone(data); meta = { rev: 0, ack: 0, lastOkAt: 0 }; dirty = false;
-              localStorage.removeItem(K.data); localStorage.removeItem(K.meta); clearPushTimers(); },
+    reset() { localEpoch++;replaceDb=true;data = blank(); observed = clone(data); meta = { rev: 0, ack: 0, lastOkAt: 0 }; dirty = false;
+              localStorage.removeItem(K.data); localStorage.removeItem(K.meta); clearStorageError();clearPushTimers();if(backend==='indexedDB')return queueDatabase(); },
   };
 })();

@@ -67,6 +67,7 @@ function client(cloud, initial = blank(), options = {}) {
       });
     }
   };
+  if(options.indexedDB)context.indexedDB=options.indexedDB;
   vm.runInNewContext(source, context);
   const ZS = context.window.ZS; ZS.load();
   async function microtasks() { for (let i = 0; i < 30; i++) await Promise.resolve(); }
@@ -321,4 +322,90 @@ test('matching pairs and multiline material answers sync with their saved select
     assert.equal(b.ZS.data.progress[id].tries, 1);
   }
   assert.equal(JSON.stringify(b.ZS.data.edit['pr-match'].practiceMatch), '{"A":["1","3"],"B":["3"]}');
+});
+
+
+// Real IndexedDB request/transaction scheduling, with isolated databases per test.
+function databaseFactory(options={}) {
+  const {IDBFactory}=require('fake-indexeddb'),factory=new IDBFactory();
+  return {open(...args){const request=factory.open(...args);request.addEventListener('success',()=>{
+    const db=request.result,transaction=db.transaction.bind(db);
+    db.transaction=(...args)=>{const tx=transaction(...args),objectStore=tx.objectStore.bind(tx);
+      tx.objectStore=(...args)=>{const store=objectStore(...args),put=store.put.bind(store),get=store.get.bind(store);
+        store.put=(...args)=>{const r=put(...args);r.addEventListener('success',()=>{if(options.onPut)options.onPut();if(options.abortWrites)tx.abort();});return r;};
+        store.get=(...args)=>{const r=get(...args);r.addEventListener('success',()=>{if(options.abortReads&&tx.mode==='readonly')tx.abort();});return r;};return store;};return tx;};
+  });return request;}};
+}
+
+test('large legacy records migrate atomically and reload offline without using the small-quota slot',async()=>{
+  const d=blank();d.notes.q1={text:'完整笔记'.repeat(200000),strokes:[[{x:0.123,y:0.456,p:0.7}]],pics:['data:image/png;base64,AAA'],ts:10};
+  for(let i=0;i<72;i++)d.progress['q'+i]={s:'right',sel:['A','C'],tries:2,rights:1,ts:10};
+  const cloud=server(),indexedDB=databaseFactory(),a=client(cloud,d,{indexedDB});a.kv.set('other-app','keep');a.options.quota=true;
+  assert.equal(await a.ZS.ready(),true);assert.equal(a.ZS.status().local.backend,'indexedDB');assert.equal(a.kv.has('zz720.v1.data'),false);
+  assert.equal(a.kv.get('other-app'),'keep');assert(a.kv.has('zz720.v1.cfg'));
+  const b=client(cloud,blank(),{indexedDB,kv:a.kv,online:false});await b.ZS.ready();
+  assert.equal(b.ZS.data.notes.q1.text,d.notes.q1.text);assert.equal(JSON.stringify(b.ZS.data.notes.q1.strokes),JSON.stringify(d.notes.q1.strokes));
+  assert.equal(Object.keys(b.ZS.data.progress).length,72);assert.equal(b.ZS.data.progress.q71.sel.join(''),'AC');assert.equal(cloud.uploads.length,0);
+});
+
+test('database writes retain later edits and answer selections across an offline reload',async()=>{
+  const cloud=server(),indexedDB=databaseFactory(),a=client(cloud,blank(),{indexedDB,online:false});await a.ZS.ready();
+  a.ZS.data.notes.q1=note('first');a.ZS.save();a.ZS.data.notes.q1.text='second';a.ZS.save();
+  a.ZS.data.progress.q2={s:'right',sel:['B'],tries:0,rights:0,ts:10};a.ZS.recordAnswer('q2',true,['B']);a.ZS.save();await a.ZS.flushLocal();
+  const b=client(cloud,blank(),{indexedDB,kv:a.kv,online:false});await b.ZS.ready();assert.equal(b.ZS.data.notes.q1.text,'second');assert.equal(b.ZS.data.progress.q2.tries,1);assert.equal(b.ZS.data.progress.q2.sel[0],'B');
+});
+
+test('an aborted transaction preserves the old copy even after a successful put request',async()=>{
+  const faults={abortWrites:true},indexedDB=databaseFactory(faults),cloud=server(),a=client(cloud,{...blank(),notes:{q1:note('original')}},{indexedDB});
+  const original=a.kv.get('zz720.v1.data');assert.equal(await a.ZS.ready(),false);assert.equal(a.kv.get('zz720.v1.data'),original);assert.match(a.ZS.lastErr,/本机保存失败/);
+  faults.abortWrites=false;assert.equal(await a.ZS.flushLocal(),true);assert.equal(a.kv.has('zz720.v1.data'),false);assert.equal(a.ZS.lastErr,'');
+});
+
+test('a local database failure still allows a cloud backup and never reports local success',async()=>{
+  const faults={abortWrites:true},indexedDB=databaseFactory(faults),cloud=server(),a=client(cloud,blank(),{indexedDB});await a.ZS.ready();a.options.quota=true;
+  a.ZS.data.notes.q1=note('protect this');a.ZS.save();assert.equal(await a.ZS.push(true),true);await a.ZS.flushLocal();
+  assert.equal(cloud.data.notes.q1.text,'protect this');assert(a.ZS.lastOkAt>0);assert.equal(a.ZS.status().state,'local-error');assert.match(a.ZS.lastErr,/本机保存失败/);
+  faults.abortWrites=false;await a.ZS.flushLocal();assert.equal(a.ZS.lastErr,'');assert.equal(a.ZS.status().local.error,'');
+});
+
+test('overlapping tabs merge their independent records inside the database transaction',async()=>{
+  const indexedDB=databaseFactory(),cloud=server(),a=client(cloud,blank(),{indexedDB});await a.ZS.ready();
+  const b=client(cloud,blank(),{indexedDB,kv:a.kv});await b.ZS.ready();a.ZS.data.notes.q1=note('tab A');a.ZS.save();b.ZS.data.notes.q2=note('tab B');b.ZS.save();
+  await Promise.all([a.ZS.flushLocal(),b.ZS.flushLocal()]);const c=client(cloud,blank(),{indexedDB,kv:a.kv});await c.ZS.ready();assert.equal(c.ZS.data.notes.q1.text,'tab A');assert.equal(c.ZS.data.notes.q2.text,'tab B');
+});
+
+test('a stale database tab cannot resurrect a deleted note while adding another record',async()=>{
+  const indexedDB=databaseFactory(),cloud=server(),d=blank();d.notes.q1=note('delete me');const a=client(cloud,d,{indexedDB});await a.ZS.ready();
+  const b=client(cloud,blank(),{indexedDB,kv:a.kv});await b.ZS.ready();delete a.ZS.data.notes.q1;a.ZS.save();await a.ZS.flushLocal();b.ZS.data.notes.q2=note('keep me');b.ZS.save();await b.ZS.flushLocal();
+  const c=client(cloud,blank(),{indexedDB,kv:a.kv});await c.ZS.ready();assert.equal(c.ZS.data.notes.q1,undefined);assert.equal(c.ZS.data.notes.q2.text,'keep me');
+});
+
+test('an inaccessible primary database blocks blank uploads and keeps the saved records',async()=>{
+  const faults={},indexedDB=databaseFactory(faults),cloud=server(),a=client(cloud,{...blank(),notes:{q1:note('database only')}},{indexedDB});await a.ZS.ready();
+  faults.abortReads=true;const b=client(cloud,blank(),{indexedDB,kv:a.kv});assert.equal(await b.ZS.sync(true),false);assert.match(b.ZS.lastErr,/数据库无法读取/);assert.equal(cloud.uploads.length,0);
+  faults.abortReads=false;const c=client(cloud,blank(),{indexedDB,kv:a.kv});await c.ZS.ready();assert.equal(c.ZS.data.notes.q1.text,'database only');
+});
+
+test('corrupt legacy storage is not replaced during database initialization',async()=>{
+  const indexedDB=databaseFactory(),cloud=server(),kv=new Map([['zz720.v1.data','{broken'],['zz720.v1.cfg',JSON.stringify({token:'synthetic'})]]);
+  const a=client(cloud,blank(),{indexedDB,kv});assert.equal(await a.ZS.sync(true),false);assert.equal(kv.get('zz720.v1.data'),'{broken');assert.equal(cloud.uploads.length,0);
+});
+
+test('reset invalidates pending database writes and does not restore the previous snapshot',async()=>{
+  const indexedDB=databaseFactory(),cloud=server(),a=client(cloud,{...blank(),notes:{q1:note('old')}},{indexedDB});await a.ZS.ready();a.ZS.data.notes.q2=note('pending');a.ZS.save();await a.ZS.reset();await a.ZS.flushLocal();
+  const b=client(cloud,blank(),{indexedDB,kv:a.kv});await b.ZS.ready();assert.equal(Object.keys(b.ZS.data.notes).length,0);
+});
+
+test('an edit during a database-backed upload remains pending after the older revision is acknowledged',async()=>{
+  const indexedDB=databaseFactory(),cloud=server(),a=client(cloud,blank(),{indexedDB});await a.ZS.ready();a.ZS.data.notes.q1=note('first');a.ZS.save();
+  const sent=deferred(),finish=deferred();cloud.hook=async()=>{sent.resolve();await finish.promise;};const upload=a.ZS.push(true);await sent.promise;
+  a.ZS.data.notes.q1.text='later';a.ZS.save();await a.ZS.flushLocal();finish.resolve();await upload;assert.equal(a.ZS.dirty,true);cloud.hook=null;await a.ZS.push(true);await a.ZS.flushLocal();assert.equal(cloud.data.notes.q1.text,'later');assert.equal(a.ZS.dirty,false);
+});
+
+
+test('a legacy tab writing during migration keeps its copy until it is durably merged',async()=>{
+  const faults={},indexedDB=databaseFactory(faults),cloud=server(),d=blank();d.notes.q1=note('before');const a=client(cloud,d,{indexedDB});
+  faults.onPut=()=>{faults.onPut=null;const next=clone(d);next.notes.q2=note('written by an older tab');a.kv.set('zz720.v1.data',JSON.stringify(next));};
+  await a.ZS.ready();assert(a.kv.has('zz720.v1.data'));await a.ZS.flushLocal();assert.equal(a.kv.has('zz720.v1.data'),false);
+  const b=client(cloud,blank(),{indexedDB,kv:a.kv});await b.ZS.ready();assert.equal(b.ZS.data.notes.q1.text,'before');assert.equal(b.ZS.data.notes.q2.text,'written by an older tab');
 });

@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 121;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -208,12 +208,15 @@ const APP_VER = 121;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const tok = (c.token || '').trim();
     m.innerHTML = '<div class="box"><h3>🩺 同步诊断</h3><div class="tiny muted">检查中…</div></div>';
     m.classList.add('show');
-    const msg = ZS.lastErr || '';
+    await ZS.flushLocal();
+    const msg = ZS.lastErr || '', local=ZS.status().local;let authOK=false,repoOK=false,cloudOK=false;
 
     add('版本', '前端 v' + APP_VER + ' · 题库 v' + QUESTION_VER + ' · 讲义 v' + DATA_VER);
     add('令牌', tok ? '已配置（' + esc(tok.slice(0, 7)) + '…）' : '❌ <b>没配置</b>');
     add('仓库', esc(c.owner) + '/' + esc(c.repo) + ' @ ' + esc(c.branch));
     add('数据文件', esc(c.file));
+    add('本机存储', (local.backend==='indexedDB'?'IndexedDB 数据库':'浏览器轻量存储 localStorage')+(local.pending?' · 保存中':local.error?' · 保存失败':' · 可用'));
+    add('本机数据量', (local.bytes/1024/1024).toFixed(2)+' MB（估算）');
     add('本机记录', Object.keys(ZS.data.progress || {}).length + ' 题');
     add('最近成功', ZS.lastOkAt ? esc(ZS.fmt(ZS.lastOkAt)) : '<span style="color:var(--warn)">从未</span>');
     add('最近失败', msg ? '<span style="color:var(--bad)">' + esc(msg) + '</span>' +
@@ -227,24 +230,23 @@ const APP_VER = 121;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       const api = 'https://api.github.com/repos/' + c.owner + '/' + c.repo;
       try {
         const r = await fetch('https://api.github.com/user', { headers: hdr });
-        if (r.status === 200) { const u = await r.json(); add('① 令牌验证', '✅ 有效（账号 ' + esc(u.login) + '）'); }
+        if (r.status === 200) { authOK=true;const u = await r.json(); add('① 令牌验证', '✅ 有效（账号 ' + esc(u.login) + '）'); }
         else add('① 令牌验证', '❌ ' + esc(ZS.explain(r.status)));
       } catch (e) { add('① 令牌验证', '❌ 网络不通：' + esc(e.message)); }
       try {
         const r = await fetch(api, { headers: hdr });
-        if (r.ok) { const d = await r.json(); add('② 仓库读取', '✅ 可访问（' + (d.private ? '私有' : '公开') + '）'); }
+        if (r.ok) { repoOK=true;const d = await r.json(); add('② 仓库读取', '✅ 可访问（' + (d.private ? '私有' : '公开') + '）'); }
         else add('② 仓库读取', '❌ ' + esc(ZS.explain(r.status)));
       } catch (e) { add('② 仓库读取', '❌ ' + esc(e.message)); }
       try {
         const r = await fetch(api + '/contents/' + c.file + '?ref=' + c.branch, { headers: hdr });
         if (r.ok) {
-          const j = await r.json();
+          cloudOK=true;const j = await r.json();
           let info = '✅ 存在（' + Math.round(j.size / 1024) + ' KB）';
           try {
-            const bin = atob((j.content || '').replace(/\s/g, ''));
-            const by = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) by[i] = bin.charCodeAt(i);
-            const remote = JSON.parse(new TextDecoder().decode(by));
+            let remote;
+            if(j.content){const bin=atob(j.content.replace(/\s/g,'')),by=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)by[i]=bin.charCodeAt(i);remote=JSON.parse(new TextDecoder().decode(by));}
+            else {const raw=await fetch(api+'/contents/'+c.file+'?ref='+c.branch,{headers:{...hdr,Accept:'application/vnd.github.raw+json'}});if(!raw.ok)throw Error('云端原文读取失败');remote=JSON.parse(await raw.text());}
             info += '<br><span class="tiny muted">云端 ' + Object.keys(remote.progress || {}).length +
               ' 题有记录，最后更新 ' + esc(ZS.fmt(remote.updated)) + '</span>';
           } catch (e) { }
@@ -252,14 +254,18 @@ const APP_VER = 121;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         } else if (r.status === 404) add('③ 云端数据', '⚠️ 还没有（第一次同步会自动创建）');
         else add('③ 云端数据', '❌ ' + esc(ZS.explain(r.status)));
       } catch (e) { add('③ 云端数据', '❌ ' + esc(e.message)); }
-      add('结论', '三项全 ✅ 却还不同步，把这一页截图发我。');
+      if(local.error)add('结论','本机存储写入失败，和令牌有效性是两件事。请先导出备份；云端的最近成功时间单独显示。');
+      else if(local.pending)add('结论','本机数据库正在保存，请稍后再次查看。');
+      else if(msg)add('结论','当前异常：'+esc(msg));
+      else if(authOK&&repoOK&&cloudOK)add('结论',ZS.dirty?'连接与本机存储正常，还有修改待上传，可点击立即同步。':'本机保存与云端连接正常，当前没有待上传修改。');
+      else add('结论','请根据上方失败的检查项目处理。');
     }
 
     m.innerHTML = '<div class="box"><h3>🩺 同步诊断</h3>' +
       '<div style="max-height:58vh;overflow:auto">' +
       rows.map(r => '<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.6">' +
         '<div style="flex:0 0 76px;color:var(--ink3)">' + r[0] + '</div><div style="flex:1;word-break:break-all">' + r[1] + '</div></div>').join('') +
-      '</div><div class="acts"><button class="btn main" onclick="ZS_SYNC()">立即同步</button>' +
+      '</div><div class="acts"><button class="btn main" onclick="ZS_SYNC()">立即同步</button><button class="btn" onclick="ZS_EXPORT()">导出备份</button>' +
       '<button class="btn" onclick="ZS_CFG()">重新设置令牌</button>' +
       '<button class="btn" onclick="ZS_CFGCLOSE()">关闭</button></div></div>';
   };
@@ -380,9 +386,12 @@ const APP_VER = 121;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   };
 
   const SYNC_LABELS = { unconfigured: '☁️ 本机保存 · 尚未连接云端', offline: '📴 离线 · 联网后自动同步',
-    syncing: '☁️ 同步中…', error: '⚠️ 同步需要处理', pending: '☁️ 本机已保存 · 等待同步', synced: '☁️ 已同步' };
+    syncing: '☁️ 同步中…', 'local-error': '⚠️ 本机保存异常', error: '⚠️ 同步需要处理', pending: '☁️ 本机已保存 · 等待同步', synced: '☁️ 已同步' };
   function updateSyncStatus() {
-    const status = ZS.status(), label = SYNC_LABELS[status.state];
+    const status = ZS.status();let label = SYNC_LABELS[status.state];
+    if(status.state==='synced'&&status.local.pending)label='☁️ 云端已同步 · 本机保存中';
+    else if(status.state==='pending'&&status.local.pending)label='本机保存中 · 等待同步';
+    else if(status.state==='local-error'&&!status.dirty&&status.lastOkAt)label='☁️ 云端已同步 · 本机保存异常';
     const time = status.lastOkAt ? new Date(status.lastOkAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
     const el = $('#syncStatus');
     if (el) {
@@ -431,6 +440,7 @@ const APP_VER = 121;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     try { S.sprintQs = await MANUAL.load(); S.judgeQs = MANUAL.judgements; S.sprintQs.concat(S.judgeQs).forEach(q => S.byId[q.id] = q); }
     catch(e) { S.sprintQs = []; S.judgeQs = []; console.error(e); }
     ZS.load();
+    await ZS.ready();
     loadSession();
     if (lastQId() && lastQId().startsWith('pr-')) { try { await PRACTICE.ensureQuestion(lastQId(),S); } catch(e) { console.error(e); } }
     migrateGuess();
@@ -447,7 +457,7 @@ const APP_VER = 121;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     document.addEventListener('zs-error', () => {
       if (Date.now() - lastErrToast < 60000) return;
       lastErrToast = Date.now();
-      ZS.toast('⚠️ 云同步失败，去「我的 → 🩺 同步诊断」看看原因', 4200);
+      ZS.toast(ZS.status().local.error?'⚠️ 本机保存异常，请先导出备份，再查看同步诊断':'⚠️ 云同步失败，去「我的 → 🩺 同步诊断」查看原因', 4200);
     });
     /* 切走时推送；切回来时自动拉一次，保证换设备后接着用 */
     document.addEventListener('visibilitychange', () => {

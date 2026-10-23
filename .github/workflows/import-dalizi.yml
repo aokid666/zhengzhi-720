@@ -29,7 +29,7 @@ jobs:
         run: python scripts/import-dalizi.py --wait-seconds 1200
       - name: Validate data and exercise UI
         run: |
-          npm install --no-save --package-lock=false happy-dom@21.0.4
+          npm install --no-save --package-lock=false happy-dom@21.0.4 fake-indexeddb@6.2.6
           node --test tests/*.test.cjs
           node tests/practice-ui.mjs
           git diff --check

@@ -459,3 +459,5 @@ html[data-invert="on"] .pgwrap.zoomed img,
 html[data-invert="on"] #zoomImg{filter:invert(1) hue-rotate(180deg)}
 /* 书写时页面保持反转，笔色由 annotate.js 的 DMAP 自动换成亮色
    （黑笔在黑底上看不见，所以黑→白；存储里仍是原色，导出/打印不受影响） */
+
+.sync-status[data-state="local-error"]{color:var(--bad)}
