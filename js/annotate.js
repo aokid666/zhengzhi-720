@@ -111,6 +111,8 @@ window.ANNO = (function () {
   function renderOne(host, tries) {
     const key = host.getAttribute('data-anno');
     if (!key) return;
+    // Loading adjacent pages must not remove a newly opened, still-empty drawing canvas.
+    if (st.on && st.host === host) return;
     if (!host.offsetParent && host.offsetWidth === 0) return;
     const rec = ZS.data.annos[key];
     const has = rec && rec.strokes && rec.strokes.length;
@@ -119,7 +121,6 @@ window.ANNO = (function () {
       if (c) c.remove();
       return;
     }
-    if (st.on && st.host === host) return;
     const cv = ensure(host);
     if (!fit(host, cv)) {
       tries = tries || 0;

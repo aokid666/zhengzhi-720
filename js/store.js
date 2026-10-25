@@ -298,6 +298,7 @@ window.ZS = (function () {
     return changed;
   }
   function schedule(delay) {
+    if(localOnly)return;
     if (!cfg().auto || !cfg().token || meta.blocked) return;
     clearTimeout(pushTimer); pushTimer = setTimeout(() => push(true), delay == null ? 3000 : delay);
     // 连续打字/手写也最多等 15 秒，不一直重置上传倒计时。
@@ -784,10 +785,10 @@ window.ZS = (function () {
     return { state: state, dirty: dirty, lastOkAt: lastOkAt, error: lastErr||localError, local: {backend:backend,pending:!!dbWork,error:localError,bytes:localBytes},
              conflicts: Object.keys(data.sync.conflicts).length };
   }
-  let started = false, pollTimer = null;
-  function startSync() {
-    if (started) return; started = true;
-    const resume = () => { emit('zs-state'); if (cfg().auto && cfg().token && !meta.blocked) sync(true); };
+  let started = false, pollTimer = null, localOnly = false;
+  function startSync(options = {}) {
+    if (started) return; started = true; localOnly = !!options.localOnly;
+    const resume = () => { emit('zs-state'); if (!localOnly && cfg().auto && cfg().token && !meta.blocked) sync(true); };
     window.addEventListener('online', resume);
     window.addEventListener('offline', () => emit('zs-state'));
     try{if(typeof BroadcastChannel!=='undefined'){channel=new BroadcastChannel(P+'local');channel.onmessage=()=>refreshLocal();}}catch(e){}
@@ -802,7 +803,7 @@ window.ZS = (function () {
       } catch (error) { setErr('其他标签页的记录无法读取'); }
     });
     pollTimer = setInterval(() => {
-      if (!document.hidden && cfg().auto && cfg().token && !meta.blocked) sync(true);
+      if (!localOnly && !document.hidden && cfg().auto && cfg().token && !meta.blocked) sync(true);
     }, 45000);
     resume();
   }

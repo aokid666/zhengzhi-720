@@ -409,3 +409,12 @@ test('a legacy tab writing during migration keeps its copy until it is durably m
   await a.ZS.ready();assert(a.kv.has('zz720.v1.data'));await a.ZS.flushLocal();assert.equal(a.kv.has('zz720.v1.data'),false);
   const b=client(cloud,blank(),{indexedDB,kv:a.kv});await b.ZS.ready();assert.equal(b.ZS.data.notes.q1.text,'before');assert.equal(b.ZS.data.notes.q2.text,'written by an older tab');
 });
+
+test('embedded reader saves locally and shares updates without duplicate cloud requests', async () => {
+  const indexedDB=databaseFactory(),cloud=server(),a=client(cloud,blank(),{indexedDB});await a.ZS.ready();
+  a.ZS.startSync({localOnly:true});a.ZS.data.notes.q1=note('reader annotation');a.ZS.save();await a.ZS.flushLocal();
+  a.emitWindow('online');await a.advance(50000);
+  assert.equal(cloud.reads,0);assert.equal(cloud.uploads.length,0);
+  const b=client(cloud,blank(),{indexedDB,kv:a.kv});await b.ZS.ready();assert.equal(b.ZS.data.notes.q1.text,'reader annotation');
+  b.ZS.startSync();await b.ZS.sync(true);assert(cloud.reads>0);
+});

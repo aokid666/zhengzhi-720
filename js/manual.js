@@ -63,6 +63,12 @@ window.MANUAL = (() => {
     const ids=Array.from(new Set((q.source==='m'?q.qRefs:[]).concat(refs)));
     box.innerHTML=ids.length?'<div class="tiny muted">'+(refs.length?'相关内容按文字匹配定位，请结合原页核对。':'本题原页如下；没找到对应的理论讲解页。')+'</div>'+ids.map(id=>pageHtml(id)).join(''):'<div class="hint">没找到背诵手册中的相应内容。</div>';
   }
+  // 分屏与题目下方的手册区采用同一套匹配，优先展示讲解原页。
+  function referencePages(q) {
+    if(q.blockId&&byBlock?.[q.blockId])return byBlock[q.blockId].refs.map(r=>r.page);
+    const refs=(['m','p'].includes(q.source)?q.mRefs:(matches?.[q.id]||[]).map(h=>h.page))||[];
+    return [...new Set(refs.concat(q.source==='m'?(q.qRefs||[]):[]))].filter(id=>byPage?.[id]);
+  }
   function badge(q) {
     const p=ctx.P(q.id);return (ctx.isWrongNow(q.id)?'❌ 错题 · ':'')+(ctx.flag(q.id,'star')?'★ 收藏 · ':'')+'已做 '+(p&&p.tries||0)+' 次';
   }
@@ -233,5 +239,5 @@ window.MANUAL = (() => {
       },0);
     };
   }
-  return {listToggle,bindListToggle,numberGrid,load,render,leave,pageHtml,questionPages,questionPdf,paintQuestion,src,get questions(){return questions;},get judgements(){return study?study.questions:[];},get study(){return study;},get data(){return data;}};
+  return {referencePages,listToggle,bindListToggle,numberGrid,load,render,leave,pageHtml,questionPages,questionPdf,paintQuestion,src,get questions(){return questions;},get judgements(){return study?study.questions:[];},get study(){return study;},get data(){return data;}};
 })();

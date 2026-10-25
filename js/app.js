@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 123;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -190,6 +190,7 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     document.documentElement.setAttribute('data-invert', on ? 'on' : 'off');
     /* 笔色是按页面明暗换的，切换后要把已画的笔迹重绘一遍 */
     try { if (window.ANNO && ANNO.repaintAll) ANNO.repaintAll(); } catch (e) { }
+    window.ZS_SPLIT?.theme();
   }
   window.ZS_INVERT = v => {
     if (v) { try { localStorage.setItem('zz720.invert', v); } catch (e) { } }
@@ -420,8 +421,8 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       const hint = $('#syncRemoteHint'); if (hint) hint.hidden = false;
       return;
     }
-    const y = window.scrollY;
-    loadSession(); route(); window.scrollTo(0, y);
+    const y = pageScrollY();
+    loadSession(); route(); scrollPage(y);
   }
 
   async function boot() {
@@ -429,6 +430,21 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     applyTheme();
     if (window.matchMedia) { try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme); } catch (e) { } }
     if (needGate()) { showGate(); return; }
+    if (window.ZS_READER_MODE) {
+      ZS.load(); await ZS.ready();
+      try { await MANUAL.load(); } catch(e) { console.error(e); }
+      await needLect();
+      window.ZS_READERGO = (kind,page) => { if(!['k','s','m'].includes(kind))return;flushEditors();go('lect/'+kind+'/'+page); };
+      window.ZS_READER_THEME = applyTheme;
+      window.addEventListener('hashchange',route);
+      route();
+      // 讲义批注与左栏仍共用数据库，但云端请求由主页面负责。
+      ZS.startSync({localOnly:true});
+      document.addEventListener('zs-remote',()=>{if(!ANNO.on)ANNO.renderScope();});
+      window.addEventListener('pagehide',()=>{flushEditors();ZS.flushLocal();});
+      window.parent.ZS_SPLIT?.readerReady();
+      return;
+    }
     try {
       const r = await fetch('data/questions.json?v=' + QUESTION_VER);
       S.qs = await r.json();
@@ -445,6 +461,7 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (lastQId() && lastQId().startsWith('pr-')) { try { await PRACTICE.ensureQuestion(lastQId(),S); } catch(e) { console.error(e); } }
     migrateGuess();
     migrateAnnoKeys();
+    window.ZS_SPLIT?.init({target:splitTarget,beforeLayout:()=>{stopRestore();flushEditors();if(ANNO.on)ANNO.close();},reflow:()=>{if(!ANNO.on)ANNO.renderScope();}});
     window.addEventListener('hashchange', route);
     route();
     document.addEventListener('zs-state', updateSyncStatus);
@@ -553,10 +570,17 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   if(window.history && 'scrollRestoration' in window.history)window.history.scrollRestoration='manual';
   const browsePositions = new Map();
   let renderedRoute = null, stopRestore = () => {};
+  const pageScrollY = () => window.ZS_SPLIT ? ZS_SPLIT.scrollY() : window.scrollY;
+  const scrollPage = y => window.ZS_SPLIT ? ZS_SPLIT.scrollTo(y) : window.scrollTo(0,y);
+  function splitTarget(q,kind) {
+    if(kind==='m'){const id=MANUAL.referencePages(q)[0];return id||null;}
+    const pg=(kind==='k'?q.kPages:q.sPages)?.[0];
+    return Number.isFinite(pg)?pg-(PAGE_OFF[kind]||0):null;
+  }
   function restoreBrowsing(y) {
     stopRestore();
     let cancelled = false;
-    const view = $('#view'), apply = () => { if(!cancelled)window.scrollTo(0, y); };
+    const view = $('#view'), apply = () => { if(!cancelled)scrollPage(y); };
     const cancel = () => { cancelled = true; observer?.disconnect(); view.removeEventListener('load', apply, true); ['wheel','touchstart','pointerdown','keydown'].forEach(k=>window.removeEventListener(k,cancel)); clearTimeout(timer); };
     const observer = window.ResizeObserver ? new ResizeObserver(apply) : null;
     if(observer)observer.observe(view);
@@ -573,7 +597,7 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     try { h = decodeURIComponent(h); } catch (e) { }
     if (S.remotePending) loadSession();
     if (h !== S.route) {
-      if(renderedRoute === S.route)browsePositions.set(S.route, window.scrollY);
+      if(renderedRoute === S.route)browsePositions.set(S.route, pageScrollY());
       stopRestore();
       if(browsePositions.size>80)browsePositions.delete(browsePositions.keys().next().value);
     }
@@ -601,10 +625,10 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (p === 'notes') return renderNotes();
     return renderHome();
   }
-  const go = h => { location.hash = '#/' + h; };
+  const go = h => { if(window.ZS_READER_MODE){const url=new URL(window.location.href);url.hash='/'+h;window.location.replace(url.href);}else location.hash = '#/' + h; };
 
   function shell(inner, loading = false) {
-    const y = renderedRoute === S.route ? window.scrollY : (browsePositions.get(S.route) || 0);
+    const y = renderedRoute === S.route ? pageScrollY() : (browsePositions.get(S.route) || 0);
     stopRestore();
     MANUAL.leave();
     PRACTICE.leave();
@@ -615,6 +639,7 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (nd && nd.ro) nd.ro.disconnect(); nd = null;
     document.body.classList.remove('notedraw');
     $('#view').innerHTML = inner;
+    window.ZS_SPLIT?.update(!loading&&S.route.startsWith('q/')?S.byId[S.route.slice(2)]:null);
     S.remotePending = false;
     const hint = $('#syncRemoteHint'); if (hint) hint.hidden = true;
     updateSyncStatus();
@@ -1376,7 +1401,7 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   function debounce(f, ms) { let t; return function () { clearTimeout(t); t = setTimeout(f, ms); }; }
   function docPageResults(kind, keyword) {
     if (!keyword) return [];
-    const dict = kind === 'k' ? S.lk : S.ls;
+    const dict = kind === 'm' ? Object.fromEntries((MANUAL.data?.pages||[]).map((p,i)=>[i+1,p.text])) : kind === 'k' ? S.lk : S.ls;
     return Object.keys(dict).map(Number).sort((a, b) => a - b).flatMap(n => {
       const t = dict[n] || '';
       const count = t.split(keyword).length - 1;
@@ -1661,13 +1686,19 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   /* 浏览整本讲义：页内滚动跳转 + 目录 */
   async function renderLectAll(kind, startPage) {
     showQNav(false);
-    const name = PAGE_NAME[kind] || kind;
+    if(!['k','s','m'].includes(kind)){shell('<div class="empty">讲义不存在</div>');return;}
+    const manualPages=MANUAL.data?.pages||[];
+    if(kind==='m'&&!manualPages.length){shell('<div class="empty">背诵手册加载失败，请重新打开分屏。</div>');return;}
+    await needLect();
+    const name = kind==='m'?'背诵手册':PAGE_NAME[kind];
     const ext = IMGEXT[kind] || 'webp';
-    const total = { k: 326, s: 197 }[kind] || 0;
+    const total = kind==='m'?manualPages.length:{ k: 326, s: 197 }[kind];
     const off = PAGE_OFF[kind] || 0;
     const lastP = total - off;
-    const toc = (await needToc())[kind] || [];
-    if (S.route.split('/')[0] !== 'lect') return;
+    const toc = kind==='m'?(MANUAL.data.topics||[]).map(t=>({label:t.module,title:t.title,page:manualPages.findIndex(p=>p.id===t.pages[0])+1})):(await needToc())[kind] || [];
+    const initial=kind==='m'&&/^[ul]\d+$/.test(String(startPage))?manualPages.findIndex(p=>p.id===startPage)+1:Number(startPage)+off;
+    const validStart=Number.isFinite(initial)&&initial>=1&&initial<=total;
+    if (S.route.split('/')[0] !== 'lect' || S.route.split('/')[1]!==kind) return;
     const find = S.docFind && S.docFind.kind === kind ? S.docFind : null;
     const collapsed = localStorage.getItem('zz720.lectbarCollapsed') === '1';
     let h = `<div class="sec-title">📚 ${esc(name)} · 全 ${total} 页</div>
@@ -1677,7 +1708,7 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         <div id="lectbarBody" class="lectbar-body">
         <div class="acts" style="gap:7px;align-items:center;margin:0;flex-wrap:wrap">
           <button class="btn tiny" onclick="ZS_TOC()">📑 目录（${toc.length}）</button>
-          <span class="tiny" style="display:inline-flex;align-items:center;gap:5px">跳到第
+          <span class="tiny" style="display:inline-flex;align-items:center;gap:5px">${kind==='m'?'<select id="manualVolume" aria-label="手册分册"><option value="upper">上册</option><option value="lower">下册</option></select>':''}跳到第
             <input id="lpIn" type="number" inputmode="numeric" min="1" max="${lastP}" placeholder="__"
               onkeydown="if(event.key==='Enter')ZS_LPJUMP('${kind}')">页
             <button class="btn tiny main" onclick="ZS_LPJUMP('${kind}')">跳转</button></span>
@@ -1702,23 +1733,26 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       Array.from({ length: total }, (_, i) => i + 1).map(pg => {
         const pn = pg - off;
         const nn = String(pg).padStart(4, '0');
-        const lb = esc(name) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + pg + ' 页');
+        const mp=kind==='m'?manualPages[pg-1]:null;
+        const lb = mp?esc('背诵手册 · '+(mp.vol==='upper'?'上册':'下册')+' '+(mp.bookPage>0?'P'+mp.bookPage:'PDF P'+mp.page)):esc(name) + (pn >= 1 ? ' 第 ' + pn + ' 页' : ' PDF 第 ' + pg + ' 页');
         return `<div class="pgwrap${thumbMode() ? ' thumb' : ''}" id="lp${pg}"
-            data-tgt="${kind}-img" data-id="${LECID}" data-anno="${LECID}|${kind}-img-${pg}">
-          <img loading="lazy" style="aspect-ratio:${kind === 's' ? '2068/2924' : '2552/3438'}"
-            src="${KINDBASE[kind] || IMGBASE}img/${kind}/${nn}.${ext}" data-label="${lb}"
+            data-tgt="${kind}-img" data-id="${LECID}" data-anno="${LECID}|${kind}-img-${mp?mp.id:pg}">
+          <img loading="lazy" style="aspect-ratio:${mp?mp.width+'/'+mp.height:kind === 's' ? '2068/2924' : '2552/3438'}"
+            src="${mp?MANUAL.src(mp.id):(KINDBASE[kind] || IMGBASE)+'img/'+kind+'/'+nn+'.'+ext}" data-label="${lb}"
             onclick="ZS_ZOOM(this)">
-          <span class="pgno">${esc(name)} P${pn >= 1 ? pn : pg}</span>
-          <button class="annobtn" onclick="ZS_ANNO('${LECID}','${kind}-img-${pg}')" title="在这一页上做笔记">✍️</button></div>`;
+          <span class="pgno">${mp?lb:esc(name)+' P'+(pn >= 1 ? pn : pg)}</span>
+          <button class="annobtn" onclick="ZS_ANNO('${LECID}','${kind}-img-${mp?mp.id:pg}')" title="在这一页上做笔记">✍️</button></div>`;
       }).join('') + `</div>`;
     shell(h);
+    if(validStart)stopRestore();
     updateLectLayout();
     if (window.ResizeObserver) {
       S.lectbarObserver = new ResizeObserver(updateLectLayout);
       S.lectbarObserver.observe(document.getElementById('topbar'));
       S.lectbarObserver.observe(document.getElementById('lectbar'));
     }
-    if (find && find.keyword) updateDocFind(kind, find.page || Number(startPage) + off);
+    if(kind==='m'&&validStart)$('#manualVolume').value=manualPages[initial-1].vol;
+    if (find && find.keyword) updateDocFind(kind, find.page || initial);
     /* 批注层：图片加载完再画。用 JS 绑定而不是内联 onload——
        这一页有 300 多张图，内联处理器会引发一串 WebKit 的「Script error」 */
     ZS_ANNOSYNC();
@@ -1726,20 +1760,24 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       if (im.complete) return;
       im.addEventListener('load', () => ZS_ANNOSYNC(), { once: true });
     });
-    if (startPage) {
+    if (validStart) {
       /* 图片是懒加载的，页面高度会边加载边变，得多定位几次。参数用「书页码」 */
-      const sp = Number(startPage) + off;
+      const sp = initial;
+      const routeAtStart=S.route;let cancelled=false;const cancel=()=>{cancelled=true;};
+      ['wheel','touchstart','pointerdown','keydown'].forEach(ev=>window.addEventListener(ev,cancel,{once:true,passive:true}));
+      const finish=()=>['wheel','touchstart','pointerdown','keydown'].forEach(ev=>window.removeEventListener(ev,cancel));
       let tries = 0, done = 0;
       const jump = () => {
+        if(cancelled||S.route!==routeAtStart){finish();return;}
         tries++;
         const el = document.getElementById('lp' + sp);
         if (el) {
           const top = el.getBoundingClientRect().top;
-          if (Math.abs(top - lectOffset()) > 12) el.scrollIntoView({ block: 'start' });
+          if (Math.abs(top - lectOffset()) > 12) scrollLectPage(el);
           else done++;              /* 连续几次都在位才算稳（图片加载会让高度变化） */
         }
         /* 到位后再复查几次；一直没到位就多试（图片慢时页面高度不够，滚动会被截断） */
-        if (done < 3 && tries < 45) setTimeout(jump, 350);
+        if (done < 3 && tries < 45) setTimeout(jump, 350);else finish();
       };
       setTimeout(jump, 250);
     }
@@ -1755,6 +1793,9 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const top = document.getElementById('topbar');
     const bar = document.getElementById('lectbar');
     return (top ? top.getBoundingClientRect().height : 76) + (bar ? bar.getBoundingClientRect().height : 0) + 16;
+  }
+  function scrollLectPage(el,behavior='auto') {
+    window.scrollTo({top:Math.max(0,window.scrollY+el.getBoundingClientRect().top-lectOffset()),behavior});
   }
   window.ZS_LECTBAR = () => {
     const bar = document.getElementById('lectbar');
@@ -1778,11 +1819,13 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const inp = document.getElementById('lpIn');
     let n = (v === undefined) ? parseInt((inp && inp.value) || '', 10) : Number(v);
     if (!n || n < 1) return ZS.toast('请输入页码');
+    if(kind==='m'&&v===undefined){const vol=$('#manualVolume').value;const index=MANUAL.data.pages.findIndex(p=>p.vol===vol&&p.bookPage===n);if(index<0)return ZS.toast('没有这一页');n=index+1;}
+    if(kind==='m'&&MANUAL.data.pages[n-1])$('#manualVolume').value=MANUAL.data.pages[n-1].vol;
     const el = document.getElementById('lp' + (n + off));
     if (!el) return ZS.toast('没有第 ' + n + ' 页');
     const b = document.getElementById('tocBox'); if (b) b.style.display = 'none';
     updateLectLayout();
-    requestAnimationFrame(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    requestAnimationFrame(() => scrollLectPage(el,'smooth'));
     const pg = el.querySelector('.pgno');
     if (pg) ZS.toast('已跳到 ' + pg.textContent, 1400);
     if (S.docFind && S.docFind.kind === kind) updateDocFind(kind, n + off);
@@ -1955,6 +1998,7 @@ const APP_VER = 122;     // 每次改动前端都 +1，和 index.html 的 ?v= �
           <span class="ebc">清空所有做题记录，重新来过（笔记与手写标注保留）</span>
           <button class="btn tiny" onclick="ZS_REDO_SET('all')">重置</button></div>
       </div>
+      ${window.ZS_SPLIT?.settingsHtml()||''}
       <div class="sec-title">数据备份</div>
       <div class="card pad">
         <div class="tiny muted" style="line-height:1.8;margin-bottom:10px">做题记录、笔记、手写标注<b>只存在本机浏览器里</b>。清理浏览器数据或换设备都会丢，建议定期导出一份。</div>
