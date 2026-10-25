@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 123;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 124;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -434,7 +434,17 @@ const APP_VER = 123;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       ZS.load(); await ZS.ready();
       try { await MANUAL.load(); } catch(e) { console.error(e); }
       await needLect();
-      window.ZS_READERGO = (kind,page) => { if(!['k','s','m'].includes(kind))return;flushEditors();go('lect/'+kind+'/'+page); };
+      window.ZS_READERGO = (kind,page) => {
+        if(!['k','s','m'].includes(kind))return;
+        flushEditors();
+        const target='lect/'+kind+'/'+page;
+        if(S.route===target){
+          // Scrolling does not change the route; repeat clicks must explicitly jump.
+          const n=kind==='m'&&/^[ul]\d+$/.test(String(page))?(MANUAL.data?.pages||[]).findIndex(p=>p.id===page)+1:Number(page);
+          stopRestore();ZS_LPJUMP(kind,n);return;
+        }
+        go(target);
+      };
       window.ZS_READER_THEME = applyTheme;
       window.addEventListener('hashchange',route);
       route();
