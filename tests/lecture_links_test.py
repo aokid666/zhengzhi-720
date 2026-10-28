@@ -62,6 +62,7 @@ class LectureReferenceTests(unittest.TestCase):
     def test_explanation_boilerplate_does_not_link_eight_rules_to_two_establishments(self):
         row=self.data['items'].get('pr-mipeng6-choice-3-13',{})
         self.assertTrue(all(e['page']!='171' for e in row.get('k',[])))
+        self.assertTrue(any(e['page']=='l015' for e in row.get('m',[])))
         q=self.questions['pr-mipeng6-choice-3-13']
         self.assertTrue(all('核心全党的核心地位的确立' not in a for p,a,t in review.facts(q)))
 
