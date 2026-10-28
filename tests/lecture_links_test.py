@@ -59,4 +59,10 @@ class LectureReferenceTests(unittest.TestCase):
         row=self.data['items'].get('pr-hat-marx-cloze-0029',{})
         self.assertTrue(row.get('k'))
 
+    def test_explanation_boilerplate_does_not_link_eight_rules_to_two_establishments(self):
+        row=self.data['items'].get('pr-mipeng6-choice-3-13',{})
+        self.assertTrue(all(e['page']!='171' for e in row.get('k',[])))
+        q=self.questions['pr-mipeng6-choice-3-13']
+        self.assertTrue(all('核心全党的核心地位的确立' not in a for p,a,t in review.facts(q)))
+
 if __name__=='__main__':unittest.main()

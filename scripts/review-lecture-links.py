@@ -71,6 +71,7 @@ def facts(q):
         prompt=''.join(ch for i,ch in enumerate(c['text']) if i not in hidden)
         for m in c['masks']: add(prompt,m['text'])
     else:
+        selected=[norm(q.get('options',{}).get(k,'')) for k in q.get('answer','') if q.get('options',{}).get(k,'') not in ['正确','错误']]
         for k in q.get('answer',''):
             a=q.get('options',{}).get(k,'')
             if a not in ['正确','错误']: add(q['stem'][-400:],a)
@@ -78,7 +79,12 @@ def facts(q):
         analysis_count=0
         for a in q.get('analysis',[]):
             for sentence in re.split(r'[。；;\n]',a.get('t','')):
-                if 14<=len(norm(sentence))<=240 and not re.search(r'错误|不正确|排除|选项|故答案|干扰项|原书标记',sentence):
+                st=norm(sentence)
+                # Explanatory boilerplate can itself be mislabeled in source
+                # notes. Bind explanatory facts to a selected answer instead
+                # of following a stray "this question tests ..." introduction.
+                tied=not selected or any((v in st if len(v)<4 else bool(grams(v,4)&grams(st,4))) for v in selected)
+                if tied and 14<=len(st)<=240 and not re.search(r'错误|不正确|排除|选项|故答案|干扰项|原书标记|本题考查|本题考察|[A-DＡ-Ｄ]项',sentence):
                     if analysis_count<4:
                         add('',sentence,'explanation');analysis_count+=1
     return list(dict.fromkeys(result))
