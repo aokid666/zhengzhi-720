@@ -15,8 +15,9 @@ class LectureReferenceTests(unittest.TestCase):
             q=self.questions[id];self.assertEqual(row['sig'],review.signature(q))
             for kind,field in review.FIELDS.items():
                 for e in row.get(kind,[]):
-                    self.assertFalse(q.get(field))
-                    if kind=='m':self.assertFalse(old.get(id))
+                    if kind in row.get('replace',{}):self.assertEqual(q.get(field),row['replace'][kind])
+                    else:self.assertFalse(q.get(field))
+                    if kind=='m' and kind not in row.get('replace',{}):self.assertFalse(old.get(id))
                     corpus=self.corpora[kind];self.assertIn(e['page'],corpus.pages)
                     if kind in ['k','s']:self.assertGreaterEqual(int(e['page']),10)
                     self.assertIn(e['quote'],corpus.pages[e['page']]['raw'])
@@ -61,9 +62,15 @@ class LectureReferenceTests(unittest.TestCase):
 
     def test_explanation_boilerplate_does_not_link_eight_rules_to_two_establishments(self):
         row=self.data['items'].get('pr-mipeng6-choice-3-13',{})
+        self.assertEqual(row['replace']['m'],['l053','l009'])
         self.assertTrue(all(e['page']!='171' for e in row.get('k',[])))
         self.assertTrue(any(e['page']=='l015' for e in row.get('m',[])))
         q=self.questions['pr-mipeng6-choice-3-13']
         self.assertTrue(all('核心全党的核心地位的确立' not in a for p,a,t in review.facts(q)))
+
+    def test_cross_subject_question_uses_six_must_upholds_instead_of_marxism_features(self):
+        row=self.data['items']['q001']
+        self.assertEqual(row['replace']['k'],[10])
+        self.assertEqual([e['page'] for e in row['k']],['170'])
 
 if __name__=='__main__':unittest.main()

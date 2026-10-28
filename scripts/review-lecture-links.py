@@ -200,7 +200,8 @@ def reviewed_passages(corpora, questions):
         end=raw.index(row['until'],start+len(row['start'])) if row.get('until') else min(len(raw),start+row['length'])
         quote=raw[start:end].strip();assert quote
         result[row['id']][row['kind']].append({'page':row['page'],'quote':quote,'note':row['note'],
-            'method':'reviewed-passage','score':1000,'answer':'','prompt':'','answerRun':0,'promptRun':0})
+            'method':'reviewed-passage','score':1000,'answer':'','prompt':'','answerRun':0,'promptRun':0,
+            **({'expectedRefs':row['expectedRefs']} if 'expectedRefs' in row else {})})
     return result
 
 def build():
@@ -211,13 +212,16 @@ def build():
         row={'sig':signature(q)};fs=None
         for kind,field in FIELDS.items():
             old=q.get(field) or (old_manual.get(q['id'],[]) if kind=='m' else [])
-            if old or (kind=='m' and q.get('blockId')):continue
+            curated=reviewed[q['id']].get(kind)
+            correction=bool(old and curated and curated[0].get('expectedRefs')==old)
+            if (old and not correction) or (kind=='m' and q.get('blockId')):continue
             group=q.get('bookId') or ('original' if not q.get('source') else 'manual')
-            counts[group]['missing_'+kind]+=1
+            if not old:counts[group]['missing_'+kind]+=1
             if fs is None:fs=facts(q)
             hits=reviewed[q['id']].get(kind) or cs[kind].find(fs,module_of(q))
             if hits:
-                row[kind]=hits;counts[group]['recovered_'+kind]+=1
+                row[kind]=hits;counts[group][('corrected_' if correction else 'recovered_')+kind]+=1
+                if correction:row.setdefault('replace',{})[kind]=old
             else:unresolved.append({'id':q['id'],'kind':kind,'module':q.get('module'),'stem':q['stem'][:140]})
         if len(row)>1:items[q['id']]=row
         if i%100==0:print('Reviewed',i,'/',len(qs),flush=True)
@@ -229,7 +233,8 @@ def build():
     for q in qs:
         if q['id'] not in items:continue
         group=q.get('bookId') or ('manual' if q.get('source')=='m' else 'original');row=items[q['id']]
-        groups[group][q['id']]={'sig':row['sig'],**{k:[{name:e[name] for name in ['page','quote','note'] if name in e} for e in row[k]] for k in FIELDS if k in row}}
+        groups[group][q['id']]={'sig':row['sig'],**({'replace':row['replace']} if row.get('replace') else {}),
+            **{k:[{name:e[name] for name in ['page','quote','note'] if name in e} for e in row[k]] for k in FIELDS if k in row}}
     outdir=ROOT/'data/lecture-links';outdir.mkdir(exist_ok=True)
     for group,rows in groups.items():(outdir/(group+'.json')).write_text(json.dumps({'version':VERSION,'items':rows},ensure_ascii=False,separators=(',',':')))
     report={'version':VERSION,'questions':len(qs),'linkedQuestions':len(items),'summary':dict(counts),'unresolved':unresolved,
