@@ -15,6 +15,9 @@ def obtain():
    if q['type']=='cloze':
     assert q['cloze']['masks'] and q['cloze']['rule']!='review'
     assert all(all(not a<=i<z for a,z in q['cloze']['protected']) for m in q['cloze']['masks'] for i in m['indices'])
+ marx=banks['hat-marx']['questions']
+ for phrase in ['否定理解','历史和道德','剩余价值学说']:
+  assert any(m['text']==phrase for q in marx for m in q['cloze']['masks']), 'Waiting for intact wrapped answer: '+phrase
  for id,pn in [('second-marx',1),('hat-marx',1),('hat-xi',16)]:
   with urllib.request.urlopen(BASE+f'img/{id}/{pn:03}.png',timeout=30) as r:assert r.read(8)==b'\x89PNG\r\n\x1a\n'
  return report,books,manifest,banks
@@ -29,7 +32,7 @@ def main():
  index=json.loads((ROOT/'data/practice-index.json').read_text());ids={b['id'] for b in books};index['books']=[b for b in index['books'] if b['id'] not in ids]+books
  for b in index['books']:
   if b['id'] in report['reused']:b['studyStage']='second'
- index['total']=sum(b['count'] for b in index['books']);index['version']=126;write('practice-index.json',index)
+ index['total']=sum(b['count'] for b in index['books']);index['version']=127;write('practice-index.json',index)
  src=json.loads((ROOT/'data/practice-sources.json').read_text());write('practice-sources.json',[m for m in src if m['id'] not in ids]+manifest)
  for id,bank in banks.items():write('practice/'+id+'.json',bank)
  write('second-hat-report.json',report);print('Imported',report['matchingCount'],'new matching groups and',report['clozeCount'],'blue-answer cloze cards; 49 existing groups retained.',flush=True)

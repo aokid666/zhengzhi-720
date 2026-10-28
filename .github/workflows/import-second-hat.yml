@@ -61,4 +61,4 @@ jobs:
       - name: Publish summary
         run: |
           echo 'Second-round matching and blue cloze validated and published from GitHub Actions.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'https://aokid666.github.io/zhengzhi-720/?n=126#/sprint/practice/group/cloze' >> "$GITHUB_STEP_SUMMARY"
+          echo 'https://aokid666.github.io/zhengzhi-720/?n=127#/sprint/practice/group/cloze' >> "$GITHUB_STEP_SUMMARY"
