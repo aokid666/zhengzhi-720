@@ -7,9 +7,9 @@ window.PRACTICE = (() => {
   const collectionId=id=>id==='cf-upper'||id==='cf-lower'?'cf':id;
   const displayBooks=()=>{const halves=index.books.filter(b=>collectionId(b.id)==='cf');return index.books.filter(b=>b.id!=='cf-lower').map(b=>b.id==='cf-upper'?{...b,id:'cf',title:'乘风肖1000题笔记',count:halves.reduce((n,b)=>n+b.count,0),pages:halves.reduce((n,b)=>n+b.pages,0),chapters:halves.flatMap(b=>b.chapters)}:b);};
   const book=id=>id==='cf'?displayBooks().find(b=>b.id===id):index.books.find(b=>b.id===id), src=(id,n)=>(book(id).sourceBase||index.sourceBase)+'img/'+id+'/'+String(n).padStart(3,'0')+'.png';
-  async function load(){if(!index){const r=await fetch('data/practice-index.json?v=127');if(!r.ok)throw Error('冲刺资料目录加载失败');index=await r.json();}return index;}
+  async function load(){if(!index){const r=await fetch('data/practice-index.json?v=128');if(!r.ok)throw Error('冲刺资料目录加载失败');index=await r.json();}return index;}
   async function needBook(id,S){await load();if(!book(id))throw Error('资料不存在');if(!books.has(id)){
-    if(!pending.has(id))pending.set(id,(async()=>{const r=await fetch('data/practice/'+id+'.json?v=127');if(!r.ok)throw Error('题库加载失败，请重试');const d=await r.json();books.set(id,d);return d;})().finally(()=>pending.delete(id)));
+    if(!pending.has(id))pending.set(id,(async()=>{const r=await fetch('data/practice/'+id+'.json?v=128');if(!r.ok)throw Error('题库加载失败，请重试');const d=await r.json();await LECTURE_LINKS.apply(d.questions);books.set(id,d);return d;})().finally(()=>pending.delete(id)));
     await pending.get(id);
   }const d=books.get(id);d.questions.forEach(q=>S.byId[q.id]=q);return d;}
   async function reviewQuestions(S,id='cf'){if(['second','hats'].includes(id)){await load();const bs=index.books.filter(b=>b.studyStage===id);await Promise.all(bs.map(b=>needBook(b.id,S)));return bs.flatMap(b=>books.get(b.id).questions);}if(id!=='cf')return (await needBook(id,S)).questions;await Promise.all(['cf-upper','cf-lower'].map(id=>needBook(id,S)));return ['cf-upper','cf-lower'].flatMap(id=>books.get(id).questions);}

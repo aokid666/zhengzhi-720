@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 127;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -462,6 +462,7 @@ const APP_VER = 127;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       if (!topicalResponse.ok) throw new Error('速成班专题题库加载失败');
       S.qs.push(...await topicalResponse.json());
     } catch (e) { document.body.innerHTML = '<div class="empty">题库加载失败：' + esc(e.message) + '</div>'; return; }
+    await LECTURE_LINKS.apply(S.qs);
     S.qs.forEach(q => S.byId[q.id] = q);
     try { S.sprintQs = await MANUAL.load(); S.judgeQs = MANUAL.judgements; S.sprintQs.concat(S.judgeQs).forEach(q => S.byId[q.id] = q); }
     catch(e) { S.sprintQs = []; S.judgeQs = []; console.error(e); }
@@ -1161,11 +1162,11 @@ const APP_VER = 127;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       const box = $('#lect' + t.toUpperCase());
       if (!box) return;
       const pages = t === 'k' ? q.kPages : q.sPages;
-      if (['m','p'].includes(q.source) && (!pages || !pages.length)) { box.innerHTML = '<div class="hint">没找到'+(t === 'k' ? '知识清单' : '速成班讲义')+'中的相应内容。</div>'; return; }
+      if (['m','p'].includes(q.source) && (!pages || !pages.length)) { box.innerHTML = '<div class="hint">暂未定位到'+(t === 'k' ? '知识清单' : '速成班讲义')+'中可确认的对应讲解。</div>'; return; }
       const dict = t === 'k' ? S.lk : S.ls;
       let txt = (pages || []).map(n => dict[n] || '').join('\n').trim();
       if (!txt) txt = '（未检索到对应讲义文字，请以截图为准）';
-      box.innerHTML = `<div class="pages">${pagesHtml(pages, t, q.id, t === 'k' ? '知识清单' : '速成班讲义')}</div>
+      box.innerHTML = `${LECTURE_LINKS.evidence(q,t)}<div class="pages">${pagesHtml(pages, t, q.id, t === 'k' ? '知识清单' : '速成班讲义')}</div>
         <div class="acts"><button class="btn" onclick="ZS_ANNO('${LECID}','${t}-img-${(t === 'k' ? q.kPages : q.sPages)[0]}')">✍️ 在讲义截图上做笔记</button>
         <button class="btn" onclick="ZS_ANNO('${q.id}','${t}-txt')">✍️ 在讲义文字上做笔记</button>
         ${pdfLink(t, S['pg_' + t + '_' + q.id] ? shiftList(pages, S['pg_' + t + '_' + q.id]) : pages, '打开《' + (t === 'k' ? '知识清单' : '速成班讲义') + '》PDF')}</div>

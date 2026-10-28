@@ -1,0 +1,46 @@
+name: Review missing lecture references
+on:
+  push:
+    branches: [codex/lecture-review]
+    paths-ignore: ['data/lecture-links*.json']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: lecture-reference-review
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 30
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Recheck missing lecture references against original texts
+        run: python -u scripts/review-lecture-links.py
+      - name: Check evidence and existing features
+        run: |
+          python -m unittest discover -s tests -p 'lecture_links_test.py'
+          npm install --no-save --package-lock=false happy-dom@21.0.4 fake-indexeddb@6.2.6
+          node --test tests/*.test.cjs
+          node tests/practice-ui.mjs
+          git diff --check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lecture-reference-evidence
+          path: data/lecture-links*.json
+      - name: Save validated references on review branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/lecture-links.json data/lecture-links-report.json
+          git commit -m "Add source-verified missing lecture references"
+          git push origin HEAD:codex/lecture-review

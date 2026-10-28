@@ -25,6 +25,7 @@ window.MANUAL = (() => {
       const r=await fetch('data/'+n+'.json?v=118'); if(!r.ok) throw new Error('背诵手册数据加载失败'); return r.json();
     }));
     [data,questions,matches,study]=result;
+    await LECTURE_LINKS.apply(questions.concat(study.questions));
     byPage=Object.fromEntries(data.pages.map(p=>[p.id,p]));byBlock=Object.fromEntries(study.blocks.map(b=>[b.id,b]));return questions;
   }
   function leave() {
@@ -59,14 +60,14 @@ window.MANUAL = (() => {
     const box=document.getElementById('lectM');if(!box)return;
     if(!data){box.innerHTML='<div class="hint">背诵手册加载失败，请刷新重试。</div>';return;}
     if(q.blockId&&byBlock[q.blockId]){box.innerHTML=blockHtml(byBlock[q.blockId]);return;}
-    const refs=(['m','p'].includes(q.source)?q.mRefs:(matches[q.id]||[]).map(h=>h.page))||[];
+    const refs=(q.mRefs?.length?q.mRefs:(matches[q.id]||[]).map(h=>h.page))||[];
     const ids=Array.from(new Set((q.source==='m'?q.qRefs:[]).concat(refs)));
-    box.innerHTML=ids.length?'<div class="tiny muted">'+(refs.length?'相关内容按文字匹配定位，请结合原页核对。':'本题原页如下；没找到对应的理论讲解页。')+'</div>'+ids.map(id=>pageHtml(id)).join(''):'<div class="hint">没找到背诵手册中的相应内容。</div>';
+    box.innerHTML=ids.length?LECTURE_LINKS.evidence(q,'m')+'<div class="tiny muted">'+(refs.length?'相关原文与截图如下，可结合本题考点核对。':'本题原页如下；没找到对应的理论讲解页。')+'</div>'+ids.map(id=>pageHtml(id)).join(''):'<div class="hint">暂未定位到背诵手册中可确认的对应讲解。</div>';
   }
   // 分屏与题目下方的手册区采用同一套匹配，优先展示讲解原页。
   function referencePages(q) {
     if(q.blockId&&byBlock?.[q.blockId])return byBlock[q.blockId].refs.map(r=>r.page);
-    const refs=(['m','p'].includes(q.source)?q.mRefs:(matches?.[q.id]||[]).map(h=>h.page))||[];
+    const refs=(q.mRefs?.length?q.mRefs:(matches?.[q.id]||[]).map(h=>h.page))||[];
     return [...new Set(refs.concat(q.source==='m'?(q.qRefs||[]):[]))].filter(id=>byPage?.[id]);
   }
   function badge(q) {
