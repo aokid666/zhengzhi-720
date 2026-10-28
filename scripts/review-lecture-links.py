@@ -87,6 +87,7 @@ class Corpus:
     def __init__(self, kind, data, modules):
         self.kind=kind; self.pages={}; self.ix=collections.defaultdict(set);self.exact_df={}
         for page, raw in data.items():
+            if kind in ['k','s'] and int(page)<=9:continue # Covers, preface, and contents are not explanations.
             text,positions=norm(raw,True)
             if not text: continue
             self.pages[page]={'raw':raw,'text':text,'positions':positions,'modules':modules.get(page,set())}

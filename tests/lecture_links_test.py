@@ -18,6 +18,7 @@ class LectureReferenceTests(unittest.TestCase):
                     self.assertFalse(q.get(field))
                     if kind=='m':self.assertFalse(old.get(id))
                     corpus=self.corpora[kind];self.assertIn(e['page'],corpus.pages)
+                    if kind in ['k','s']:self.assertGreaterEqual(int(e['page']),10)
                     self.assertIn(e['quote'],corpus.pages[e['page']]['raw'])
                     if e['method']=='reviewed-passage':self.assertTrue(e['note'])
                     else:
