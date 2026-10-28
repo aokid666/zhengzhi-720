@@ -1,0 +1,64 @@
+name: Import and publish second-round matching and blue-answer cloze
+on:
+  push:
+    branches: [codex/import-second-hat]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+concurrency:
+  group: import-second-hat-site
+  cancel-in-progress: true
+jobs:
+  import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Wait for validated source deployment and import generated data
+        run: python scripts/import-second-hat.py --wait-seconds 2400
+      - name: Validate data and exercise UI
+        run: |
+          npm install --no-save --package-lock=false happy-dom@21.0.4 fake-indexeddb@6.2.6
+          node --test tests/*.test.cjs
+          node tests/practice-ui.mjs
+          git diff --check
+      - name: Preserve latest main changes and publish
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if ! git diff --cached --quiet; then
+            git commit -m "Import validated second-round matching and blue-answer cloze"
+          fi
+          git fetch origin main --depth=30
+          git merge --no-edit origin/main
+          git push origin HEAD:codex/import-second-hat
+          git push origin HEAD:main
+      - name: Request Pages build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import os,json,urllib.request,urllib.error
+          req=urllib.request.Request('https://api.github.com/repos/aokid666/zhengzhi-720/pages/builds',data=b'{}',method='POST',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json','User-Agent':'second-hat-publish'})
+          try:
+            with urllib.request.urlopen(req,timeout=60) as r: print('Pages build requested:',r.status)
+          except urllib.error.HTTPError as e:
+            if e.code!=409: raise
+            print('Pages build already running.')
+          PY
+      - name: Publish summary
+        run: |
+          echo 'Second-round matching and blue cloze validated and published from GitHub Actions.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'https://aokid666.github.io/zhengzhi-720/?n=126#/sprint/practice/group/cloze' >> "$GITHUB_STEP_SUMMARY"

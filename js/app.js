@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 125;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 126;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -714,11 +714,11 @@ const APP_VER = 125;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     return { done, right, wrong: done - right, guess, total: ids.length };
   }
   const reviewBank=()=>localStorage.getItem('zz720.reviewBank')||'original';
-  const reviewPool=()=>reviewBank()==='cf'?['cf-upper','cf-lower'].flatMap(id=>PRACTICE.books.get(id)?.questions||[]):['dalizi-true','mipeng6'].includes(reviewBank())?(PRACTICE.books.get(reviewBank())?.questions||[]):reviewBank()==='manual190'?S.sprintQs:S.qs;
-  const reviewChooser=()=>'<label class="review-bank">复习题库 <select onchange="ZS_REVIEWBANK(this.value)">'+[['original','720题 / 原题库'],['cf','乘风肖1000题笔记'],['manual190','背诵手册 · 习题190'],['dalizi-true','大李子 · 历年真题'],['mipeng6','米鹏6套卷']].map(([id,label])=>'<option value="'+id+'" '+(reviewBank()===id?'selected':'')+'>'+label+'</option>').join('')+'</select></label>';
-  window.ZS_REVIEWBANK=async value=>{if(!['original','cf','manual190','dalizi-true','mipeng6'].includes(value))return;try{if(['cf','dalizi-true','mipeng6'].includes(value))await PRACTICE.reviewQuestions(S,value);localStorage.setItem('zz720.reviewBank',value);if(S.route==='stat')return renderStat();else if(S.route==='me')return renderMe();else return renderHome();}catch(e){ZS.toast(e.message);}};
+  const reviewPool=()=>['second','hats'].includes(reviewBank())?PRACTICE.groupQuestions(reviewBank()):reviewBank()==='cf'?['cf-upper','cf-lower'].flatMap(id=>PRACTICE.books.get(id)?.questions||[]):['dalizi-true','mipeng6'].includes(reviewBank())?(PRACTICE.books.get(reviewBank())?.questions||[]):reviewBank()==='manual190'?S.sprintQs:S.qs;
+  const reviewChooser=()=>'<label class="review-bank">复习题库 <select onchange="ZS_REVIEWBANK(this.value)">'+[['original','720题 / 原题库'],['cf','乘风肖1000题笔记'],['manual190','背诵手册 · 习题190'],['dalizi-true','大李子 · 历年真题'],['mipeng6','米鹏6套卷'],['second','二刷学成 · 五模块'],['hats','肖帽子题 · 蓝色挖空']].map(([id,label])=>'<option value="'+id+'" '+(reviewBank()===id?'selected':'')+'>'+label+'</option>').join('')+'</select></label>';
+  window.ZS_REVIEWBANK=async value=>{if(!['original','cf','manual190','dalizi-true','mipeng6','second','hats'].includes(value))return;try{if(['cf','dalizi-true','mipeng6','second','hats'].includes(value))await PRACTICE.reviewQuestions(S,value);localStorage.setItem('zz720.reviewBank',value);if(S.route==='stat')return renderStat();else if(S.route==='me')return renderMe();else return renderHome();}catch(e){ZS.toast(e.message);}};
   async function renderHome() {
-    if(['cf','dalizi-true','mipeng6'].includes(reviewBank())){try{await PRACTICE.reviewQuestions(S,reviewBank());}catch(e){ZS.toast(e.message);}if(S.route!=='home'&&S.route!=='')return;}
+    if(['cf','dalizi-true','mipeng6','second','hats'].includes(reviewBank())){try{await PRACTICE.reviewQuestions(S,reviewBank());}catch(e){ZS.toast(e.message);}if(S.route!=='home'&&S.route!=='')return;}
 
     showQNav(false);
     const chs = chapters();
@@ -769,7 +769,7 @@ const APP_VER = 125;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         <div class="tiny muted">逐题附原讲义解析、对应知识清单和速成班讲义的文字与原页截图。</div>
       </div>
       <div class="sec-title">🚀 冲刺板块</div>
-      <div class="card sprint-home"><div class="sprint-home-heading"><b>背诵、练题与易混点复盘</b><a href="#/sprint">查看全部 →</a></div><div class="sprint-home-links"><a href="#/sprint/topics"><b>专题挖空</b><span>123 个专题 →</span></a><a href="#/sprint/practice"><b>选择题 / 笔记</b><span>1980 道练习 →</span></a><a href="#/sprint/questions"><b>手册习题190</b><span>193 道题 →</span></a><a href="#/sprint/practice/mipeng6"><b>米鹏6套卷</b><span>选择题 / 材料分析 →</span></a><a href="#/sprint/practice/dalizi-true"><b>大李子历年真题</b><span>2015—2025 · 363 题 →</span></a></div></div>
+      <div class="card sprint-home"><div class="sprint-home-heading"><b>背诵、练题与易混点复盘</b><a href="#/sprint">查看全部 →</a></div><div class="sprint-added-links"><a href="#/sprint/practice/group/second"><b>二刷学成 · 五模块</b><span>连线 / 填序号 →</span></a><a href="#/sprint/practice/group/cloze"><b>肖帽子题</b><span>蓝色答案挖空 →</span></a></div><div class="sprint-home-links"><a href="#/sprint/topics"><b>专题挖空</b><span>123 个专题 →</span></a><a href="#/sprint/practice"><b>选择题 / 笔记</b><span>选择 / 连线 / 挖空 →</span></a><a href="#/sprint/questions"><b>手册习题190</b><span>193 道题 →</span></a><a href="#/sprint/practice/mipeng6"><b>米鹏6套卷</b><span>选择题 / 材料分析 →</span></a><a href="#/sprint/practice/dalizi-true"><b>大李子历年真题</b><span>2015—2025 · 363 题 →</span></a></div></div>
       <div class="sec-title">🔄 艾宾浩斯复习</div>
       <div class="card pad">${reviewChooser()}
         <div class="tiny muted" style="margin-bottom:6px">答对：复习间隔按 1 / 2 / 4 / 7 / 15 / 30 天递增；答错：回到第 1 档，半天后再来。</div>
@@ -1523,7 +1523,7 @@ const APP_VER = 125;     // 每次改动前端都 +1，和 index.html 的 ?v= �
 
   /* ---------- 我的 ---------- */
   async function renderStat() {
-    if(['cf','dalizi-true','mipeng6'].includes(reviewBank())){try{await PRACTICE.reviewQuestions(S,reviewBank());}catch(e){return ZS.toast(e.message);}if(S.route!=='stat')return;}
+    if(['cf','dalizi-true','mipeng6','second','hats'].includes(reviewBank())){try{await PRACTICE.reviewQuestions(S,reviewBank());}catch(e){return ZS.toast(e.message);}if(S.route!=='stat')return;}
     showQNav(false);
     const all = reviewPool().map(q => q.id), st = statOf(all);
     const chs = chapters(reviewPool()).map(c => {
@@ -1569,7 +1569,7 @@ const APP_VER = 125;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         weak.map(c => `<div class="ebrow">
           <span class="ebl" style="min-width:0;flex:1">${esc(c.ch)} <span class="tiny muted">${esc(c.mod)}</span></span>
           <span class="ebc">正确率 <b style="color:var(--bad)">${(c.acc * 100).toFixed(0)}%</b><br>做过 ${c.done}/${c.ids.length} · 错题 ${c.wrong}</span>
-          <button class="btn tiny main" onclick="ZS_GO('${['cf','dalizi-true','mipeng6'].includes(reviewBank())?'sprint/practice/'+reviewBank():reviewBank()==='manual190'?'sprint/questions':'l/'+c.mi+'-'+encodeURIComponent(c.ch)}')">去看</button>
+          <button class="btn tiny main" onclick="ZS_GO('${['cf','dalizi-true','mipeng6','second','hats'].includes(reviewBank())?'sprint/practice/'+(['second','hats'].includes(reviewBank())?'group/'+(reviewBank()==='hats'?'cloze':'second'):reviewBank()):reviewBank()==='manual190'?'sprint/questions':'l/'+c.mi+'-'+encodeURIComponent(c.ch)}')">去看</button>
         </div>`).join('') + `</div>`;
     }
     const mods = new Map();
@@ -1583,7 +1583,7 @@ const APP_VER = 125;     // 每次改动前端都 +1，和 index.html 的 ?v= �
           <b style="color:var(--teal);font-size:15px">${esc(list[0].mod)}</b>
           <span class="sp" style="flex:1"></span>
           <span class="tiny muted">${dn}/${tot}</span></div>` +
-        list.map(c => `<div class="ch-row" onclick="ZS_GO('${['cf','dalizi-true','mipeng6'].includes(reviewBank())?'sprint/practice/'+reviewBank():reviewBank()==='manual190'?'sprint/questions':'l/'+c.mi+'-'+encodeURIComponent(c.ch)}')">
+        list.map(c => `<div class="ch-row" onclick="ZS_GO('${['cf','dalizi-true','mipeng6','second','hats'].includes(reviewBank())?'sprint/practice/'+(['second','hats'].includes(reviewBank())?'group/'+(reviewBank()==='hats'?'cloze':'second'):reviewBank()):reviewBank()==='manual190'?'sprint/questions':'l/'+c.mi+'-'+encodeURIComponent(c.ch)}')">
           <span class="cn">${esc(c.ch)}</span>
           <span class="cbar"><i style="width:${c.ids.length ? Math.round(c.done / c.ids.length * 100) : 0}%"></i></span>
           <span class="tiny muted" style="min-width:76px;text-align:right">${c.done}/${c.ids.length}${
@@ -2120,7 +2120,7 @@ const APP_VER = 125;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   /* 重做：保留历史次数与复习进度，只把本题切回「待作答」状态 */
   function doRedo(id) {
     if (S.byId[id] && S.byId[id].source === 'p') PRACTICE.reset(id);
-    S['redo_' + id] = true; delete S['rev_' + id]; S['sel_' + id] = [];
+    S['redo_' + id] = true; delete S['rev_' + id];if(window.HAT_CLOZE)HAT_CLOZE.reset(id,S); S['sel_' + id] = [];
     if ((ZS.data.flags[id] || {}).guess) { ZS.data.flags[id].guess = false; ZS.data.flags[id].ts = Date.now(); ZS.save(); }
     renderQuestion(id);
     ZS.toast('已重置本题，可以重做（累计次数保留）');
