@@ -19,8 +19,10 @@ class LectureReferenceTests(unittest.TestCase):
                     if kind=='m':self.assertFalse(old.get(id))
                     corpus=self.corpora[kind];self.assertIn(e['page'],corpus.pages)
                     self.assertIn(e['quote'],corpus.pages[e['page']]['raw'])
-                    self.assertTrue(e['answerRun']>=min(7,len(e['answer'])) or e['answerRun']>=18)
-                    self.assertTrue(e['promptRun']>=6 or e['method']=='statement')
+                    if e['method']=='reviewed-passage':self.assertTrue(e['note'])
+                    else:
+                        self.assertTrue(e['answerRun']>=min(7,len(e['answer'])) or e['answerRun']>=18)
+                        self.assertTrue(e['promptRun']>=6 or e['method'] in ['statement','answer-phrase'])
                     if kind=='m':self.assertFalse(e['page'].startswith('l') and 17<=int(e['page'][1:])<=65)
 
     def test_short_first_coauthored_book_fact_is_recovered_despite_table_layout(self):
@@ -40,5 +42,20 @@ class LectureReferenceTests(unittest.TestCase):
     def test_generic_topic_and_fabricated_statement_do_not_create_references(self):
         for prompt,answer in [('这个观点的重要内容','人民'),('火星移民考试中紫色植物理论的第一性原理','量子糖果')]:
             for corpus in self.corpora.values():self.assertEqual(corpus.find([(review.norm(prompt),review.norm(answer),'pair')],''),[])
+
+    def test_main_form_is_not_confused_with_main_enemy_or_three_magic_weapons(self):
+        row=self.data['items']['pr-hat-mao-cloze-0025']
+        self.assertTrue(any(e['page']=='u081' for e in row['m']))
+        self.assertTrue(all(e['page']!='l105' for e in row['m']))
+
+    def test_historical_conditions_are_not_replaced_by_a_practical_foundation(self):
+        row=self.data['items'].get('pr-hat-mao-cloze-0078',{})
+        self.assertTrue(all(e['page']!='121' for e in row.get('k',[])))
+
+    def test_complete_distinctive_answer_and_short_concept_are_searchable(self):
+        row=self.data['items'].get('pr-hat-mao-cloze-0026',{})
+        self.assertTrue(row.get('k') or row.get('s'))
+        row=self.data['items'].get('pr-hat-marx-cloze-0029',{})
+        self.assertTrue(row.get('k'))
 
 if __name__=='__main__':unittest.main()

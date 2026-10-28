@@ -7,7 +7,13 @@ import argparse, collections, difflib, hashlib, json, math, pathlib, re, unicode
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 VERSION = 128
-ALIASES = [('马克思恩格斯', '马恩'), ('第一次合著', '第一次合作'), ('作品', '著作')]
+ALIASES = [('马克思恩格斯', '马恩'), ('第一次合著', '第一次合作'), ('作品', '著作'),
+           ('主要斗争形式','主要形式'), ('突出特点','特点'), ('三样法宝','三大法宝')]
+QUALIFIERS = ['根本原因','根本目的','根本任务','根本保证','根本途径','根本要求','根本遵循',
+              '根本特性','本质属性','基本国情','主要矛盾','主要形式','主要敌人','主要任务',
+              '实践基础','思想基础','理论基础','理论来源','社会历史条件','历史条件','前提条件',
+              '出发点','落脚点','首要问题','核心问题','中心任务','基本任务','首要任务','直接任务',
+              '第一次','最早','唯一']
 FIELDS = {'k': 'kPages', 's': 'sPages', 'm': 'mRefs'}
 
 def read(name):
@@ -35,6 +41,8 @@ def signature(q):
     parts += [k + ':' + v for k,v in sorted(q.get('options',{}).items())]
     for side in ['left','right']:
         parts += [i['key'] + ':' + i['text'] for i in q.get(side,[])]
+    parts += ['analysis:'+a.get('k','')+'='+a.get('t','') for a in q.get('analysis',[])]
+    parts += ['map:'+k+'='+','.join(v) for k,v in sorted(q.get('matchMap',{}).items())]
     h = 2166136261
     # JS charCodeAt uses UTF-16 code units.
     raw = '\x1f'.join(parts).encode('utf-16-le')
@@ -77,7 +85,7 @@ def facts(q):
 
 class Corpus:
     def __init__(self, kind, data, modules):
-        self.kind=kind; self.pages={}; self.ix=collections.defaultdict(set)
+        self.kind=kind; self.pages={}; self.ix=collections.defaultdict(set);self.exact_df={}
         for page, raw in data.items():
             text,positions=norm(raw,True)
             if not text: continue
@@ -117,23 +125,44 @@ class Corpus:
                     ac=sum(b.size for b in ab)/max(1,len(answer));pc=sum(b.size for b in pb)/max(1,len(prompt))
                     # A distinctive intact statement is evidence in its own right.
                     long_proof=am>=18 and (ac>=.55 or am>=26)
+                    if len(answer)>=10 and answer in window and answer not in self.exact_df:
+                        self.exact_df[answer]=sum(answer in self.pages[pg]['text'] for pg in self.ix.get(answer[:5],()))
+                    phrase_proof=typ=='pair' and len(answer)>=10 and answer in window and self.exact_df.get(answer,999)<=8
                     pair_proof=(am>=min(7,len(answer)) and ac>=.62 and pm>=6 and (pc>=.30 or pm>=12))
-                    if len(answer)<=3: pair_proof=am==len(answer) and pm>=10 and pc>=.35
-                    if not (long_proof or pair_proof): continue
+                    if len(answer)<=3: pair_proof=am==len(answer) and pm>=8 and pc>=.45
+                    if not (long_proof or pair_proof or phrase_proof): continue
                     if typ=='explanation' and not long_proof: continue
+                    best_answer=max(ab,key=lambda b:b.size)
+                    near_prompt=[b for b in pb if b.size>=max(4,pm*.65) and abs(b.b-best_answer.b)<=100]
+                    if not (long_proof or phrase_proof) and not near_prompt: continue
+                    if typ=='pair':
+                        qualifiers=[a for a in QUALIFIERS if a in prompt]
+                        qualifiers=[a for a in qualifiers if not any(a!=b and a in b for b in qualifiers)]
+                        # Same answer in a nearby list is not enough: "main enemy"
+                        # and "main form" (or historical conditions / practical
+                        # foundations) are different examinable relationships.
+                        if qualifiers and not any(any(abs(m.start()-best_answer.b)<=100 for m in re.finditer(re.escape(a),window)) for a in qualifiers): continue
+                        if len(answer)<=5 and len(self.ix.get(answer[:5],()))>30 and pm<12: continue
                     if len(answer)==1 and not re.search(r'(^|[^\u4e00-\u9fff])'+re.escape(answer)+r'([^\u4e00-\u9fff]|$)',p['raw']): continue
-                    blocks=ab+pb;lo=min(b.b for b in blocks);hi=max(b.b+b.size for b in blocks)
+                    blocks=[best_answer]+sorted(near_prompt,key=lambda b:-b.size)[:1]
+                    lo=min(b.b for b in blocks);hi=max(b.b+b.size for b in blocks)
                     if hi-lo>280: continue
                     # Three short, frequent fragments never become a proof merely
                     # because they appear on a page about the same broad subject.
                     distinctive=max((math.log(1+self.N/(1+len(self.ix.get(window[b.b:b.b+5],())))) for b in ab+pb if b.size>=5),default=0)
                     if distinctive<1.8: continue
-                    a=p['positions'][start+max(0,lo-22)];z=p['positions'][start+min(len(window)-1,hi+28)]+1
+                    a=p['positions'][start+max(0,lo-35)];z=p['positions'][start+min(len(window)-1,hi+45)]+1
+                    # Complete the source lines instead of starting halfway
+                    # through a heading or clipping a definition's final word.
+                    line_start=p['raw'].rfind('\n',0,a)
+                    if a-line_start<85:a=line_start+1
+                    line_end=p['raw'].find('\n',z)
+                    if line_end>=0 and line_end-z<85:z=line_end
                     quote=p['raw'][a:z].strip()
                     if len(re.findall(r'[A-D][.．、]',quote))>=3: continue
                     strength=am*1.5+pm*.7+ac*8+pc*5+distinctive
                     evidence={'page':page,'quote':quote,'answer':answer,'prompt':prompt[:180],
-                              'answerRun':am,'promptRun':pm,'method':'statement' if long_proof else 'question-answer',
+                              'answerRun':am,'promptRun':pm,'method':'statement' if long_proof else 'answer-phrase' if phrase_proof else 'question-answer',
                               'score':round(strength,2)}
                     if page not in found or strength>found[page]['score']: found[page]=evidence
         return sorted(found.values(),key=lambda e:-e['score'])[:2]
@@ -155,10 +184,22 @@ def pool():
     return read('questions')+read('topical-exercises')+read('manual-questions')+read('manual-study')['questions']+[
         q for b in read('practice-index')['books'] for q in read('practice/'+b['id'])['questions']]
 
+def reviewed_passages(corpora, questions):
+    rows=json.loads((ROOT/'scripts/lecture-reference-reviewed.json').read_text());result=collections.defaultdict(lambda:collections.defaultdict(list))
+    byid={q['id']:q for q in questions}
+    for row in rows:
+        q=byid[row['id']];assert row['stemContains'] in q['stem']
+        raw=corpora[row['kind']].pages[row['page']]['raw'];start=raw.index(row['start'])
+        end=raw.index(row['until'],start+len(row['start'])) if row.get('until') else min(len(raw),start+row['length'])
+        quote=raw[start:end].strip();assert quote
+        result[row['id']][row['kind']].append({'page':row['page'],'quote':quote,'note':row['note'],
+            'method':'reviewed-passage','score':1000,'answer':'','prompt':'','answerRun':0,'promptRun':0})
+    return result
+
 def build():
     cs=corpora();old_manual=read('manual-matches');items={};counts=collections.defaultdict(collections.Counter)
     unresolved=[]
-    qs=pool()
+    qs=pool();reviewed=reviewed_passages(cs,qs)
     for i,q in enumerate(qs):
         row={'sig':signature(q)};fs=None
         for kind,field in FIELDS.items():
@@ -167,7 +208,7 @@ def build():
             group=q.get('bookId') or ('original' if not q.get('source') else 'manual')
             counts[group]['missing_'+kind]+=1
             if fs is None:fs=facts(q)
-            hits=cs[kind].find(fs,module_of(q))
+            hits=reviewed[q['id']].get(kind) or cs[kind].find(fs,module_of(q))
             if hits:
                 row[kind]=hits;counts[group]['recovered_'+kind]+=1
             else:unresolved.append({'id':q['id'],'kind':kind,'module':q.get('module'),'stem':q['stem'][:140]})
@@ -175,6 +216,15 @@ def build():
         if i%100==0:print('Reviewed',i,'/',len(qs),flush=True)
     result={'version':VERSION,'items':items,'summary':dict(counts)}
     out=ROOT/'data/lecture-links.json';out.write_text(json.dumps(result,ensure_ascii=False,separators=(',',':')))
+    # The full audit stays available for reproducibility; browsers fetch only
+    # the small supplement for the book currently being studied.
+    groups={q.get('bookId') or ('manual' if q.get('source')=='m' else 'original'):{} for q in qs}
+    for q in qs:
+        if q['id'] not in items:continue
+        group=q.get('bookId') or ('manual' if q.get('source')=='m' else 'original');row=items[q['id']]
+        groups[group][q['id']]={'sig':row['sig'],**{k:[{name:e[name] for name in ['page','quote','note'] if name in e} for e in row[k]] for k in FIELDS if k in row}}
+    outdir=ROOT/'data/lecture-links';outdir.mkdir(exist_ok=True)
+    for group,rows in groups.items():(outdir/(group+'.json')).write_text(json.dumps({'version':VERSION,'items':rows},ensure_ascii=False,separators=(',',':')))
     report={'version':VERSION,'questions':len(qs),'linkedQuestions':len(items),'summary':dict(counts),'unresolved':unresolved,
             'sourceSha256':{n:hashlib.sha256((ROOT/'data'/f'{n}.json').read_bytes()).hexdigest() for n in ['lecture-k','lecture-s','manual-index']}}
     (ROOT/'data/lecture-links-report.json').write_text(json.dumps(report,ensure_ascii=False,separators=(',',':')))
