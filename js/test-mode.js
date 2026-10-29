@@ -6,7 +6,7 @@ window.TEST_MODE=(()=>{
  const enabled=()=>!!active||localStorage.getItem(PREF)==='1';
  const eligible=q=>!!q&&q.type!=='cloze'&&q.type!=='written'&&(q.type==='matching'||Object.keys(q.options||{}).length>0)&&!ctx?.sandbox?.(q.id);
  const isReview=id=>!!review?.ids.includes(id);
- const testing=q=>enabled()&&eligible(q)&&!isReview(q.id);
+ const testing=q=>enabled()&&eligible(q)&&!isReview(q.id)&&(!ctx?.progress?.(q.id)?.s||!!active?.drafts[q.id]);
  function persist(){try{sessionStorage.setItem(KEY,JSON.stringify({active,review}));}catch(e){ZS.toast('测试暂存空间不足，请及时提交本次测试。');}}
  function prepare(q){
   if(review&&!review.ids.includes(q.id)){review=null;persist();}
@@ -46,16 +46,23 @@ window.TEST_MODE=(()=>{
   finishing=false;if(show)report();return true;
  }
  function submit(id){if(!count())return ZS.toast('请先完成至少一道题');if(finish(true))ctx.render(id);}
- function leave(route){if(!active)return;const id=route.startsWith('q/')?route.slice(2):null;const q=id&&ctx.getQ(id);if(!id||(q&&!eligible(q)))finish(true);}
+ function leave(route){const id=route.startsWith('q/')?route.slice(2):null;const q=id&&ctx.getQ(id);if(!id||(q&&!eligible(q))){if(active)finish(true);if(review){review=null;persist();}}}
+ function exitReview(q){review=null;persist();ctx.go(ctx.directory(q));}
+ function decorateDirectory(){
+  const view=document.getElementById('view');if(!view||view.querySelector('.test-mode-switch'))return;
+  const el=document.createElement('div');el.className='test-mode-bar';el.innerHTML='<div class="test-mode-switch" role="group" aria-label="做题模式"><button class="btn tiny '+(!enabled()?'main':'')+'" id="testPractice" aria-pressed="'+!enabled()+'">练习模式</button><button class="btn tiny '+(enabled()?'main':'')+'" id="testEnable" aria-pressed="'+enabled()+'">测试模式</button></div><p>测试模式下，新作答的题目提交后统一公布结果；已做题保留原有状态与解析。材料题、挖空背诵和重做区沿用原流程。</p>';
+  (view.querySelector('.sprint-page')||view).prepend(el);
+  const select=value=>{if(active)finish(true);review=null;localStorage.setItem(PREF,value);persist();el.remove();decorateDirectory();};
+  el.querySelector('#testPractice').onclick=()=>select('0');el.querySelector('#testEnable').onclick=()=>select('1');
+ }
  function status(){const el=document.getElementById('testCount');if(el)el.textContent='已答 '+count()+' 题 · 提交前可修改';}
  function decorate(q){
   if(!q||!document.querySelector('#view .qhd'))return;
-  const el=document.createElement('div');el.className='test-mode-bar';el.innerHTML='<div class="test-mode-switch"><button class="btn tiny '+(!enabled()?'main':'')+'" id="testPractice">练习模式</button><button class="btn tiny '+(enabled()?'main':'')+'" id="testEnable" '+(!eligible(q)?'disabled':'')+'>测试模式</button></div>'+(testing(q)?'<div class="test-mode-state"><span id="testCount"></span><button class="btn tiny main" id="testFinish">提交测试</button></div><p>先作答，提交测试或离开题目页后统一显示答案、解析和成绩。</p>':isReview(q.id)?'<div class="test-mode-state"><span>复习本次 '+review.ids.length+' 题</span><button class="btn tiny" id="testAgain">再测一轮</button><button class="btn tiny" id="testLastReport">查看成绩</button></div>':!eligible(q)?'<p>材料题、挖空背诵和重做区使用原有自评或暂存流程；测试模式支持客观题。</p>':'');
+  if(!testing(q)&&!isReview(q.id))return;
+  const el=document.createElement('div');el.className='test-mode-bar';el.innerHTML=testing(q)?'<div class="test-mode-state"><span>测试模式 · </span><span id="testCount"></span><button class="btn tiny main" id="testFinish">提交测试</button></div><p>先作答，提交测试或离开题目页后统一显示答案、解析和成绩。</p>':'<div class="test-mode-state"><span>复习本次 '+review.ids.length+' 题</span><button class="btn tiny" id="testExitReview">退出复习</button><button class="btn tiny" id="testLastReport">查看成绩</button></div>';
   document.getElementById('view').prepend(el);
-  el.querySelector('#testPractice').onclick=()=>{if(active)finish(true);localStorage.setItem(PREF,'0');persist();ctx.render(q.id);};
-  el.querySelector('#testEnable').onclick=()=>{if(enabled())return;localStorage.setItem(PREF,'1');review=null;active=null;persist();ctx.render(q.id);};
+  if(el.querySelector('#testExitReview'))el.querySelector('#testExitReview').onclick=()=>exitReview(q);
   if(el.querySelector('#testFinish'))el.querySelector('#testFinish').onclick=()=>submit(q.id);
-  if(el.querySelector('#testAgain'))el.querySelector('#testAgain').onclick=()=>{review=null;active=null;localStorage.setItem(PREF,'1');persist();ctx.render(q.id);};
   if(el.querySelector('#testLastReport'))el.querySelector('#testLastReport').onclick=report;status();
  }
  async function init(context){
@@ -67,5 +74,5 @@ window.TEST_MODE=(()=>{
  function forget(id){if(review){delete review.rows[id];review.ids=review.ids.filter(k=>k!==id);}if(active){delete active.drafts[id];active.order=active.order.filter(k=>k!==id);}persist();}
  const result=id=>isReview(id)?copy(review.rows[id]):null;
  const pool=id=>isReview(id)?review.ids.map(ctx.getQ).filter(Boolean):null;
- return {init,prepare,testing,eligible,draft,stage,leave,decorate,finish,submit,forget,result,pool,isReview,count};
+ return {init,prepare,testing,eligible,draft,stage,leave,decorate,decorateDirectory,finish,submit,forget,result,pool,isReview,count};
 })();

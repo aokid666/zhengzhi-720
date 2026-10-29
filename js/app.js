@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 129;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 130;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -79,10 +79,23 @@ const APP_VER = 129;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       if (S.route === 'queue') renderQueues(); else route();
     });
   };
-  /* 返回上一页（页内历史栈） */
+  /* 返回所属目录，题目之间的切换不增加返回层级。 */
+  function questionDirectory(q) {
+    const entry=S.questionDirectory;
+    if(entry)return entry;
+    return q.source==='p'?'sprint/practice/'+PRACTICE.collectionId(q.bookId):q.exerciseKind==='judgement'?'sprint/judgements/all'+(q.blockId?'/'+q.blockId:''):q.source==='m'?'sprint/questions':'l/'+q.moduleIdx+'-'+q.chapter;
+  }
   window.ZS_BACK = () => {
-    if (S.back.length > 1) { S.back.pop(); go(S.back[S.back.length - 1]); }
-    else ZS.toast('已经是最开始了');
+    const h=S.route||'';
+    if(h.startsWith('q/')){const q=S.byId[h.slice(2)];return go(q?questionDirectory(q):'');}
+    if(h.startsWith('l/'))return go('');
+    if(h.startsWith('sprint/practice/'))return go(h.includes('/read/')?'sprint/practice/'+PRACTICE.collectionId(h.split('/')[2]):'sprint/practice');
+    if(h==='sprint/practice'||/^sprint\/(questions|judgements|topics|points|book)/.test(h))return go('sprint');
+    if(h.startsWith('sprint/block/'))return go('sprint/points');
+    if(h.startsWith('sprint/topic/'))return go('sprint/topics');
+    if(h.startsWith('sprint/'))return go('sprint');
+    if(h==='sprint'||h)return go('');
+    ZS.toast('已经在首页');
   };
   const inQ = id => !!(S.q && S.q.ids && S.q.ids.indexOf(id) >= 0);
   const inSb = id => !!(S.q && S.q.mode === 'sb' && inQ(id));
@@ -472,7 +485,7 @@ const APP_VER = 129;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (lastQId() && lastQId().startsWith('pr-')) { try { await PRACTICE.ensureQuestion(lastQId(),S); } catch(e) { console.error(e); } }
     migrateGuess();
     migrateAnnoKeys();
-    await window.TEST_MODE?.init({getQ:id=>S.byId[id],sandbox:inSb,
+    await window.TEST_MODE?.init({getQ:id=>S.byId[id],sandbox:inSb,progress:P,directory:questionDirectory,
       ensure:ids=>Promise.all(ids.filter(id=>id.startsWith('pr-')).map(id=>PRACTICE.ensureQuestion(id,S))),
       commit:(id,right,sel,attempt)=>setProg(id,right,false,sel,attempt),
       go:h=>{if(S.route===h)renderQuestion(h.slice(2));else go(h);},render:renderQuestion});
@@ -619,6 +632,9 @@ const APP_VER = 129;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       stopRestore();
       if(browsePositions.size>80)browsePositions.delete(browsePositions.keys().next().value);
     }
+    if(h.startsWith('q/')&&!S.route.startsWith('q/')) {
+      S.questionDirectory=/^l\//.test(S.route)||/^sprint\/(questions|judgements)(\/|$)/.test(S.route)||/^sprint\/practice\/[^/]+$/.test(S.route)||S.route==='queue'?S.route:null;
+    }
     S.route = h;
     S.remotePending = false;
     const remoteHint = $('#syncRemoteHint'); if (remoteHint) remoteHint.hidden = true;
@@ -659,6 +675,7 @@ const APP_VER = 129;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     $('#view').innerHTML = inner;
     const currentQuestion=!loading&&S.route.startsWith('q/')?S.byId[S.route.slice(2)]:null;
     if(currentQuestion)window.TEST_MODE?.decorate(currentQuestion);
+    else if(!loading&&(/^l\//.test(S.route)||/^sprint\/(questions|judgements)(\/|$)/.test(S.route)||(/^sprint\/practice\/[^/]+$/.test(S.route)&&!!$('#pList'))))window.TEST_MODE?.decorateDirectory();
     window.ZS_SPLIT?.update(currentQuestion&&!window.TEST_MODE?.testing(currentQuestion)?currentQuestion:null);
     S.remotePending = false;
     const hint = $('#syncRemoteHint'); if (hint) hint.hidden = true;
