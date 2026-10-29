@@ -2,7 +2,7 @@
 window.ZS_SPLIT = (() => {
   'use strict';
   if (window.ZS_READER_MODE) return null;
-  const KEY='zz720.splitPrefs', names={k:'知识清单',s:'速成班讲义',m:'背诵手册'};
+  const KEY='zz720.splitPrefs', names={k:'知识清单',s:'速成班讲义',m:'肖秀荣背诵手册',tj:'腿姐背诵手册'};
   let prefs={side:'right',kind:'k',ratio:50};
   try {const p=JSON.parse(localStorage.getItem(KEY)||'{}');if(['left','right'].includes(p.side))prefs.side=p.side;if(names[p.kind])prefs.kind=p.kind;if(Number.isFinite(p.ratio))prefs.ratio=p.ratio;} catch(e){}
   let ctx,question,opened=false,kind=prefs.kind,frame,ready=false,loadTimer,resizeObserver,request=0,drag=null,allowUnmatched=false;
@@ -28,7 +28,7 @@ window.ZS_SPLIT = (() => {
   function update(q){const changed=question?.id!==q?.id;question=q||null;if(!question&&opened)close();updateButton();if(opened&&changed)locate();}
   function status(text,missing=false){const box=$('studyReaderStatus');box.textContent=text;box.classList.toggle('missing',missing);}
   function flushReader(){try{const w=frame?.contentWindow;w?.ANNO?.flush();return w?.ZS?.flushLocal()||Promise.resolve();}catch(e){return Promise.resolve();}}
-  function createFrame(target){const previous=frame;ready=false;const f=document.createElement('iframe');frame=f;f.title='整本'+names[kind];f.id='studyReaderFrame';const url=new URL(location.href);url.search='?n=129&reader=1';url.hash='/lect/'+kind+'/'+target;f.src=url.href;$('studyReaderContent').replaceChildren(f);
+  function createFrame(target){const previous=frame;ready=false;const f=document.createElement('iframe');frame=f;f.title='整本'+names[kind];f.id='studyReaderFrame';const url=new URL(location.href);url.search='?n=132&reader=1';url.hash=kind==='tj'?'/extra/'+(target===1?'tuijie-manual-lower/1':target):'/lect/'+kind+'/'+target;f.src=url.href;$('studyReaderContent').replaceChildren(f);
     if(previous)previous.remove();clearTimeout(loadTimer);loadTimer=setTimeout(()=>{if(frame===f&&!ready)status('讲义加载较慢，请检查网络，或点击“定位本题”重试。',true);},20000);
     f.addEventListener('load',()=>{try{if(f===frame&&f.contentWindow.ZS_READERGO)readerReady();}catch(e){status('讲义未能加载，请点击“定位本题”重试。',true);}});
   }
