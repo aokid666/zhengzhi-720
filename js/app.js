@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 130;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 131;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -944,9 +944,9 @@ const APP_VER = 130;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       const figure=/下图|漫画|图示|如图|下表|表中/.test(q.stem);
       h+=`<details class="card pad p-question-source" ${figure?'open':''}><summary>${figure?'题目原图（含图表）':'查看原始题面'}</summary>${PRACTICE.questionPages(q,'question')}</details>`;
     }
+    h += `<div class="acts" style="margin-top:0"><button class="btn" onclick="ZS_ANNO('${id}','q-txt')">✍️ 在题目与选项上做笔记</button></div>`;
     if (revealed) {
-      h += `<div class="acts" style="margin-top:0"><button class="btn" onclick="ZS_ANNO('${id}','q-txt')">✍️ 在题目与选项上做笔记</button>
-        ${q.source === 'p' ? PRACTICE.questionPdf(q, 'question') : q.source === 'm' ? MANUAL.questionPdf(q, 'question') : q.source === 's' ? pdfLink('s', q.qPages, '打开原讲义题目页') : pdfLink('q', [q.qPage + PAGE_OFF.q], '打开《试题册》PDF')}</div>`;
+      h += `<div class="acts" style="margin-top:0">${q.source === 'p' ? PRACTICE.questionPdf(q, 'question') : q.source === 'm' ? MANUAL.questionPdf(q, 'question') : q.source === 's' ? pdfLink('s', q.qPages, '打开原讲义题目页') : pdfLink('q', [q.qPage + PAGE_OFF.q], '打开《试题册》PDF')}</div>`;
     }
     if (!revealed) {
       h += `<div class="acts">
