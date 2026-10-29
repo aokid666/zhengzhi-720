@@ -41,3 +41,5 @@ test('earlier answers recover only from the matching history attempt', () => {
   data.progress.q1.ts = t + 10000;
   assert.equal(app.savedSelection('q1', data.progress.q1), null);
 });
+
+test('one settled test attempt is recorded once when a submission is retried',()=>{const data={progress:{},flags:{},hist:{}};const app=appWithData(data);app.setProg('q-test',true,false,['B'],'batch-1:q-test');app.setProg('q-test',true,false,['B'],'batch-1:q-test');assert.equal(data.progress['q-test'].tries,1);assert.equal(data.progress['q-test'].rights,1);app.setProg('q-test',false,false,['A'],'batch-2:q-test');assert.equal(data.progress['q-test'].tries,2);});

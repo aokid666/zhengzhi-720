@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 129;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -472,6 +472,10 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (lastQId() && lastQId().startsWith('pr-')) { try { await PRACTICE.ensureQuestion(lastQId(),S); } catch(e) { console.error(e); } }
     migrateGuess();
     migrateAnnoKeys();
+    await window.TEST_MODE?.init({getQ:id=>S.byId[id],sandbox:inSb,
+      ensure:ids=>Promise.all(ids.filter(id=>id.startsWith('pr-')).map(id=>PRACTICE.ensureQuestion(id,S))),
+      commit:(id,right,sel,attempt)=>setProg(id,right,false,sel,attempt),
+      go:h=>{if(S.route===h)renderQuestion(h.slice(2));else go(h);},render:renderQuestion});
     window.ZS_SPLIT?.init({target:splitTarget,beforeLayout:()=>{stopRestore();flushEditors();if(ANNO.on)ANNO.close();},reflow:()=>{if(!ANNO.on)ANNO.renderScope();}});
     window.addEventListener('hashchange', route);
     route();
@@ -524,8 +528,10 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     return Math.floor(s2 / 60) + ' 分 ' + String(s2 % 60).padStart(2, '0') + ' 秒';
   };
   const dayKey = ts => { const d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
-  function setProg(id, right, guess, sel) {
+  function setProg(id, right, guess, sel, testAttempt) {
     const p = ZS.data.progress[id] = ZS.data.progress[id] || { tries: 0, rights: 0, rv: 0 };
+    if(testAttempt && p.testAttempt===testAttempt)return;
+    if(testAttempt)p.testAttempt=testAttempt;
     p.tries = (p.tries || 0) + 1;
     if (right) p.rights = (p.rights || 0) + 1;
     p.s = right ? 'right' : 'wrong';
@@ -607,6 +613,7 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     let h = location.hash.replace(/^#\/?/, '');
     try { h = decodeURIComponent(h); } catch (e) { }
     if (S.remotePending) loadSession();
+    window.TEST_MODE?.leave(h);
     if (h !== S.route) {
       if(renderedRoute === S.route)browsePositions.set(S.route, pageScrollY());
       stopRestore();
@@ -650,7 +657,9 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (nd && nd.ro) nd.ro.disconnect(); nd = null;
     document.body.classList.remove('notedraw');
     $('#view').innerHTML = inner;
-    window.ZS_SPLIT?.update(!loading&&S.route.startsWith('q/')?S.byId[S.route.slice(2)]:null);
+    const currentQuestion=!loading&&S.route.startsWith('q/')?S.byId[S.route.slice(2)]:null;
+    if(currentQuestion)window.TEST_MODE?.decorate(currentQuestion);
+    window.ZS_SPLIT?.update(currentQuestion&&!window.TEST_MODE?.testing(currentQuestion)?currentQuestion:null);
     S.remotePending = false;
     const hint = $('#syncRemoteHint'); if (hint) hint.hidden = true;
     updateSyncStatus();
@@ -664,7 +673,7 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     bar.classList.toggle('show', !!on);
     document.body.classList.toggle('hasqnav', !!on);
     const info = document.getElementById('qnavInfo');
-    const Q = S.q;
+    const Q = window.TEST_MODE?.isReview(S.curId)?null:S.q;
     const qk = Q ? Q.ids.indexOf(S.curId) : -1;
     if (info) info.textContent = on ? (qk >= 0 ? (qk + 1) + ' / ' + Q.ids.length : (idx + 1) + ' / ' + qPool(S.curId).length) : '';
     const pv = document.getElementById('qnavPrev'), nx = document.getElementById('qnavNext');
@@ -682,6 +691,8 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (fn) fn.disabled = !on || atLast;
   }
   window.ZS_QNAV = d => {
+    const reviewed=window.TEST_MODE?.pool(S.curId);
+    if(reviewed){const i=reviewed.findIndex(q=>q.id===S.curId)+d;if(i<0||i>=reviewed.length)return ZS.toast('本次测试复习到这里了');go('q/'+reviewed[i].id);return;}
     if (S.q) {
       const k = S.q.ids.indexOf(S.curId);
       const m = (k < 0 ? 0 : k) + d;
@@ -846,7 +857,7 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
 
   /* ---------- 题目 ---------- */
-  function qPool(id) { const q=S.byId[id]; return q && q.source === 'p' ? PRACTICE.pool(id) : q && q.exerciseKind === 'judgement' ? (S.manualJudgeIds && S.manualJudgeIds.includes(id) ? S.manualJudgeIds.map(k=>S.byId[k]).filter(Boolean) : (S.judgeQs || [])) : q && q.source === 'm' ? (S.sprintQs || []) : S.qs; }
+  function qPool(id) { const reviewed=window.TEST_MODE?.pool(id);if(reviewed)return reviewed;const q=S.byId[id]; return q && q.source === 'p' ? PRACTICE.pool(id) : q && q.exerciseKind === 'judgement' ? (S.manualJudgeIds && S.manualJudgeIds.includes(id) ? S.manualJudgeIds.map(k=>S.byId[k]).filter(Boolean) : (S.judgeQs || [])) : q && q.source === 'm' ? (S.sprintQs || []) : S.qs; }
   function qIndexOf(id) { return qPool(id).findIndex(q => q.id === id); }
 
   function renderQuestion(id) {
@@ -857,16 +868,18 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     }
     if (!q) { shell('<div class="empty">题目不存在</div>'); return; }
     S.cur = q; S.curId = id;
+    const testing=window.TEST_MODE?.prepare(q)||false, testResult=window.TEST_MODE?.result(id);
     setLastQ(id);
     if (q.source === 'p' && q.type !== 'choice') { clearInterval(S._mt); return PRACTICE.renderQuestion(q, {shell,showQNav,P,flag,isWrongNow,isDone,setProg,qIndexOf,renderQuestion,renderNote,paintLect,needLect,S}); }
     showQNav(true, qIndexOf(id));
-    const p = P(id);
+    const p = testResult?Object.assign({},P(id)||{tries:1,rights:0},{s:testResult.right?'right':'wrong',sel:testResult.sel}):P(id);
     const sbRec = inSb(id) ? (S.sb && S.sb[id]) : null;
-    const answered = inSb(id) ? !!sbRec : (!!(p && p.s) && !S['redo_' + id]);
-    const revealed = answered || !!S['rev_' + id];
+    const answered = !testing && (testResult || (inSb(id) ? !!sbRec : (!!(p && p.s) && !S['redo_' + id])));
+    const revealed = !testing && (answered || !!S['rev_' + id]);
     if (revealed) { needLect().then(() => { if (S.cur === q && !q._lectDone) { q._lectDone = 1; paintLect(q); } }); }
     const saved = answered && !sbRec ? savedSelection(id, p) : null;
-    const sel = sbRec ? sbRec.sel : answered ? (saved || []) : (S['sel_' + id] || []);
+    const sel = testing?TEST_MODE.draft(id):testResult?testResult.sel:sbRec ? sbRec.sel : answered ? (saved || []) : (S['sel_' + id] || []);
+    if(testing)S['sel_'+id]=sel.slice();
     /* 模拟考计时器 */
     clearInterval(S._mt);
     if (S.q && S.q.mode === 'mock' && S.q.start) {
@@ -884,7 +897,7 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         <button class="iconbtn" onclick="ZS_GO('${q.source === 'p' ? 'sprint/practice/'+PRACTICE.collectionId(q.bookId) : q.exerciseKind === 'judgement' ? 'sprint/judgements/all/'+q.blockId : q.source === 'm' ? 'sprint/questions' : 'l/'+q.moduleIdx+'-'+q.chapter}')" title="返回题目目录">☰</button>
         <span class="idx">${q.source === 'p' ? esc(q.module+' · '+q.chapter)+' · 原题 '+q.originalNo : esc(q.chapter)+' 第 '+q.no+' 题'}</span>
         <span class="chip">${esc(q.section)}</span>
-        ${S.q ? `<span class="qchip">${QMODES[S.q.mode] || '📖 复习'} ${S.q.ids.indexOf(id) + 1}/${S.q.ids.length}${S.q.mode === 'mock' ? ' · <b id="mockTime">00:00</b>' : ''}<button onclick="ZS_QEXIT()" title="离开队列（可在底部「队列」继续）">✕</button></span>` : ''}
+        ${S.q&&!testResult ? `<span class="qchip">${QMODES[S.q.mode] || '📖 复习'} ${S.q.ids.indexOf(id) + 1}/${S.q.ids.length}${S.q.mode === 'mock' ? ' · <b id="mockTime">00:00</b>' : ''}<button onclick="ZS_QEXIT()" title="离开队列（可在底部「队列」继续）">✕</button></span>` : ''}
         <span class="sp"></span>
         ${revealed ? `<button class="iconbtn" onclick="ZS_GONOTE('${id}')">📝</button>` : ''}
         <button class="iconbtn ${flag(id, 'star') ? 'on' : ''}" onclick="ZS_FLAG('${id}','star')">★</button>
@@ -920,8 +933,8 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     }
     if (!revealed) {
       h += `<div class="acts">
-        <button class="btn main" onclick="ZS_SUBMIT('${id}')">提交答案</button>
-        <button class="btn" onclick="ZS_REVEAL('${id}')">直接看答案</button>
+        <button class="btn main" onclick="ZS_SUBMIT('${id}')">${testing?'保存本题':'提交答案'}</button>
+        ${testing?`<button class="btn" id="testFinishBottom" onclick="TEST_MODE.submit('${id}')">提交测试</button>`:`<button class="btn" onclick="ZS_REVEAL('${id}')">直接看答案</button>`}
         <button class="btn" onclick="ZS_CLR('${id}')">清除选择</button>
       </div>`;
     } else if (answered) {
@@ -983,7 +996,7 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       h += `<div id="noteSection"></div>`;
     } else {
       h += `<div class="card pad" style="margin-top:12px;text-align:center;color:var(--ink3)" class="tiny">
-        🔒 做完本题后才会显示解析、讲义与你的笔记</div>`;
+        ${testing?'🔒 提交测试后统一显示解析、讲义和结果':'🔒 做完本题后才会显示解析、讲义与你的笔记'}</div>`;
     }
     shell(h);
     if (revealed) {
@@ -2087,6 +2100,8 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const manualBox = $('#lectM'); if(manualBox) manualBox.style.display = t === 'm' ? '' : 'none';
   };
   window.ZS_SEL = (id, k) => {
+    const tq=S.byId[id];
+    if(window.TEST_MODE?.testing(tq)){const sel=TEST_MODE.draft(id),i=sel.indexOf(k);if(i>=0)sel.splice(i,1);else{if(!tq.multi)sel.length=0;sel.push(k);}TEST_MODE.stage(tq,sel);renderQuestion(id);return;}
     /* 已经作答 / 已经看过答案的题，不允许再改选项，以免改掉「你选了 X」的记录 */
     if (inSb(id)) {
       if (S.sb && S.sb[id]) return ZS.toast('本题已在重做区作答，点「重做本题」可重做');
@@ -2100,10 +2115,11 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     else { if (!q.multi) sel.length = 0; sel.push(k); }
     renderQuestion(id);
   };
-  window.ZS_CLR = id => { S['sel_' + id] = []; renderQuestion(id); };
+  window.ZS_CLR = id => {if(window.TEST_MODE?.testing(S.byId[id]))TEST_MODE.stage(S.byId[id],[]);S['sel_' + id] = []; renderQuestion(id); };
   window.ZS_SUBMIT = id => {
     const q = S.byId[id], sel = S['sel_' + id] || [];
     if (!sel.length) return ZS.toast('先选一个答案');
+    if(window.TEST_MODE?.testing(q)){TEST_MODE.stage(q,sel);renderQuestion(id);return ZS.toast('已保存本题，提交测试后统一公布结果');}
     const ok = sel.slice().sort().join('') === q.answer.split('').sort().join('');
     if (inSb(id)) {
       S.sb = S.sb || {}; S.sb[id] = { sel: sel.slice(), right: ok };
@@ -2117,9 +2133,10 @@ const APP_VER = 128;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const r = document.querySelector('#view .res');
     if (r) setTimeout(() => r.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
   };
-  window.ZS_REVEAL = id => { S['rev_' + id] = true; renderQuestion(id); };
+  window.ZS_REVEAL = id => {if(window.TEST_MODE?.testing(S.byId[id]))return ZS.toast('请先提交测试，再看答案和解析');S['rev_' + id] = true; renderQuestion(id); };
   /* 重做：保留历史次数与复习进度，只把本题切回「待作答」状态 */
   function doRedo(id) {
+    window.TEST_MODE?.forget(id);
     if (S.byId[id] && S.byId[id].source === 'p') PRACTICE.reset(id);
     S['redo_' + id] = true; delete S['rev_' + id];if(window.HAT_CLOZE)HAT_CLOZE.reset(id,S); S['sel_' + id] = [];
     if ((ZS.data.flags[id] || {}).guess) { ZS.data.flags[id].guess = false; ZS.data.flags[id].ts = Date.now(); ZS.save(); }
