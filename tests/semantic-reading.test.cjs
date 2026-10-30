@@ -71,3 +71,21 @@ test('separate examination categories have precise passages and remaining gaps s
  const modern=extra.items['pr-tuijie8-choice-3-19'].refs.filter(e=>e.method==='question-reviewed-reading');assert(modern.some(e=>e.page===116&&e.covers==='D'));assert(modern.every(e=>!e.partial));
  const market=extra.items['pr-tuijie8-choice-8-22'].refs.filter(e=>e.method==='question-reviewed-reading');assert(market.some(e=>e.source==='tuijie-manual-lower'&&e.page===16&&e.covers==='AB'));
 });
+
+test('history review keeps complete distinctions, partial textbook coverage and split-page context',()=>{
+ const n=read('data/lecture-links/tuijie8.json'),x=read('data/extra-links/tuijie8.json');
+ const item=id=>n.items['pr-tuijie8-choice-'+id];
+ const row=id=>manifest.questions.find(q=>q.id==='pr-tuijie8-choice-'+id);
+ const get=(id,k)=>item(id)[k];
+ const dispute=row('4-03');assert(dispute.references.some(e=>e.kind==='m'&&e.page==='u158'&&e.quote.includes('第一次正面交锋')));
+ const land=row('4-08');assert(land.references.some(e=>e.kind==='m'&&e.quote.includes('只有使用权，没有所有权')));
+ const co=get('4-28','s').find(e=>e.method==='question-reviewed-reading');assert.equal(co.covers,'AB');assert(!co.partial);
+ assert(get('4-28','m').some(e=>e.partial&&e.covers==='B'));
+ const movement=x.items['pr-tuijie8-choice-4-24'].refs.filter(e=>e.method==='question-reviewed-reading');
+ assert(movement.some(e=>e.source==='tuijie-manual-lower'&&e.page===27&&e.contextOnly&&e.covers===''));
+ assert(movement.some(e=>e.source==='tuijie-manual-lower'&&e.page===28&&e.covers==='ABC'&&!e.partial));
+ const theory=get('4-20','k');assert(theory.some(e=>e.page==='256'));assert(theory.some(e=>e.page==='257'));
+ const government=get('4-21','m');assert(government.some(e=>e.page==='u161'));assert(government.some(e=>e.page==='u162'));
+ const method=row('4-31');assert(method.references.every(e=>e.covers==='BCD'&&e.quote.includes('思想方法')));
+ assert(get('4-24','s').some(e=>e.partial&&e.covers==='BC'));
+});
