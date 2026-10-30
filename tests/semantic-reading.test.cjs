@@ -46,3 +46,16 @@ test('a table header is context, and a negative question cites the correction in
  assert.equal(new Set(total.map(e=>e.page)).size,total.length,'the same page image must not be repeated');
  assert(total.some(e=>e.note.includes('原理应用依据')));
 });
+
+test('close reading distinguishes local participation, complete enumerations and cross-page economic theory',()=>{
+ const n=read('data/lecture-links/tuijie8.json'),x=read('data/extra-links/tuijie8.json');
+ const refs=(id,kind)=>n.items['pr-tuijie8-choice-'+id]?.[kind]?.filter(e=>e.method==='question-reviewed-reading')||[];
+ assert.equal(refs('3-30','k').map(e=>e.covers).join(''),'ABCD');
+ assert.equal(refs('6-20','s').map(e=>e.covers).join(''),'ABCD');
+ const local=x.items['pr-tuijie8-choice-7-24'].refs.filter(e=>e.method==='question-reviewed-reading');
+ assert(local.every(e=>e.partial&&!e.covers.includes('D')),'local participation must not imply unproven democratic literacy');
+ const money=refs('8-04','k');assert(money.some(e=>e.page==='114'));assert(money.some(e=>e.page==='164'));
+ const ai=refs('6-02','m');assert(ai.some(e=>e.page==='u015'));assert(ai.some(e=>e.page==='u016'));
+ assert(refs('8-24','k').every(e=>e.covers==='B'&&e.partial));
+ const modern=refs('3-19','k');assert(modern.some(e=>e.page==='181'&&e.covers==='C'));
+});
