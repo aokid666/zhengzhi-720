@@ -62,7 +62,7 @@ window.MANUAL = (() => {
     if(q.blockId&&byBlock[q.blockId]){box.innerHTML=blockHtml(byBlock[q.blockId]);return;}
     const refs=(q.mRefs?.length?q.mRefs:(matches[q.id]||[]).map(h=>h.page))||[];
     const ids=Array.from(new Set((q.source==='m'?q.qRefs:[]).concat(refs)));
-    box.innerHTML=ids.length?LECTURE_LINKS.evidence(q,'m')+'<div class="tiny muted">'+(refs.length?'相关原文与截图如下，可结合本题考点核对。':'本题原页如下；没找到对应的理论讲解页。')+'</div>'+ids.map(id=>pageHtml(id)).join(''):'<div class="hint">暂未定位到背诵手册中可确认的对应讲解。</div>';
+    box.innerHTML=ids.length?LECTURE_LINKS.evidence(q,'m')+'<div class="tiny muted">'+(refs.length?'相关原文与截图如下，可结合本题考点核对。':'本题原页如下；没找到对应的理论讲解页。')+'</div>'+ids.map(id=>pageHtml(id)).join(''):LECTURE_LINKS.missing(q,'背诵手册');
   }
   // 分屏与题目下方的手册区采用同一套匹配，优先展示讲解原页。
   function referencePages(q) {

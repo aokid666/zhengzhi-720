@@ -16,10 +16,11 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -u scripts/recheck-missing-lectures.py
-      - run: python -m unittest discover -s tests -p lecture_links_test.py
+      - run: python -m unittest discover -s tests -p 'lecture*_test.py'
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - run: npm install --no-save --package-lock=false happy-dom@21.0.4 fake-indexeddb@6.2.6
       - run: node --test tests/*.test.cjs
       - run: git diff --check
       - name: Save verified additions

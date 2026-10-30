@@ -15,3 +15,9 @@ test('confirmed wrong page correction requires both the same question and the sa
  const changed={...q,mRefs:['u100']};await api.apply([changed]);assert.equal(changed.mRefs[0],'u100');
  await api.apply([q]);assert.equal(q.mRefs[0],'l015');assert.equal(q.mRefs.length,1);
 });
+
+test('failed reference download is distinct from an unmatched passage and can be retried',async()=>{
+ let failed=true;const q={id:'retry-test',module:'马原',stem:'意识的含义',answer:'A',options:{A:'人脑的机能'},kPages:[],sPages:[],mRefs:[]};const ctx={window:{},console:{warn(){}},fetch:async()=>({ok:!failed,json:async()=>({items:{'retry-test':{sig:ctx.window.LECTURE_LINKS.signature(q),k:[{page:'18',quote:'意识是人脑的机能和属性'}]}}})})};vm.runInNewContext(src,ctx);const api=ctx.window.LECTURE_LINKS;
+ await api.apply([q]);assert.equal(q._lectureLinkError,true);assert(api.missing(q,'知识清单').includes('加载失败'));assert(api.missing(q,'知识清单').includes('重新加载'));assert(!api.missing(q,'知识清单').includes('暂未定位'));
+ failed=false;await api.apply([q]);assert.equal(q._lectureLinkError,false);assert.equal(q.kPages[0],18);assert(api.missing(q,'速成班讲义').includes('暂未定位'));assert(!api.missing(q,'速成班讲义').includes('加载失败'));
+});

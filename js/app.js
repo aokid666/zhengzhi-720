@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 133;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 134;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -1189,6 +1189,8 @@ const APP_VER = 133;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     </div>`;
   }
 
+  window.ZS_RETRYLECTURES = async id => { const q=S.byId[id];if(!q)return;await LECTURE_LINKS.apply([q]);if(S.curId===id)paintLect(q); };
+
   function paintLect(q) {
     MANUAL.paintQuestion(q);
     window.EXTRA_LECTURES?.render(q);
@@ -1196,7 +1198,7 @@ const APP_VER = 133;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       const box = $('#lect' + t.toUpperCase());
       if (!box) return;
       const pages = t === 'k' ? q.kPages : q.sPages;
-      if (['m','p'].includes(q.source) && (!pages || !pages.length)) { box.innerHTML = '<div class="hint">暂未定位到'+(t === 'k' ? '知识清单' : '速成班讲义')+'中可确认的对应讲解。</div>'; return; }
+      if (['m','p'].includes(q.source) && (!pages || !pages.length)) { box.innerHTML = LECTURE_LINKS.missing(q,t === 'k' ? '知识清单' : '速成班讲义'); return; }
       const dict = t === 'k' ? S.lk : S.ls;
       let txt = (pages || []).map(n => dict[n] || '').join('\n').trim();
       if (!txt) txt = '（未检索到对应讲义文字，请以截图为准）';

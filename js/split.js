@@ -28,7 +28,7 @@ window.ZS_SPLIT = (() => {
   function update(q){const changed=question?.id!==q?.id;question=q||null;if(!question&&opened)close();updateButton();if(opened&&changed)locate();}
   function status(text,missing=false){const box=$('studyReaderStatus');box.textContent=text;box.classList.toggle('missing',missing);}
   function flushReader(){try{const w=frame?.contentWindow;w?.ANNO?.flush();return w?.ZS?.flushLocal()||Promise.resolve();}catch(e){return Promise.resolve();}}
-  function createFrame(target){const previous=frame;ready=false;const f=document.createElement('iframe');frame=f;f.title='整本'+names[kind];f.id='studyReaderFrame';const url=new URL(location.href);url.search='?n=133&reader=1';url.hash=kind==='tj'?'/extra/'+(target===1?'tuijie-manual-upper/1':target):'/lect/'+kind+'/'+target;f.src=url.href;$('studyReaderContent').replaceChildren(f);
+  function createFrame(target){const previous=frame;ready=false;const f=document.createElement('iframe');frame=f;f.title='整本'+names[kind];f.id='studyReaderFrame';const url=new URL(location.href);url.search='?n=134&reader=1';url.hash=kind==='tj'?'/extra/'+(target===1?'tuijie-manual-upper/1':target):'/lect/'+kind+'/'+target;f.src=url.href;$('studyReaderContent').replaceChildren(f);
     if(previous)previous.remove();clearTimeout(loadTimer);loadTimer=setTimeout(()=>{if(frame===f&&!ready)status('讲义加载较慢，请检查网络，或点击“定位本题”重试。',true);},20000);
     f.addEventListener('load',()=>{try{if(f===frame&&f.contentWindow.ZS_READERGO)readerReady();}catch(e){status('讲义未能加载，请点击“定位本题”重试。',true);}});
   }
