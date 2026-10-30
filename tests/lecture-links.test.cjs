@@ -33,3 +33,14 @@ test('a passage covering only some correct options is visibly labeled before exp
  assert(html.slice(0,html.indexOf('</summary>')).includes('部分选项依据'));
  assert(!api.evidence({lectureEvidence:{k:[{page:'17',quote:'原文'}]}},'k').includes('部分选项依据'));
 });
+
+test('reviewed additions keep original pages, reject independent page edits and remain idempotent',async()=>{
+ const q={id:'cross-page',module:'马原',stem:'两个阶段的共同点',answer:'D',options:{D:'利用市场'},kPages:[114]};let row;
+ const ctx={window:{},console,fetch:async()=>({ok:true,json:async()=>({items:{'cross-page':row}})})};vm.runInNewContext(src,ctx);const api=ctx.window.LECTURE_LINKS;
+ row={sig:api.signature(q),extend:{k:[114]},k:[{page:'114',quote:'列宁原文'},{page:'164',quote:'邓小平原文'}]};
+ const changed={...q,kPages:[199]};await api.apply([changed]);assert.deepEqual(changed.kPages,[199]);assert(!changed.lectureEvidence);
+ const stale={...q,stem:'别人修改后的题干'};await api.apply([stale]);assert.deepEqual(stale.kPages,[114]);assert(!stale.lectureEvidence);
+ await api.apply([q]);assert.equal(JSON.stringify(q.kPages),'[114,164]');assert(api.evidence(q,'k').includes('邓小平原文'));
+ await api.apply([q]);assert.equal(JSON.stringify(q.kPages),'[114,164]');assert.equal(q.lectureEvidence.k.length,2);
+ assert(!q.progress);assert.equal(q.stem,'两个阶段的共同点');
+});

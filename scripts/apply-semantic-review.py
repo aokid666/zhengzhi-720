@@ -102,7 +102,9 @@ def main():
     assert item['sig']==sig
     if panel in ('k','s','m'):
      if q.get(r.FIELDS[panel]):
-      detail['pages'].append({'page':ref['page'],'status':'native-reference-preserved'});continue
+      # Bind additive reading to the exact original page list; do not change the bank.
+      assert panel not in item.get('replace',{}),(q['id'],panel,'independent page correction requires review')
+      item.setdefault('extend',{})[panel]=copy.deepcopy(q[r.FIELDS[panel]])
      dest=item.setdefault(panel,[])
      key=lambda e:(str(e['page']),e['quote'])
     else:
