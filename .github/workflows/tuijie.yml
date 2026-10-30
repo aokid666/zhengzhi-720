@@ -20,4 +20,5 @@ jobs:
       - run: node tests/practice-ui.mjs
       - run: node tests/test-mode-ui.mjs
       - run: node tests/tuijie-ui.mjs
+      - run: node tests/lecture-race-ui.mjs
       - run: git diff --check

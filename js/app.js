@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 136;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 137;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -514,10 +514,16 @@ const APP_VER = 136;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     window.addEventListener('pagehide', () => { flushEditors(); ZS.push(true); });
   }
 
+  let lectureLoading = null;
   async function needLect() {
-    if (Object.keys(S.lk).length) return;
-    try { S.lk = await (await fetch('data/lecture-k.json?v=' + DATA_VER)).json(); } catch (e) { S.lk = {}; }
-    try { S.ls = await (await fetch('data/lecture-s.json?v=' + DATA_VER)).json(); } catch (e) { S.ls = {}; }
+    if(Object.keys(S.lk).length && Object.keys(S.ls).length)return;
+    if(!lectureLoading)lectureLoading=(async()=>{
+      await Promise.all([['lk','lecture-k'],['ls','lecture-s']].map(async([key,file])=>{
+        if(Object.keys(S[key]).length)return;
+        try{const response=await fetch('data/'+file+'.json?v='+DATA_VER);if(!response.ok)throw Error('讲义文字加载失败');S[key]=await response.json();}catch(e){S[key]={};}
+      }));
+    })().finally(()=>{lectureLoading=null;});
+    return lectureLoading;
   }
 
   /* ---------- 进度 ---------- */
@@ -1022,7 +1028,7 @@ const APP_VER = 136;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     window.QUESTION_COPY?.mount(q);
     if (revealed) {
       q._lectDone = 0;
-      needLect().then(() => { paintLect(q); ANNO.renderScope(); });
+      needLect().then(() => { if(S.cur===q && S.route==='q/'+q.id){paintLect(q);ANNO.renderScope();} });
       renderNote(id);
       ANNO.renderScope();
     }
@@ -1190,9 +1196,17 @@ const APP_VER = 136;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     </div>`;
   }
 
+  window.ZS_FINDQLECTURE = async (id,kind) => {
+    const q=S.byId[id];if(!q)return;const keyword=LECTURE_LINKS.query(q);
+    if(['tj','history'].includes(kind)){try{await EXTRA_LECTURES.search(q,kind==='tj'?'tuijie':'history',keyword);}catch(e){ZS.toast(e.message);}return;}
+    if(!['k','s','m'].includes(kind))return;await needLect();if(S.curId!==id||!S.route.startsWith('q/'))return;
+    const hits=docPageResults(kind,keyword),page=hits[0]?.n||((PAGE_OFF[kind]||0)+1);S.docFind={kind,keyword,page};S.docSearchQ=keyword;S.searchDocKind=kind;go('lect/'+kind+'/'+(page-(PAGE_OFF[kind]||0)));
+  };
+
   window.ZS_RETRYLECTURES = async id => { const q=S.byId[id];if(!q)return;await LECTURE_LINKS.apply([q]);if(S.curId===id)paintLect(q); };
 
   function paintLect(q) {
+    if(S.cur!==q || S.route!=='q/'+q.id)return;
     MANUAL.paintQuestion(q);
     window.EXTRA_LECTURES?.render(q);
     ['k', 's'].forEach(t => {
@@ -1448,11 +1462,12 @@ const APP_VER = 136;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
   function debounce(f, ms) { let t; return function () { clearTimeout(t); t = setTimeout(f, ms); }; }
   function docPageResults(kind, keyword) {
-    if (!keyword) return [];
+    if (!keyword || !keyword.replace(/\s/g,'')) return [];
+    const needle=keyword.replace(/\s/g,'');
     const dict = kind === 'm' ? Object.fromEntries((MANUAL.data?.pages||[]).map((p,i)=>[i+1,p.text])) : kind === 'k' ? S.lk : S.ls;
     return Object.keys(dict).map(Number).sort((a, b) => a - b).flatMap(n => {
       const t = dict[n] || '';
-      const count = t.split(keyword).length - 1;
+      const count = t.replace(/\s/g,'').split(needle).length - 1;
       return count ? [{ n, count, text: t }] : [];
     });
   }
@@ -1748,7 +1763,7 @@ const APP_VER = 136;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     const validStart=Number.isFinite(initial)&&initial>=1&&initial<=total;
     if (S.route.split('/')[0] !== 'lect' || S.route.split('/')[1]!==kind) return;
     const find = S.docFind && S.docFind.kind === kind ? S.docFind : null;
-    const collapsed = localStorage.getItem('zz720.lectbarCollapsed') === '1';
+    const collapsed = localStorage.getItem('zz720.lectbarCollapsed') === '1' && !(find&&find.keyword);
     let h = `<div class="sec-title">📚 ${esc(name)} · 全 ${total} 页</div>
       <div class="card pad lectbar${collapsed ? ' collapsed' : ''}" id="lectbar">
         <div class="lectbar-head"><strong>📚 ${esc(name)} · 工具栏</strong>
