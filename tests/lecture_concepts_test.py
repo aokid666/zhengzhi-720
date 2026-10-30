@@ -12,6 +12,12 @@ class ConceptTests(unittest.TestCase):
   fs=[(m.canon('剩余价值来源'),m.canon('揭示了剩余价值的真正来源'),'pair')]
   self.assertEqual(c.recover({'stem':'揭示来源','answer':'A','options':{'A':'揭示了剩余价值的真正来源'}},fs,''),[])
   self.assertEqual(c.heading({'stem':'这个观点的内容','answer':'A','options':{'A':'人民'}},''),[])
+ def test_incidental_words_and_generic_cloze_answers_are_not_definitions(self):
+  c=m.DefinitionCorpus('s',{'192':'放弃了无产阶级的领导权，导致大革命失败。'},{})
+  q={'stem':'中国革命的中心问题是','options':{'A':'无产阶级领导权'},'answer':'A'}
+  self.assertEqual(c.heading(q,''),[])
+  q={'type':'cloze','stem':'劳动价值论揭示了商品经济的规律','cloze':{'masks':[{'text':'一般规律'}]}}
+  self.assertEqual(m.terms(q),[])
  def test_canonical_normalization_preserves_original_coordinates(self):
   t,pos=m.canon('物质的根本属性',True);self.assertEqual(t,'物质根本属性');self.assertEqual(''.join('物质的根本属性'[i] for i in pos),t)
 if __name__=='__main__':unittest.main()

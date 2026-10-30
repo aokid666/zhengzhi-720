@@ -25,6 +25,28 @@ def facts(q):
  return list(dict.fromkeys((canon(p),canon(a),t) for p,a,t in result if len(canon(a))>=2))
 
 GENERIC={'工人阶级','无产阶级','人民群众','中国共产党','社会主义','资本主义','生产力','生产关系','人民','实践','价值','真理','认识','物质','运动','一般规律','精神境界','政治建设','生产方式','社会发展','经济发展','历史发展','政治制度','理论体系','历史进步','科学技术','根本原因','精神力量','重要保障','重要作用'}
+SEMANTIC_TERMS=[
+ (r'永恒.*(?:运动|变化).*发展', ['发展是一个过程']),
+ (r'感性认识.*(?:渗透|理性)|理性认识.*感性', ['感性认识与理性认识','感性认识和理性认识']),
+ (r'意识活动.*创造|意识.*调控.*(?:生理|行为)', ['意识能动性']),
+ (r'认识.*(?:源于|来源于|来自).*实践', ['实践是认识来源']),
+ (r'透过现象.*本质|现象.*(?:把握|揭示).*本质', ['现象与本质','现象和本质']),
+ (r'先进文化.*社会|文化.*(?:精神动力|引导.*社会)', ['社会意识作用','社会意识相对独立性']),
+ (r'单位.*商品.*价值量|单位时间.*商品.*(?:数量|多)', ['商品价值量','劳动生产率']),
+ (r'矛盾.*特殊性|具体问题具体分析', ['矛盾特殊性','矛盾普遍性和特殊性']),
+ (r'量变.*(?:质变|积累)|质变.*量变', ['量变和质变','量变与质变','量变质变规律']),
+ (r'前进.*曲折|(?:反复|倒退).*发展|发展.*(?:曲折|倒退)', ['否定之否定规律','前进性与曲折性','前进性和曲折性']),
+ (r'生产力.*生产关系|生产关系.*生产力', ['生产力与生产关系','生产力和生产关系']),
+ (r'^资本价值构成$', ['价值构成']),
+ (r'同历史前进方向是否符合', ['新事物']),
+ (r'任何事物.*(?:中介|联系)', ['联系具有普遍性']),
+ (r'放在普遍联系.*系统', ['联系具有普遍性','系统观念']),
+ (r'发现并利用规律|认识和利用规律', ['规律客观性','尊重客观规律']),
+ (r'主体与客体相互作用.*过程和结果', ['认识本质']),
+]
+def semantic_terms(q):
+ values=[q.get('options',{}).get(k,'') for k in q.get('answer','')]+[m['text'] for m in q.get('cloze',{}).get('masks',[])]
+ return [term for pattern,terms in SEMANTIC_TERMS if any(re.search(pattern,canon(value)) for value in values) for term in terms]
 def terms(q):
  out=[]
  for k in q.get('answer',''):
@@ -38,6 +60,7 @@ def terms(q):
  if q.get('type')=='cloze':
   out.extend(canon(m['text']) for m in q.get('cloze',{}).get('masks',[]) if 4<=len(canon(m['text']))<=24 and canon(m['text']) not in GENERIC)
   if '党的建设' in q.get('stem','') and any(canon(m['text'])=='政治建设' for m in q.get('cloze',{}).get('masks',[])):out.append('党政治建设')
+ out.extend(semantic_terms(q))
  return list(dict.fromkeys(out))
 
 class DefinitionCorpus(r.Corpus):
@@ -52,14 +75,14 @@ class DefinitionCorpus(r.Corpus):
   for term in terms(q):
    pages=set(self.ix.get(term[:5],())) if len(term)>=5 else {p for p,v in self.pages.items() if term in v['text']}
    pages={p for p in pages if term in self.pages[p]['text']}
-   if not pages or len(pages)>8:continue
+   if not pages:continue
    for pn in pages:
     p=self.pages[pn]
     if module and p['modules'] and module not in p['modules']:continue
     offset=0
     for line in p['raw'].splitlines(keepends=True):
      norm=canon(line);at=norm.find(term);plain=re.sub(r'^[0-9一二三四五六七八九十（）、]+','',norm);location=plain.find(term)
-     prefix=plain[:location] if location>=0 else '';prefix_ok=not prefix or bool(re.fullmatch(r'(考|坚持|必须坚持|是|指|含义|定义|重点考点[一二三四五六七八九十]*)',prefix)) or bool(re.search(r'(问题|构成|性质|概念|本质|特征|原则|属性|首要|根本|主要|著作|标志|前提|源泉|目的|任务|尺度|基础|道路|制度|方针|重点|地位|要求|条件|核心|关键|保障|牵引|统领|基点)$',prefix))
+     prefix=plain[:location] if location>=0 else '';prefix_ok=not prefix or bool(re.fullmatch(r'(考|比较|坚持|必须坚持|是|指|含义|定义|(?:专题|重点考点|考点)[一二三四五六七八九十0-9]*)',prefix)) or bool(re.search(r'(问题|构成|性质|概念|本质|特征|原则|属性|首要|根本|主要|著作|标志|前提|源泉|目的|任务|尺度|基础|道路|制度|方针|重点|地位|要求|条件|核心|关键|保障|牵引|统领|基点)$',prefix))
      is_heading=prefix_ok and location>=0 and location<=12 and len(plain)<=max(len(term)+15,32) and not re.search('不是|不能|没有|不具有|并非|错误|×',line)
      if is_heading and (location<=2 or re.search('^第|考|问题|构成|性质|概念|本质|特征|原则|属性|首要|根本|主要|著作|标志',plain[:location])):
       a=p['raw'].rfind('\n',0,max(0,offset-55))+1;z=p['raw'].find('\n',min(len(p['raw']),offset+len(line)+190));z=len(p['raw']) if z<0 else z;quote=p['raw'][a:z].strip();near=canon(quote)
