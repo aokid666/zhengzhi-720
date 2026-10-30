@@ -27,6 +27,8 @@ class RecheckCorpus(r.Corpus):
   hits={}
   for prompt,answer,typ in fs:
    if not prompt or not 8<=len(answer)<=55 or re.search('不是|不能|没有|不可能|并非|不得|不具有',answer):continue
+   definition=re.fullmatch(r'(.{2,18}?)是(.{5,35})',answer)
+   if not definition or definition[1] in ['它们','这些','其中','任何','一个','我们'] or definition[1] not in prompt:continue
    candidates=collections.Counter()
    for g in r.grams(answer):
     pages=self.ix.get(g,())
@@ -42,6 +44,8 @@ class RecheckCorpus(r.Corpus):
     if df>3:continue
     lo=max(0,best.b-65);hi=min(len(text),best.b+best.size+65);window=text[lo:hi];pb=difflib.SequenceMatcher(None,prompt,window,autojunk=False).get_matching_blocks();pm=max(b.size for b in pb)
     if pm<4:continue
+    pred=definition[2];where=text.find(pred,lo,hi)
+    if where<0 or definition[1] not in text[max(0,where-60):where]:continue
     qualifiers=[x for x in r.QUALIFIERS if x in answer or x in prompt[-90:]]
     if qualifiers and not any(x in window for x in qualifiers):continue
     # Reject an opposite statement surrounding an otherwise matching predicate.
@@ -65,11 +69,17 @@ def main():
   for p in d['pages']:
    if s['group']=='tuijie' and (p['page']<(11 if s['id'].endswith('upper') else 7) or s['id'].endswith('upper') and p['page'] in TEST):continue
    ed['tj' if s['group']=='tuijie' else 'history'][s['id']+':'+str(p['page'])]=p['text']
- corpora.update({k:RecheckCorpus('extra',v,{}) for k,v in ed.items()});old_manual=r.read('manual-matches');qs=r.pool();native_maps={};extra_maps={};counts=collections.Counter();added=[];unresolved=[]
+ corpora.update({k:RecheckCorpus('extra',v,{}) for k,v in ed.items()});old_manual=r.read('manual-matches');qs=r.pool();native_maps={};extra_maps={};counts=collections.Counter();prior_path=ROOT/'data/lecture-recheck-report.json';prior=read(prior_path) if prior_path.exists() else {};rejected=[x for x in prior.get('added',[]) if any(e['method']=='short-definition' for e in x['evidence'])];added=[x for x in prior.get('added',[]) if x not in rejected];unresolved=[]
  for qi,q in enumerate(qs):
   g=group(q)
   if g not in native_maps:
    native_maps[g]=r.read('lecture-links/'+g);extra_maps[g]=r.read('extra-links/'+g)
+   # Re-evaluate only provisional short definitions from our prior audit.
+   for old in [x for x in rejected if x['group']==g]:
+    if old['kind'] in r.FIELDS:
+     row=native_maps[g]['items'].get(old['id'],{});row[old['kind']]=[e for e in row.get(old['kind'],[]) if not any(e['page']==h['page'] and e['quote']==h['quote'] for h in old['evidence'])]
+    else:
+     row=extra_maps[g]['items'].get(old['id'],{});row['refs']=[e for e in row.get('refs',[]) if not any(e['source']+':'+str(e['page'])==h['page'] and e['quote']==h['quote'] for h in old['evidence'])]
   sig=r.signature(q);nr=native_maps[g]['items'].get(q['id'],{});er=extra_maps[g]['items'].get(q['id'],{});fs=None
   for kind in ['k','s','m','tj','history']:
    if kind=='history' and not history(q):continue
@@ -95,5 +105,7 @@ def main():
   if qi%200==0:print('Reviewed',qi,'/',len(qs),dict(counts),flush=True)
  for folder,maps in [('lecture-links',native_maps),('extra-links',extra_maps)]:
   for g,d in maps.items():d['version']=VER;dump(ROOT/'data'/folder/(g+'.json'),d)
+ for kind in ['k','s','m','tj','history']:
+  counts['before_'+kind]=prior.get('counts',{}).get('before_'+kind,counts['before_'+kind]);counts['recovered_'+kind]=sum(x['kind']==kind for x in added);counts['after_'+kind]=counts['before_'+kind]-counts['recovered_'+kind]
  report={'version':VER,'questions':len(qs),'counts':dict(counts),'added':added,'unresolved':unresolved,'sourceSha256':source_hash};dump(ROOT/'data/lecture-recheck-report.json',report);print(json.dumps(dict(counts)),flush=True)
 if __name__=='__main__':main()
