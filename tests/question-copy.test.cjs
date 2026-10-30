@@ -1,0 +1,9 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync(__dirname+'/../js/question-copy.js','utf8');const ctx={window:{},navigator:{}};vm.runInNewContext(source,ctx);const api=ctx.window.QUESTION_COPY;
+test('choice copy includes all options, correct option text and original analysis before answering',()=>{
+ const q=JSON.parse(fs.readFileSync(__dirname+'/../data/practice/tuijie8.json')).questions[0],before=JSON.stringify(q),out=api.text(q,{bookTitle:'腿姐八套卷'});assert(out.includes(q.stem));for(const k of ['A','B','C','D'])assert(out.includes(k+'. '+q.options[k]));assert(out.includes('正确答案：B. 《关于费尔巴哈的提纲》'));assert(out.includes(q.analysis[0].t));assert(!out.includes('userdata'));assert.equal(JSON.stringify(q),before);
+});
+test('matching copy keeps item labels and one-to-many answer mapping',()=>{const out=api.text({type:'matching',stem:'连线',left:[{key:'A',text:'左项'}],right:[{key:'1',text:'甲'},{key:'2',text:'乙'}],matchMap:{A:['1','2']},analysis:[{t:'原文'}]});assert(out.includes('A. 左项'));assert(out.includes('A → 1. 甲；2. 乙'));});
+test('cloze copy retains numbered blanks with separate complete answers',()=>{const out=api.text({type:'cloze',stem:'填空',cloze:{text:'甲是乙',masks:[{indices:[2],text:'乙'}]},analysis:[]});assert(out.includes('甲是【第1空】'));assert(out.includes('1. 乙'));});
+test('written self-assessment is explicit and edited explanation text can be copied',()=>{const out=api.text({type:'written',stem:'判断并订正',answer:'',analysis:[{t:'原文'}],sourceWarning:'请核对后自评'},{analysis:'我的订正说明'});assert(out.includes('本题采用自评'));assert(out.includes('我的订正说明'));assert(out.includes('请核对后自评'));assert(!out.includes('正确答案：A'));});
+test('native clipboard receives the complete text',async()=>{let copied;ctx.navigator.clipboard={writeText:async value=>copied=value};assert.equal(await api.copy('完整题目\n正确答案：B\n解析'),true);assert.equal(copied,'完整题目\n正确答案：B\n解析');});

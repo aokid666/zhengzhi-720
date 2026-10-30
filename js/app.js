@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 134;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 135;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -890,7 +890,7 @@ const APP_VER = 134;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     S.cur = q; S.curId = id;
     const testing=window.TEST_MODE?.prepare(q)||false, testResult=window.TEST_MODE?.result(id);
     setLastQ(id);
-    if (q.source === 'p' && q.type !== 'choice') { clearInterval(S._mt); return PRACTICE.renderQuestion(q, {shell,showQNav,P,flag,isWrongNow,isDone,setProg,qIndexOf,renderQuestion,renderNote,paintLect,needLect,S}); }
+    if (q.source === 'p' && q.type !== 'choice') { clearInterval(S._mt); PRACTICE.renderQuestion(q, {shell,showQNav,P,flag,isWrongNow,isDone,setProg,qIndexOf,renderQuestion,renderNote,paintLect,needLect,S}); window.QUESTION_COPY?.mount(q); return; }
     showQNav(true, qIndexOf(id));
     const p = testResult?Object.assign({},P(id)||{tries:1,rights:0},{s:testResult.right?'right':'wrong',sel:testResult.sel}):P(id);
     const sbRec = inSb(id) ? (S.sb && S.sb[id]) : null;
@@ -1019,6 +1019,7 @@ const APP_VER = 134;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         ${testing?'🔒 提交测试后统一显示解析、讲义和结果':'🔒 做完本题后才会显示解析、讲义与你的笔记'}</div>`;
     }
     shell(h);
+    window.QUESTION_COPY?.mount(q);
     if (revealed) {
       q._lectDone = 0;
       needLect().then(() => { paintLect(q); ANNO.renderScope(); });
