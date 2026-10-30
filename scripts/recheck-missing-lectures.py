@@ -8,7 +8,11 @@ TEST={19,20,31,32,38,43,53,54,58,86,87,98,99,104,119,120,131,132,143,144,157,158
 def read(p):return json.loads(p.read_text())
 def dump(p,d):p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(d,ensure_ascii=False,separators=(',',':')))
 def group(q):return q.get('bookId') or ('manual' if q.get('source')=='m' else 'original')
-def subject(q):return q.get('subject') or r.module_of(q)
+def subject(q):
+ if q.get('subject'):return q['subject']
+ prompt=r.norm(q.get('stem',''))
+ if '新时代中国特色社会主义思想' in prompt and '世界观和方法论' in prompt:return '习近平新时代中国特色社会主义思想概论'
+ return r.module_of(q)
 def history(q):return bool(re.search('史纲|近现代史|毛中特|毛泽东思想',q.get('module','')+' '+q.get('chapter','')+' '+q.get('subject','')))
 def extra_facts(q):
  fs=list(r.facts(q));stem=r.norm(q.get('stem','')+' '+q.get('cloze',{}).get('text',''));selected=[r.norm(q.get('options',{}).get(k,'')) for k in q.get('answer','') if q.get('options',{}).get(k) not in ['正确','错误']];anchors=[a for a in selected if len(a)>=4] or [stem]
