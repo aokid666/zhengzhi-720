@@ -66,7 +66,7 @@ test('separate examination categories have precise passages and remaining gaps s
  const economic=proofs('8-20','s').find(e=>e.method==='question-reviewed-reading');
  assert.equal(economic.covers,'BCD');assert(!economic.partial);assert(economic.quote.includes('福利风险'));assert(!economic.quote.includes('社会极端思潮'));
  const labor=proofs('6-19','k').find(e=>e.method==='question-reviewed-reading');assert.equal(labor.covers,'AB');assert(labor.quote.includes('劳动的成果或者产品全部归资本家所有'));
- const investigation=proofs('8-17','k').filter(e=>e.method==='question-reviewed-reading');assert(investigation.some(e=>e.page==='23'&&e.covers==='A'));assert(investigation.some(e=>e.page==='46'&&e.covers==='B'));
+ const investigation=proofs('8-17','k');assert(investigation.some(e=>e.page==='23'&&e.covers==='A'));assert(investigation.some(e=>e.page==='46'&&e.quote.includes('投身实践')));
  const historical=proofs('7-19','m').filter(e=>e.method==='question-reviewed-reading');assert(historical.every(e=>e.partial&&!e.covers.includes('D')));
  const modern=extra.items['pr-tuijie8-choice-3-19'].refs.filter(e=>e.method==='question-reviewed-reading');assert(modern.some(e=>e.page===116&&e.covers==='D'));assert(modern.every(e=>!e.partial));
  const market=extra.items['pr-tuijie8-choice-8-22'].refs.filter(e=>e.method==='question-reviewed-reading');assert(market.some(e=>e.source==='tuijie-manual-lower'&&e.page===16&&e.covers==='AB'));
