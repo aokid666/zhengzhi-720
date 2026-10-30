@@ -100,7 +100,7 @@ class DefinitionCorpus(r.Corpus):
   fs=[x for x in fs if len(x[1])>=12]
   if not fs:return []
   if self.joined is None:
-   joined={};mods={};origin={};keys=list(self.pages)
+   joined={};mods={};origin={};keys=sorted(self.pages,key=lambda key:(re.sub(r'\d+$','',str(key)),int(re.search(r'(\d+)$',str(key))[1]) if re.search(r'(\d+)$',str(key)) else 0))
    for left,right in zip(keys,keys[1:]):
     p,q=self.pages[left],self.pages[right]
     # Do not join different books or a new chapter/topic.

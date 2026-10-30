@@ -19,7 +19,7 @@ class ConceptTests(unittest.TestCase):
   q={'type':'cloze','stem':'劳动价值论揭示了商品经济的规律','cloze':{'masks':[{'text':'一般规律'}]}}
   self.assertEqual(m.terms(q),[])
  def test_page_continuation_keeps_two_verbatim_original_fragments(self):
-  data={'20':'资本周转时间由资本生产时间','21':'和资本流通时间共同组成。'}
+  data={'21':'和资本流通时间共同组成。','20':'资本周转时间由资本生产时间'}
   data.update({str(n):'这里是无关的测试背景文字，不包含待核对的资本概念。'+str(n) for n in range(22,90)})
   c=m.DefinitionCorpus('k',data,{})
   fs=[(m.canon('资本周转时间'),m.canon('资本周转时间由资本生产时间和资本流通时间共同组成'),'explanation')]
