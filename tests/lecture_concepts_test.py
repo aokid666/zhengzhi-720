@@ -18,6 +18,13 @@ class ConceptTests(unittest.TestCase):
   self.assertEqual(c.heading(q,''),[])
   q={'type':'cloze','stem':'劳动价值论揭示了商品经济的规律','cloze':{'masks':[{'text':'一般规律'}]}}
   self.assertEqual(m.terms(q),[])
+ def test_page_continuation_keeps_two_verbatim_original_fragments(self):
+  data={'20':'资本周转时间由资本生产时间','21':'和资本流通时间共同组成。'}
+  data.update({str(n):'这里是无关的测试背景文字，不包含待核对的资本概念。'+str(n) for n in range(22,90)})
+  c=m.DefinitionCorpus('k',data,{})
+  fs=[(m.canon('资本周转时间'),m.canon('资本周转时间由资本生产时间和资本流通时间共同组成'),'explanation')]
+  hits=c.continuation(fs,'');self.assertEqual([h['page'] for h in hits],['20','21'])
+  for h in hits:self.assertIn(h['quote'],data[h['page']]);self.assertEqual(h['method'],'cross-page')
  def test_canonical_normalization_preserves_original_coordinates(self):
   t,pos=m.canon('物质的根本属性',True);self.assertEqual(t,'物质根本属性');self.assertEqual(''.join('物质的根本属性'[i] for i in pos),t)
 if __name__=='__main__':unittest.main()

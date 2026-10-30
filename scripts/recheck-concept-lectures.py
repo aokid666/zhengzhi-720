@@ -166,7 +166,7 @@ def main():
    if kind=='history' and not rc.history(q):continue
    if kind in r.FIELDS:
     existing=q.get(r.FIELDS[kind]) or (nr.get(kind) if nr.get('sig')==sig else []) or (old_manual.get(q['id']) if kind=='m' else [])
-    if kind=='m' and (q.get('blockId') or q.get('source')=='m' and q.get('qRefs')):existing=True
+    if kind=='m' and q.get('blockId'):existing=True
    else:
     refs=er.get('refs',[]) if er.get('sig')==sig else q.get('extraLectures',[]);existing=[x for x in refs if x['source'].startswith('tuijie-' if kind=='tj' else 'history-')]
    if existing:continue
