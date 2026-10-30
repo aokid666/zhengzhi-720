@@ -23,7 +23,7 @@ def extra_facts(q):
    clean=re.split('技巧助背|口诀助背|联想助背|画图助背|提示[：:]|注意[：:]',line)[0]
    clean=re.sub(r'^\s*[·》>①-⑳（(\d）).、\s]+','',clean);a=r.norm(clean)
    if not 8<=len(a)<=200 or re.search('错误|不正确|排除|干扰项|选项|未找到|没找到|扫码|仅供|请结合|本题考|[A-DＡ-Ｄ]项|×',clean):continue
-   if not any(r.grams(a,3)&r.grams(x,3) for x in anchors):continue
+   if not any(r.grams(a,min(5,len(x)))&r.grams(x,min(5,len(x))) for x in anchors):continue
    fs.append((stem[-400:],a,'pair'))
  return list(dict.fromkeys(fs))
 class RecheckCorpus(r.Corpus):
@@ -73,12 +73,12 @@ def main():
   for p in d['pages']:
    if s['group']=='tuijie' and (p['page']<(11 if s['id'].endswith('upper') else 7) or s['id'].endswith('upper') and p['page'] in TEST):continue
    ed['tj' if s['group']=='tuijie' else 'history'][s['id']+':'+str(p['page'])]=p['text']
- corpora.update({k:RecheckCorpus('extra',v,{}) for k,v in ed.items()});old_manual=r.read('manual-matches');qs=r.pool();native_maps={};extra_maps={};counts=collections.Counter();prior_path=ROOT/'data/lecture-recheck-report.json';prior=read(prior_path) if prior_path.exists() else {};rejected=[x for x in prior.get('added',[]) if any(e['method']=='short-definition' for e in x['evidence'])];added=[x for x in prior.get('added',[]) if x not in rejected];unresolved=[]
+ corpora.update({k:RecheckCorpus('extra',v,{}) for k,v in ed.items()});old_manual=r.read('manual-matches');qs=r.pool();native_maps={};extra_maps={};counts=collections.Counter();prior_path=ROOT/'data/lecture-recheck-report.json';prior=read(prior_path) if prior_path.exists() else {};rejected=prior.get('added',[]);added=[];unresolved=[]
  for qi,q in enumerate(qs):
   g=group(q)
   if g not in native_maps:
    native_maps[g]=r.read('lecture-links/'+g);extra_maps[g]=r.read('extra-links/'+g)
-   # Re-evaluate only provisional short definitions from our prior audit.
+   # Re-evaluate only our own additions from the prior audit; preserve the original links.
    for old in [x for x in rejected if x['group']==g]:
     if old['kind'] in r.FIELDS:
      row=native_maps[g]['items'].get(old['id'],{});row[old['kind']]=[e for e in row.get(old['kind'],[]) if not any(e['page']==h['page'] and e['quote']==h['quote'] for h in old['evidence'])]

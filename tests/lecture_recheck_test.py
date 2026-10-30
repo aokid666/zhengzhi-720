@@ -11,6 +11,9 @@ class RecheckTests(unittest.TestCase):
   q={'module':'马克思主义基本原理','stem':'这里体现的习近平新时代中国特色社会主义思想的世界观和方法论是'}
   self.assertEqual(m.subject(q),'习近平新时代中国特色社会主义思想概论')
   self.assertEqual(m.subject({'module':'马克思主义基本原理','stem':'习近平引用马克思的著作说明实践的作用'}),'马克思主义基本原理')
+ def test_wrong_option_annotations_do_not_become_explanatory_facts(self):
+  q={'stem':'少年安得长少年，海波尚变为桑田体现什么','options':{'C':'运动是物质的根本属性'},'answer':'C','analysis':[{'t':'物质的唯一特性（共同特性）\n客观实在性\n物质的根本属性（固有属性）\n运动'}]}
+  fs=m.extra_facts(q);self.assertTrue(any('根本属性' in a for p,a,t in fs));self.assertFalse(any('唯一特性' in a for p,a,t in fs))
  def test_negation_and_wrong_subject_cannot_become_short_definition_evidence(self):
   c=m.RecheckCorpus('k',{'18':'意识不是人脑的分泌物，意识是物质世界长期发展的产物。'},{'18':{'马克思主义基本原理'}})
   self.assertEqual(c.short_definitions([('意识是人脑的分泌物','意识是人脑的分泌物','pair')],'马克思主义基本原理'),[])
