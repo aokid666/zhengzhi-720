@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 135;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 136;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -651,7 +651,7 @@ const APP_VER = 135;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (p !== 'q') parkQ();
     if (p === 'sprint' && a === 'practice') return PRACTICE.render(h, {shell,showQNav,P,flag,isWrongNow,isDone,S});
     if (p === 'sprint' || (p === 'l' && a && /^[78]-/.test(a))) return MANUAL.render(p === 'l' ? (a.startsWith('8-') ? 'sprint/judgements' : 'sprint/questions') : h, {shell,showQNav,P,flag,isWrongNow,isDone,S});
-    if(p==='extra')return EXTRA_LECTURES.reader(h,{shell,showQNav,stopRestore});
+    if(p==='extra')return EXTRA_LECTURES.reader(h,{shell,showQNav,stopRestore:()=>stopRestore()});
     if (p === 'l' && a) return renderChapter(a);
     if (p === 'q' && a) return renderQuestion(a);
     if (p === 's') return renderSearch();
@@ -2156,7 +2156,7 @@ const APP_VER = 135;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     renderQuestion(id);
     ZS.toast(ok ? '✔ 做对了' : '✘ 答案：' + q.answer);
     const r = document.querySelector('#view .res');
-    if (r) setTimeout(() => r.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
+    if (r) setTimeout(() => { if(S.route==='q/'+id && S.curId===id && r.isConnected)r.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 120);
   };
   window.ZS_REVEAL = id => {if(window.TEST_MODE?.testing(S.byId[id]))return ZS.toast('请先提交测试，再看答案和解析');S['rev_' + id] = true; renderQuestion(id); };
   /* 重做：保留历史次数与复习进度，只把本题切回「待作答」状态 */
