@@ -1,0 +1,112 @@
+"""Publish question-by-question reading decisions, never infer new page assignments.
+
+The review manifest records an explicit exam concept, reasoning and verbatim
+passages selected after reading. This program only validates and applies them.
+"""
+import copy,hashlib,importlib.util,json,pathlib,urllib.request,concurrent.futures
+ROOT=pathlib.Path(__file__).resolve().parents[1]
+spec=importlib.util.spec_from_file_location('review',ROOT/'scripts/review-lecture-links.py')
+r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r);r.ROOT=ROOT
+VERSION=138
+def read(path):return json.loads((ROOT/path).read_text())
+def write(path,value):
+ p=ROOT/path;value=json.dumps(value,ensure_ascii=False,separators=(',',':'))
+ if p.read_text()!=value:p.write_text(value)
+def digest(text):return hashlib.sha256(text.encode()).hexdigest()
+def original_question(q,correction):
+ original=copy.deepcopy(q)
+ if correction:
+  assert q['module'] in (correction['from'],correction['to']),(q['id'],'module changed independently')
+  original['module']=correction['from']
+ return original
+def verify_quote(ref,documents):
+ page=str(ref['page']);raw=documents[ref['kind']][page]
+ assert ref['quote'] and ref['quote'] in raw,(ref['kind'],page,'source passage changed')
+ return digest(raw)
+def main():
+ manifest=read('scripts/semantic-reference-reviewed.json')
+ corrections={x['id']:x for x in manifest['moduleCorrections']}
+ qs={q['id']:q for q in r.pool()}
+ # Check every reviewed question before making any in-memory change.
+ for row in manifest['questions']+manifest['moduleCorrections']:
+  assert row['sig']==r.signature(original_question(qs[row['id']],corrections.get(row['id']))),(row['id'],'question changed since reading')
+ docs={'k':read('data/lecture-k.json'),'s':read('data/lecture-s.json'),
+       'm':{p['id']:p['text'] for p in read('data/manual-index.json')['pages']}}
+ aliases={'tj-u':'tuijie-manual-upper'}
+ needed={aliases.get(e['kind'],e['kind']) for row in manifest['questions'] for e in row['references'] if e['kind'] not in docs}
+ sources={s['id']:s for s in read('data/extra-lectures.json')['sources']}
+ def fetch(sid):
+  with urllib.request.urlopen(sources[sid]['dataUrl'],timeout=120) as response:d=json.load(response)
+  assert d['source']['sha256']==sources[sid]['sha256'],(sid,'source identity changed')
+  return sid,{str(p['page']):p['text'] for p in d['pages']}
+ with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+  for sid,pages in pool.map(fetch,sorted(needed)):docs['tj-u' if sid=='tuijie-manual-upper' else sid]=pages
+ proof_hashes={}
+ for row in manifest['questions']:
+  q=qs[row['id']]
+  assert row['concept'] and len(row['reasoning'])>=20
+  for ref in row['references']:
+   assert ref['covers'] and set(ref['covers'])<=set(q['answer']),(row['id'],'coverage is not a correct option')
+   proof_hashes[(ref['kind'],ref['page'])]=verify_quote(ref,docs)
+ # A module correction changes a signature: migrate only this approved field.
+ banks={};maps={};extras={};changed_modules=[]
+ def files(q):
+  group=q.get('bookId') or ('manual' if q.get('source')=='m' else 'original')
+  if group not in maps:
+   maps[group]=read('data/lecture-links/'+group+'.json');extras[group]=read('data/extra-links/'+group+'.json')
+  return group,maps[group],extras[group]
+ for qid,c in corrections.items():
+  q=qs[qid];group,native,extra=files(q);old=r.signature(original_question(q,c))
+  q['module']=c['to'];new=r.signature(q)
+  for overlay in (native,extra):
+   if qid in overlay['items']:
+    assert overlay['items'][qid]['sig'] in (old,new),(qid,'existing overlay signature')
+    overlay['items'][qid]['sig']=new
+  if group not in banks:banks[group]=read('data/practice/'+group+'.json')
+  bankq=next(x for x in banks[group]['questions'] if x['id']==qid)
+  before=copy.deepcopy(bankq);bankq['module']=c['to']
+  assert {k:v for k,v in before.items() if k!='module'}=={k:v for k,v in bankq.items() if k!='module'}
+  changed_modules.append({'id':qid,'from':c['from'],'to':c['to'],'reasoning':c['reasoning']})
+ report=[];added=0
+ for row in manifest['questions']:
+  q=qs[row['id']];group,native,extra=files(q);sig=r.signature(q);panels={}
+  for ref in row['references']:
+   kind=ref['kind'];panel=kind if kind in ('k','s','m') else 'tj' if kind.startswith(('tj-','tuijie-')) else 'history'
+   panels.setdefault(panel,[]).append(ref)
+  for panel,refs in panels.items():
+   covers=set(''.join(e['covers'] for e in refs));remaining=set(q['answer'])-covers
+   complete=not remaining;status='完整选项依据' if complete else '部分选项依据'
+   detail={'id':q['id'],'kind':panel,'concept':row['concept'],'reasoning':row['reasoning'],
+           'covers':''.join(sorted(covers)),'notCovered':''.join(sorted(remaining)),'complete':complete,'pages':[]}
+   for ref in refs:
+    note='逐题复核｜'+status+'。考点：'+row['concept']+'。'+row['reasoning']+' 本页核对选项：'+ref['covers']+'。'
+    if remaining:note+=' 本资料所列原文尚未完整展开选项'+''.join(sorted(remaining))+'，不能据此视为整题已全部覆盖。'
+    proof={'page':ref['page'],'quote':ref['quote'],'note':note,'method':'question-reviewed-reading',
+           'covers':ref['covers'],'partial':not complete}
+    overlay=native if panel in ('k','s','m') else extra
+    item=overlay['items'].setdefault(q['id'],{'sig':sig})
+    assert item['sig']==sig
+    if panel in ('k','s','m'):
+     if q.get(r.FIELDS[panel]):
+      detail['pages'].append({'page':ref['page'],'status':'native-reference-preserved'});continue
+     dest=item.setdefault(panel,[])
+     key=lambda e:(str(e['page']),e['quote'])
+    else:
+     proof['source']=aliases.get(ref['kind'],ref['kind']);proof['page']=int(ref['page']);dest=item.setdefault('refs',[])
+     key=lambda e:(e['source'],str(e['page']),e['quote'])
+    found=next((i for i,e in enumerate(dest) if key(e)==key(proof)),None)
+    if found is None:dest.append(proof);added+=1
+    elif dest[found].get('method')=='question-reviewed-reading':dest[found]=proof
+    detail['pages'].append({'source':proof.get('source',panel),'page':proof['page'],'quote':proof['quote'],
+                            'pageTextSha256':proof_hashes[(ref['kind'],ref['page'])]})
+   report.append(detail)
+ for group,d in banks.items():write('data/practice/'+group+'.json',d)
+ for group,d in maps.items():d['version']=VERSION;write('data/lecture-links/'+group+'.json',d)
+ for group,d in extras.items():d['version']=VERSION;write('data/extra-links/'+group+'.json',d)
+ output={'version':VERSION,'reviewedQuestions':len(manifest['questions']),'reviewedPanels':len(report),
+         'completePanels':sum(x['complete'] for x in report),'partialPanels':sum(not x['complete'] for x in report),
+         'moduleCorrections':changed_modules,'reviews':report}
+ (ROOT/'data/semantic-reading-review-report.json').write_text(json.dumps(output,ensure_ascii=False,separators=(',',':')))
+ print(json.dumps({k:v for k,v in output.items() if k not in ('moduleCorrections','reviews')},ensure_ascii=False))
+ print('Verified original passages:',len(proof_hashes),'new reference pages:',added,'module corrections:',len(changed_modules))
+if __name__=='__main__':main()

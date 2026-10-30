@@ -26,3 +26,10 @@ test('unmatched references offer source-specific full-book lookup with a useful 
  const ctx={window:{},console};vm.runInNewContext(src,ctx);const api=ctx.window.LECTURE_LINKS,q={id:'lookup',answer:'B',options:{B:'《关于费尔巴哈的提纲》'},stem:'首次提出科学实践观的著作'};
  assert.equal(api.query(q),'关于费尔巴哈的提纲');const html=api.missing(q,'腿姐背诵手册',true);assert(html.includes('data-kind="tj"'));assert(html.includes('ZS_FINDQLECTURE'));assert(html.includes('查找本题考点'));assert.equal(api.query({answer:'A',options:{A:'必须坚持自信自立'}}),'自信自立');
 });
+
+test('a passage covering only some correct options is visibly labeled before expanding it',()=>{
+ const ctx={window:{},console};vm.runInNewContext(src,ctx);const api=ctx.window.LECTURE_LINKS;
+ const html=api.evidence({lectureEvidence:{k:[{page:'17',quote:'原文',partial:true,note:'尚未完整展开B'}]}},'k');
+ assert(html.slice(0,html.indexOf('</summary>')).includes('部分选项依据'));
+ assert(!api.evidence({lectureEvidence:{k:[{page:'17',quote:'原文'}]}},'k').includes('部分选项依据'));
+});

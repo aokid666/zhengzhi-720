@@ -1,0 +1,32 @@
+name: Validate question-by-question lecture reading
+on:
+  push:
+    branches: [codex/semantic-reviewed]
+    paths: ['scripts/semantic-reference-reviewed.json', 'scripts/apply-semantic-review.py', '.github/workflows/semantic-review.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/apply-semantic-review.py
+      - run: python -m unittest discover -s tests -p 'lecture*_test.py'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --no-save --package-lock=false happy-dom@21.0.4 fake-indexeddb@6.2.6
+      - run: node --test tests/*.test.cjs
+      - run: node tests/tuijie-ui.mjs
+      - run: git diff --check
+      - name: Save validated reading decisions
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/lecture-links data/extra-links data/practice/tuijie8.json data/semantic-reading-review-report.json
+          git diff --cached --quiet || git commit -m 'Apply reviewed exam concepts and correct mixed-paper subjects'
+          git push origin HEAD:codex/semantic-reviewed
