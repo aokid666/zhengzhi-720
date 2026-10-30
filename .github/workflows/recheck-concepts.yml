@@ -1,0 +1,37 @@
+name: Recover missing concept definitions and page continuations
+on:
+  push:
+    branches: [codex/lecture-concepts]
+    paths: ['scripts/recheck-concept-lectures.py', '.github/workflows/recheck-concepts.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -u scripts/recheck-concept-lectures.py
+      - run: python -m unittest discover -s tests -p 'lecture*_test.py'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --no-save --package-lock=false happy-dom@21.0.4 fake-indexeddb@6.2.6
+      - run: node --test tests/*.test.cjs
+      - run: git diff --check
+      - name: Preserve verified references
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/lecture-links data/extra-links data/lecture-concept-recheck-report.json
+          git commit -m 'Recover equivalent definitions, named concepts and cross-page lecture passages'
+          git push origin HEAD:codex/lecture-concepts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: concept-reference-audit
+          path: data/lecture-concept-recheck-report.json
