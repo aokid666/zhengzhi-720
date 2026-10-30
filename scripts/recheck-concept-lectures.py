@@ -24,7 +24,7 @@ def facts(q):
   if relation:result.append((stem[-400:],relation[2]+'是'+relation[1],'pair'))
  return list(dict.fromkeys((canon(p),canon(a),t) for p,a,t in result if len(canon(a))>=2))
 
-GENERIC={'工人阶级','无产阶级','人民群众','中国共产党','社会主义','资本主义','生产力','生产关系','人民','实践','价值','真理','认识','物质','运动'}
+GENERIC={'工人阶级','无产阶级','人民群众','中国共产党','社会主义','资本主义','生产力','生产关系','人民','实践','价值','真理','认识','物质','运动','一般规律','精神境界','政治建设','生产方式','社会发展','经济发展','历史发展','政治制度','理论体系','历史进步','科学技术','根本原因','精神力量','重要保障','重要作用'}
 def terms(q):
  out=[]
  for k in q.get('answer',''):
@@ -37,6 +37,7 @@ def terms(q):
     if root in q.get('stem','')[-60:]:out.extend([root+term,root+'具有'+term])
  if q.get('type')=='cloze':
   out.extend(canon(m['text']) for m in q.get('cloze',{}).get('masks',[]) if 4<=len(canon(m['text']))<=24 and canon(m['text']) not in GENERIC)
+  if '党的建设' in q.get('stem','') and any(canon(m['text'])=='政治建设' for m in q.get('cloze',{}).get('masks',[])):out.append('党政治建设')
  return list(dict.fromkeys(out))
 
 class DefinitionCorpus(r.Corpus):
@@ -47,7 +48,7 @@ class DefinitionCorpus(r.Corpus):
   finally:r.norm=saved
   self.joined=None
  def heading(self,q,module):
-  hits=[];prompt=canon(q.get('stem',''));qualifiers=[canon(x) for x in r.QUALIFIERS if canon(x) in prompt[-110:]]
+  hits=[];prompt=canon(q.get('stem',''));qualifiers=[canon(x) for x in r.QUALIFIERS+['中心问题','战略基点','统领','牵引','核心标志','第一动力','重要前提'] if canon(x) in prompt[-110:]]
   for term in terms(q):
    pages=set(self.ix.get(term[:5],())) if len(term)>=5 else {p for p,v in self.pages.items() if term in v['text']}
    pages={p for p in pages if term in self.pages[p]['text']}
@@ -58,19 +59,20 @@ class DefinitionCorpus(r.Corpus):
     offset=0
     for line in p['raw'].splitlines(keepends=True):
      norm=canon(line);at=norm.find(term);plain=re.sub(r'^[0-9一二三四五六七八九十（）、]+','',norm);location=plain.find(term)
-     is_heading=location>=0 and location<=12 and len(plain)<=max(len(term)+15,32) and not re.search('不是|不能|没有|不具有|并非|错误|×',line)
+     prefix=plain[:location] if location>=0 else '';prefix_ok=not prefix or bool(re.fullmatch(r'(考|坚持|必须坚持|是|指|含义|定义|重点考点[一二三四五六七八九十]*)',prefix)) or bool(re.search(r'(问题|构成|性质|概念|本质|特征|原则|属性|首要|根本|主要|著作|标志|前提|源泉|目的|任务|尺度|基础|道路|制度|方针|重点|地位|要求|条件|核心|关键|保障|牵引|统领|基点)$',prefix))
+     is_heading=prefix_ok and location>=0 and location<=12 and len(plain)<=max(len(term)+15,32) and not re.search('不是|不能|没有|不具有|并非|错误|×',line)
      if is_heading and (location<=2 or re.search('^第|考|问题|构成|性质|概念|本质|特征|原则|属性|首要|根本|主要|著作|标志',plain[:location])):
       a=p['raw'].rfind('\n',0,max(0,offset-55))+1;z=p['raw'].find('\n',min(len(p['raw']),offset+len(line)+190));z=len(p['raw']) if z<0 else z;quote=p['raw'][a:z].strip();near=canon(quote)
       if qualifiers and not any(x in near for x in qualifiers):offset+=len(line);continue
       if len(re.findall(r'[A-D][.．、]',quote))>=3:offset+=len(line);continue
       # A named heading is reference material about this concept, not a claim
       # that a generic page independently proves the question's entire answer.
-      hits.append({'page':pn,'quote':quote,'method':'concept-definition','note':'对应考点：'+term+'。以下为该概念或事项的原文讲解，可结合题目核对。','term':term,'score':len(term)*2-location});break
+      hits.append({'page':pn,'quote':quote,'method':'concept-definition','note':'对应考点：'+term+'。以下为该概念或事项的原文讲解，可结合题目核对。','term':term,'score':len(term)*2-location+sum(1 for g in r.grams(prompt,4) if g in near and g not in r.grams(term,4))});break
      offset+=len(line)
   hits.sort(key=lambda e:-e['score']);unique={}
   for e in hits:
    if e['page'] not in unique:unique[e['page']]=e
-  return list(unique.values())[:2]
+  return list(unique.values())[:1]
  def continuation(self,fs,module):
   fs=[x for x in fs if len(x[1])>=12]
   if not fs:return []
@@ -109,7 +111,10 @@ class DefinitionCorpus(r.Corpus):
 def read(p):return json.loads(p.read_text())
 def dump(p,d):p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(d,ensure_ascii=False,separators=(',',':')))
 def main():
- native=r.corpora();corpora={k:DefinitionCorpus(k,{p:v['raw'] for p,v in c.pages.items()},{p:v['modules'] for p,v in c.pages.items()}) for k,c in native.items()};source_hash={}
+ native=r.corpora()
+ for page,p in native['s'].pages.items():
+  if 10<=int(page)<=53:p['modules']={'马克思主义基本原理'}
+ corpora={k:DefinitionCorpus(k,{p:v['raw'] for p,v in c.pages.items()},{p:v['modules'] for p,v in c.pages.items()}) for k,c in native.items()};source_hash={}
  catalog=r.read('extra-lectures');data={'tj':{},'history':{}};modules={'tj':{},'history':{}}
  for source in catalog['sources']:
   with urllib.request.urlopen(source['dataUrl']+'?verify='+str(time.time_ns()),timeout=120) as f:doc=json.load(f)
@@ -122,10 +127,17 @@ def main():
     for name in ['马克思主义基本原理','毛泽东思想和中国特色社会主义理论体系概论','习近平新时代中国特色社会主义思想概论','中国近现代史纲要','思想道德与法治']:
      if canon(name) in heading:last={name};break
    key=id+':'+str(pn);data[kind][key]=p['text'];modules[kind][key]=last if id.endswith('upper') else set()
- corpora.update({k:DefinitionCorpus('extra',d,modules[k]) for k,d in data.items()});qs=r.pool();nm={};em={};counts=collections.Counter();added=[];unresolved=[];old_manual=r.read('manual-matches')
+ corpora.update({k:DefinitionCorpus('extra',d,modules[k]) for k,d in data.items()});qs=r.pool();nm={};em={};counts=collections.Counter();added=[];unresolved=[];old_manual=r.read('manual-matches');prior_path=ROOT/'data/lecture-concept-recheck-report.json';prior=read(prior_path) if prior_path.exists() else {};prior_by_group=collections.defaultdict(list)
+ for row in prior.get('added',[]):prior_by_group[row['group']].append(row)
  for i,q in enumerate(qs):
   g=rc.group(q);sig=r.signature(q)
-  if g not in nm:nm[g]=r.read('lecture-links/'+g);em[g]=r.read('extra-links/'+g)
+  if g not in nm:
+   nm[g]=r.read('lecture-links/'+g);em[g]=r.read('extra-links/'+g)
+   for old in prior_by_group[g]:
+    if old['kind'] in r.FIELDS:
+     row=nm[g]['items'].get(old['id'],{});row[old['kind']]=[e for e in row.get(old['kind'],[]) if not any(e['page']==h['page'] and e['quote']==h['quote'] for h in old['evidence'])]
+    else:
+     row=em[g]['items'].get(old['id'],{});row['refs']=[e for e in row.get('refs',[]) if not any(e['source']+':'+str(e['page'])==h['page'] and e['quote']==h['quote'] for h in old['evidence'])]
   nr=nm[g]['items'].get(q['id'],{});er=em[g]['items'].get(q['id'],{});fs=None
   for kind in ['k','s','m','tj','history']:
    if kind=='history' and not rc.history(q):continue
