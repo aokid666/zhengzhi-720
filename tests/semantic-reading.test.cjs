@@ -56,6 +56,18 @@ test('close reading distinguishes local participation, complete enumerations and
  assert(local.every(e=>e.partial&&!e.covers.includes('D')),'local participation must not imply unproven democratic literacy');
  const money=n.items['pr-tuijie8-choice-8-04'].k;assert(money.some(e=>e.page==='114'));assert(money.some(e=>e.page==='164'));
  const ai=n.items['pr-tuijie8-choice-6-02'].m;assert(ai.some(e=>e.page==='u015'));assert(ai.some(e=>e.page==='u016'));
- assert(refs('8-24','k').every(e=>e.covers==='B'&&e.partial));
+ const reform=refs('8-24','k');assert.equal([...new Set(reform.flatMap(e=>[...e.covers]))].sort().join(''),'ABC');assert(reform.every(e=>!e.partial&&e.note.includes('原理应用依据')));
  const modern=refs('3-19','k');assert(modern.some(e=>e.page==='181'&&e.covers==='C'));
+});
+
+test('separate examination categories have precise passages and remaining gaps stay explicit',()=>{
+ const native=read('data/lecture-links/tuijie8.json'),extra=read('data/extra-links/tuijie8.json');
+ const proofs=(id,k)=>native.items['pr-tuijie8-choice-'+id][k];
+ const economic=proofs('8-20','s').find(e=>e.method==='question-reviewed-reading');
+ assert.equal(economic.covers,'BCD');assert(!economic.partial);assert(economic.quote.includes('福利风险'));assert(!economic.quote.includes('社会极端思潮'));
+ const labor=proofs('6-19','k').find(e=>e.method==='question-reviewed-reading');assert.equal(labor.covers,'AB');assert(labor.quote.includes('劳动的成果或者产品全部归资本家所有'));
+ const investigation=proofs('8-17','k').filter(e=>e.method==='question-reviewed-reading');assert(investigation.some(e=>e.page==='23'&&e.covers==='A'));assert(investigation.some(e=>e.page==='46'&&e.covers==='B'));
+ const historical=proofs('7-19','m').filter(e=>e.method==='question-reviewed-reading');assert(historical.every(e=>e.partial&&!e.covers.includes('D')));
+ const modern=extra.items['pr-tuijie8-choice-3-19'].refs.filter(e=>e.method==='question-reviewed-reading');assert(modern.some(e=>e.page===116&&e.covers==='D'));assert(modern.every(e=>!e.partial));
+ const market=extra.items['pr-tuijie8-choice-8-22'].refs.filter(e=>e.method==='question-reviewed-reading');assert(market.some(e=>e.source==='tuijie-manual-lower'&&e.page===16&&e.covers==='AB'));
 });

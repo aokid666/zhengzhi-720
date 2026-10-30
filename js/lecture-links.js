@@ -4,7 +4,7 @@ window.LECTURE_LINKS=(()=>{
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  function signature(q){let a=[q.module||'',q.stem||'',q.answer||'',q.cloze?.text||''];Object.keys(q.options||{}).sort().forEach(k=>a.push(k+':'+q.options[k]));['left','right'].forEach(s=>(q[s]||[]).forEach(i=>a.push(i.key+':'+i.text)));(q.analysis||[]).forEach(i=>a.push('analysis:'+(i.k||'')+'='+(i.t||'')));Object.keys(q.matchMap||{}).sort().forEach(k=>a.push('map:'+k+'='+q.matchMap[k].join(',')));let h=2166136261;const text=a.join('\x1f');for(let i=0;i<text.length;i++)h=Math.imul(h^text.charCodeAt(i),16777619)>>>0;return h.toString(16).padStart(8,'0');}
  const group=q=>q.bookId||(q.source==='m'?'manual':'original');
- async function load(key){if(!pending.has(key))pending.set(key,fetch('data/lecture-links/'+encodeURIComponent(key)+'.json?v=140').then(r=>{if(!r.ok)throw Error('补充讲义定位加载失败');return r.json();}).catch(e=>{pending.delete(key);console.warn(e.message);return {items:{},loadFailed:true};}));return pending.get(key);}
+ async function load(key){if(!pending.has(key))pending.set(key,fetch('data/lecture-links/'+encodeURIComponent(key)+'.json?v=141').then(r=>{if(!r.ok)throw Error('补充讲义定位加载失败');return r.json();}).catch(e=>{pending.delete(key);console.warn(e.message);return {items:{},loadFailed:true};}));return pending.get(key);}
  async function apply(qs){
   const entries=await Promise.all([...new Set(qs.map(group))].map(async key=>[key,await load(key)])),data=Object.fromEntries(entries);
   const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
