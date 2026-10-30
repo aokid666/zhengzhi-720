@@ -1,0 +1,36 @@
+name: Recheck all missing lecture panels
+on:
+  push:
+    branches: [codex/lecture-recheck]
+    paths: ['scripts/recheck-missing-lectures.py', '.github/workflows/recheck-missing.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  recheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -u scripts/recheck-missing-lectures.py
+      - run: python -m unittest discover -s tests -p lecture_links_test.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test tests/*.test.cjs
+      - run: git diff --check
+      - name: Save verified additions
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/lecture-links data/extra-links data/lecture-recheck-report.json
+          git commit -m 'Recover missing lecture passages without changing existing references'
+          git push origin HEAD:codex/lecture-recheck
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lecture-recheck-audit
+          path: data/lecture-recheck-report.json
