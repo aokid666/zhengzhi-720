@@ -7,7 +7,7 @@ import copy,hashlib,importlib.util,json,pathlib,urllib.request,concurrent.future
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('review',ROOT/'scripts/review-lecture-links.py')
 r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r);r.ROOT=ROOT
-VERSION=138
+VERSION=139
 def read(path):return json.loads((ROOT/path).read_text())
 def write(path,value):
  p=ROOT/path;value=json.dumps(value,ensure_ascii=False,separators=(',',':'))
@@ -46,7 +46,7 @@ def main():
   q=qs[row['id']]
   assert row['concept'] and len(row['reasoning'])>=20
   for ref in row['references']:
-   assert ref['covers'] and set(ref['covers'])<=set(q['answer']),(row['id'],'coverage is not a correct option')
+   assert (ref['covers'] or ref.get('contextOnly')) and set(ref['covers'])<=set(q['answer']),(row['id'],'coverage is not a correct option')
    proof_hashes[(ref['kind'],ref['page'])]=verify_quote(ref,docs)
  # A module correction changes a signature: migrate only this approved field.
  banks={};maps={};extras={};changed_modules=[]
@@ -67,6 +67,15 @@ def main():
   before=copy.deepcopy(bankq);bankq['module']=c['to']
   assert {k:v for k,v in before.items() if k!='module'}=={k:v for k,v in bankq.items() if k!='module'}
   changed_modules.append({'id':qid,'from':c['from'],'to':c['to'],'reasoning':c['reasoning']})
+ # Replace only this workflow's own earlier excerpts when reading is refined.
+ # Never remove a native reference or another review/generator's decisions.
+ for row in manifest['questions']:
+  _,native,extra=files(qs[row['id']])
+  for kind in ('k','s','m'):
+   item=native['items'].get(row['id'],{})
+   if kind in item:item[kind]=[e for e in item[kind] if e.get('method')!='question-reviewed-reading']
+  item=extra['items'].get(row['id'],{})
+  if 'refs' in item:item['refs']=[e for e in item['refs'] if e.get('method')!='question-reviewed-reading']
  report=[];added=0
  for row in manifest['questions']:
   q=qs[row['id']];group,native,extra=files(q);sig=r.signature(q);panels={}
@@ -75,14 +84,19 @@ def main():
    panels.setdefault(panel,[]).append(ref)
   for panel,refs in panels.items():
    covers=set(''.join(e['covers'] for e in refs));remaining=set(q['answer'])-covers
+   assert covers,(q['id'],panel,'context alone cannot count as a matching explanation')
    complete=not remaining;status='完整选项依据' if complete else '部分选项依据'
+   if row.get('evidenceMode')=='principle-application':status='原理应用依据'+('（部分选项）' if remaining else '')
+   if row.get('answerMode')=='incorrect-statement':status='选错题的纠正依据'+('（部分选项）' if remaining else '')
    detail={'id':q['id'],'kind':panel,'concept':row['concept'],'reasoning':row['reasoning'],
-           'covers':''.join(sorted(covers)),'notCovered':''.join(sorted(remaining)),'complete':complete,'pages':[]}
+           'covers':''.join(sorted(covers)),'notCovered':''.join(sorted(remaining)),'complete':complete,
+           'evidenceMode':row.get('evidenceMode','direct-passage'),'answerMode':row.get('answerMode','correct-statement'),'pages':[]}
    for ref in refs:
-    note='逐题复核｜'+status+'。考点：'+row['concept']+'。'+row['reasoning']+' 本页核对选项：'+ref['covers']+'。'
+    note='逐题复核｜'+status+'。考点：'+row['concept']+'。'+row['reasoning']
+    note+=(' 本页提供前后文或表头，须与所列讲解页连读，不单独用于判定答案。' if ref.get('contextOnly') else ' 本页核对选项：'+ref['covers']+'。')
     if remaining:note+=' 本资料所列原文尚未完整展开选项'+''.join(sorted(remaining))+'，不能据此视为整题已全部覆盖。'
     proof={'page':ref['page'],'quote':ref['quote'],'note':note,'method':'question-reviewed-reading',
-           'covers':ref['covers'],'partial':not complete}
+           'covers':ref['covers'],'partial':not complete,'contextOnly':bool(ref.get('contextOnly'))}
     overlay=native if panel in ('k','s','m') else extra
     item=overlay['items'].setdefault(q['id'],{'sig':sig})
     assert item['sig']==sig
@@ -97,7 +111,7 @@ def main():
     found=next((i for i,e in enumerate(dest) if key(e)==key(proof)),None)
     if found is None:dest.append(proof);added+=1
     elif dest[found].get('method')=='question-reviewed-reading':dest[found]=proof
-    detail['pages'].append({'source':proof.get('source',panel),'page':proof['page'],'quote':proof['quote'],
+    detail['pages'].append({'source':proof.get('source',panel),'page':proof['page'],'quote':proof['quote'],'contextOnly':bool(ref.get('contextOnly')),
                             'pageTextSha256':proof_hashes[(ref['kind'],ref['page'])]})
    report.append(detail)
  for group,d in banks.items():write('data/practice/'+group+'.json',d)

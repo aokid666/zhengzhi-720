@@ -34,3 +34,15 @@ test('published reading references preserve source passages and keep partial opt
  }
  assert(partial>0,'partial source coverage must not be mislabeled as a full explanation');
 });
+
+test('a table header is context, and a negative question cites the correction instead of endorsing the false option',()=>{
+ const native=read('data/lecture-links/tuijie8.json');
+ const table=native.items['pr-tuijie8-choice-2-09'].s;
+ const header=table.find(e=>e.contextOnly);assert(header);assert.equal(header.covers,'');assert(header.note.includes('不单独用于判定答案'));
+ assert(table.some(e=>e.covers.includes('B')));
+ const correction=native.items['pr-tuijie8-choice-4-14'].k.find(e=>e.method==='question-reviewed-reading');
+ assert(correction.note.includes('选错题的纠正依据'));assert(correction.note.includes('纠正A项'));
+ const total=native.items['pr-tuijie8-choice-8-19'].s;
+ assert.equal(new Set(total.map(e=>e.page)).size,total.length,'the same page image must not be repeated');
+ assert(total.some(e=>e.note.includes('原理应用依据')));
+});
