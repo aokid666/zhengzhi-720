@@ -5,6 +5,22 @@ const questions=new Map(read('data/practice/tuijie8.json').questions.map(q=>[q.i
 const corrections=new Map(manifest.moduleCorrections.map(c=>[c.id,c]));
 const ctx={window:{},console};vm.runInNewContext(fs.readFileSync(root+'js/lecture-links.js','utf8'),ctx);
 const signature=ctx.window.LECTURE_LINKS.signature;
+test('Marxism review separates structural levels, economic causes and exact cross-page support',()=>{
+ const row=id=>manifest.questions.find(q=>q.id==='pr-tuijie8-choice-'+id);
+ const refs=(id,k)=>row(id).references.filter(e=>e.kind===k);
+ const structure=refs('1-10','k');assert(structure.some(e=>e.page==='65'&&e.covers==='A'&&e.quote.includes('国家政权是核心')));
+ const truth=refs('1-08','m');assert(truth.some(e=>e.page==='u033'&&e.quote.includes('不是相互转化')));assert.equal(row('1-08').evidenceMode,'principle-application');
+ assert(row('1-15').references.every(e=>e.kind==='k'&&e.page==='109'&&e.quote.includes('超巨型')),'a generic international-finance heading is insufficient for the specific company-chain example');
+ assert(refs('1-26','m').some(e=>e.covers==='CD'&&e.quote.includes('客观后果')));
+ const wage=refs('1-27','tj-u');assert(wage.some(e=>e.page==='46'&&e.covers==='BC'&&e.quote.includes('劳动力的价值或价格')));
+ const turnover=refs('1-28','m');assert(turnover.some(e=>e.page==='u059'&&e.covers==='AC'&&e.quote.includes('固定资本和')));
+ const crisis=refs('1-29','k');assert(crisis.some(e=>e.page==='92'&&e.covers==='C'));assert(crisis.some(e=>e.page==='94'&&e.covers==='AB'));assert(crisis.some(e=>e.page==='95'&&e.covers==='D'));
+ assert(refs('1-30','s').every(e=>e.covers==='ABD'),'state redistribution alone does not explicitly elaborate national-income source C');
+ const political=refs('1-31','k');assert(political.some(e=>e.page==='108'&&e.covers==='B'));assert(political.some(e=>e.page==='109'&&e.covers==='AC'));assert(!political.some(e=>e.quote.includes('社会阶层和阶级结构的变化')));
+ const twentyFirst=refs('1-32','k');assert(twentyFirst.some(e=>e.page==='110'&&e.covers==='A'));assert(twentyFirst.some(e=>e.page==='109'&&e.covers==='BCD'));
+ assert(row('1-33').references.every(e=>e.covers==='AB'),'long development processes must not silently include the unelaborated worldwide option D');
+ assert(refs('1-05','tj-u').some(e=>e.page==='36'&&e.contextOnly&&e.covers===''));assert(refs('1-05','tj-u').some(e=>e.page==='37'&&e.covers==='C'));
+});
 test('Mao and Xi reading distinguishes exact hats, feasibility, significance and incomplete option support',()=>{
  const row=id=>manifest.questions.find(q=>q.id==='pr-tuijie8-choice-'+id);
  const refs=(id,k)=>row(id).references.filter(e=>e.kind===k);
