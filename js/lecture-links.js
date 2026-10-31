@@ -1,4 +1,4 @@
-/* Supplement missing references only; never replace questions or saved user state. */
+/* Reviewed lecture references and exact audited corrections; question content and saved state stay unchanged. */
 window.LECTURE_LINKS=(()=>{
  'use strict';const pending=new Map();
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
