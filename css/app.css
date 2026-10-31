@@ -155,13 +155,17 @@ body.annodraw #view [contenteditable="true"],body.notedraw #view [contenteditabl
 }
 .anno-cv.drawing{cursor:crosshair}
 .pgwrap.zoomed img{max-height:78vh;object-fit:contain;background:#fff}
-#annobar{
+#annobar,#drawTools.screen-docked{
   position:fixed;left:0;right:0;bottom:0;z-index:80;background:rgba(255,253,249,.97);
   border-top:1px solid var(--line);box-shadow:0 -4px 16px rgba(20,40,38,.08);
   padding:8px 10px calc(8px + env(safe-area-inset-bottom));display:none;
 }
 #annobar.show{display:block}
-#annobar .r1{display:flex;gap:6px;align-items:center;margin-bottom:7px;font-size:12.5px;color:var(--ink2)}
+.screen-docked{transform-origin:0 0;box-sizing:border-box;max-height:50vh;overflow:auto;overscroll-behavior:contain}
+#annobar.visual-docked,#drawTools.visual-docked{top:0;right:auto;bottom:auto}
+#drawTools.screen-docked{display:flex;margin:0}
+body.notetoolmode #tabbar,body.notetoolmode #qnav{display:none}
+#annobar .r1{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:7px;font-size:12.5px;color:var(--ink2)}
 #annobar .colors{display:flex;gap:7px;align-items:center}
 .sw{width:26px;height:26px;border-radius:50%;border:2px solid var(--fill);box-shadow:0 0 0 1px var(--line);cursor:pointer}
 .sw.on{box-shadow:0 0 0 2px var(--teal)}
@@ -431,7 +435,7 @@ body.gated #annoVis,body.gated #annobar{display:none !important}
 body.gated .wrap{display:none}
 
 /* ---------- 夜间模式：零散补丁（上面按变量走的不用管，这里补硬编码的）---------- */
-html[data-theme="dark"] #annobar{background:var(--tabbg);box-shadow:0 -4px 16px rgba(0,0,0,.35)}
+html[data-theme="dark"] #annobar,html[data-theme="dark"] #drawTools.screen-docked{background:var(--tabbg);box-shadow:0 -4px 16px rgba(0,0,0,.35)}
 html[data-theme="dark"] #qnav{background:var(--tabbg)}
 html[data-theme="dark"] #qfab button{background:rgba(33,44,47,.93);box-shadow:0 2px 12px rgba(0,0,0,.45)}
 html[data-theme="dark"] .annobtn{background:rgba(33,44,47,.9);border-color:var(--line);box-shadow:0 2px 8px rgba(0,0,0,.4)}

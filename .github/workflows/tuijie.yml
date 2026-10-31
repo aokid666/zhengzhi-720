@@ -21,4 +21,5 @@ jobs:
       - run: node tests/test-mode-ui.mjs
       - run: node tests/tuijie-ui.mjs
       - run: node tests/lecture-race-ui.mjs
+      - run: node tests/handwriting-ui.mjs
       - run: git diff --check

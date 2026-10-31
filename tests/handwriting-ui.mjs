@@ -1,0 +1,24 @@
+import {Window} from 'happy-dom';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';
+process.chdir(path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..')); import assert from 'node:assert/strict';
+const w=new Window({url:'http://localhost/',settings:{enableJavaScriptEvaluation:true,disableCSSFileLoading:true,disableJavaScriptFileLoading:true}});w.localStorage.setItem('zz720.v1.cfg',JSON.stringify({gate:'0',auto:false}));w.document.write(fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,''));w.fetch=async u=>{const url=String(u);if(url.startsWith('https://aokid666.github.io/zz-manual-'))return new Response(JSON.stringify({lines:[]}));if(url.startsWith('https://aokid666.github.io/')){const catalog=JSON.parse(fs.readFileSync('data/extra-lectures.json'));const source=catalog.sources.find(s=>s.dataUrl===url);if(source)return new Response(JSON.stringify({pages:source.pages.map(p=>({...p,text:'原文检索测试：党的一大 · PDF '+p.page}))}));}return new Response(fs.readFileSync(path.join('.',url.split('?')[0])),{status:200});};let scrollY=0,lastTarget='';Object.defineProperty(w,'scrollY',{get:()=>scrollY});w.scrollTo=(x,y)=>{scrollY=y;};w.HTMLElement.prototype.scrollIntoView=function(){lastTarget=this.id;};w.HTMLElement.prototype.setPointerCapture=()=>{};w.ResizeObserver=class{observe(){}disconnect(){}};w.HTMLCanvasElement.prototype.getContext=()=>new Proxy({},{get:(_,k)=>k==='measureText'?()=>({width:8}):()=>{}});
+const vv=new w.EventTarget();Object.assign(vv,{width:256,height:192,offsetLeft:310,offsetTop:220,scale:4});Object.defineProperty(w,'visualViewport',{value:vv});
+for(const n of ['store','annotate','lecture-links','extra-lectures','manual','cloze','test-mode','practice','question-copy','app'])w.eval(fs.readFileSync('js/'+n+'.js','utf8'));w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
+const $=s=>w.document.querySelector(s),wait=async(fn)=>{for(let i=0;i<400;i++){if(fn())return;await new Promise(r=>setTimeout(r,10));}throw Error('Timeout: '+fn);};const go=async h=>{w.ZS_GO(h);await new Promise(r=>setTimeout(r,20));};
+await wait(()=>$('#view').textContent.includes('冲刺板块'));
+
+const [q1,q2]=JSON.parse(fs.readFileSync('data/questions.json'));
+await go('q/'+q1.id);w.ZS_SEL(q1.id,q1.answer);w.ZS_SUBMIT(q1.id);await wait(()=>$('#noteBox'));
+w.ZS_NOTEOPEN(q1.id);w.ZS_NOTEDRAW(q1.id);
+const tools=$('#drawTools');assert.equal(tools.parentElement,w.document.body);assert(tools.classList.contains('visual-docked'));assert(w.document.body.classList.contains('notetoolmode'));
+assert.equal(tools.style.width,'1024px');assert(tools.style.transform.includes('scale(0.25)'));
+const cv=$('#noteCv canvas');cv.getBoundingClientRect=()=>({left:-300,top:-200,width:1600,height:1200});cv.onpointerdown({clientX:100,clientY:100,pointerId:1,preventDefault(){}});cv.onpointerup();
+assert.deepEqual(JSON.parse(JSON.stringify(w.ZS.data.notes[q1.id].strokes[0].p)),[[0.25,0.25]]);
+tools.querySelector('[data-n="bold"]').click();tools.querySelector('[data-n="eraser"]').click();assert(tools.querySelector('[data-n="eraser"]').classList.contains('on'));
+Object.assign(vv,{width:384,height:256,scale:2,offsetLeft:100,offsetTop:60});vv.dispatchEvent(new w.Event('resize'));await wait(()=>tools.style.width==='768px');assert(tools.style.transform.includes('scale(0.5)'));
+[...tools.querySelectorAll('button')].find(b=>b.textContent.includes('完成')).click();assert(!w.document.body.classList.contains('notetoolmode'));assert.equal(tools.parentElement.className,'nbd');assert(!tools.classList.contains('screen-docked'));assert.equal($('#noteCv').style.display,'none');
+w.ZS_NOTEDRAW(q1.id);assert.equal($('#drawTools').parentElement,w.document.body);
+w.ZS_ANNO(q1.id,'q-txt');assert(w.ANNO.on);assert(!w.document.body.classList.contains('notetoolmode'));assert($('#annobar').classList.contains('visual-docked'));assert.equal($('#noteCv').style.display,'none');
+w.ZS_NOTEDRAW(q1.id);assert(!w.ANNO.on);assert(!$('#annobar').classList.contains('show'));assert(w.document.body.classList.contains('notetoolmode'));
+await go('q/'+q2.id);assert(!w.document.body.classList.contains('notetoolmode'));assert(!$('#drawTools'));assert(!$('#annobar').classList.contains('show'));assert.equal(w.ZS.data.notes[q1.id].strokes.length,1);assert.equal(w.ZS.data.progress[q1.id].tries,1);
+console.log('PASS: floating annotation and note palettes follow zoom, retain drawing coordinates and controls, close on navigation, and preserve saved strokes.');
+await w.happyDOM.abort();await w.happyDOM.close();

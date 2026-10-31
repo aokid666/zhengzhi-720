@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 145;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 146;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -677,6 +677,7 @@ const APP_VER = 145;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     PRACTICE.leave();
     flushEditors();
     if (ANNO.on) ANNO.close();
+    undockNoteTools();
     if (S.lectbarObserver) { S.lectbarObserver.disconnect(); S.lectbarObserver = null; }
     if (S.openNoteId) { ZS.endEdit('notes', S.openNoteId); S.openNoteId = null; }
     if (nd && nd.ro) nd.ro.disconnect(); nd = null;
@@ -1233,6 +1234,11 @@ const APP_VER = 145;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   const NC = ['#1f6feb', '#d0342c', '#1f8a5b', '#111111', '#d89055', '#8e44ad'];
   const NW = [0.18, 0.25, 0.34, 0.45, 0.6, 0.8, 1.05, 1.4];   // 同 ANNO.WIDTHS
   let nd = null;                       // 笔记手写状态
+  let releaseNoteTools = null;
+  function undockNoteTools() {
+    releaseNoteTools?.(); releaseNoteTools = null;
+    document.body.classList.remove('notetoolmode');
+  }
 
   function renderNote(id) {
     const box = $('#noteSection'); if (!box) return;
@@ -1256,6 +1262,7 @@ const APP_VER = 145;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
   function openNote(id, force) {
     const box = $('#noteBox'); if (!box) return;
+    undockNoteTools();
     const tg = $('#noteToggle');
     if (!force && box.innerHTML.trim()) {
       flushEditors(); ZS.endEdit('notes', id); S.openNoteId = null;
@@ -1292,6 +1299,7 @@ const APP_VER = 145;     // 每次改动前端都 +1，和 index.html 的 ?v= �
           <span class="sp" style="flex:1"></span>
           <button class="iconbtn" data-n="undo">↶ 撤销</button>
           <button class="iconbtn" data-n="clear">🗑 清空</button>
+          <button class="iconbtn main" onclick="ZS_NOTEDRAW('${id}')">✓ 完成</button>
         </div>
         <div class="notepics" id="notePics"></div>
         <div class="ncanvas" id="noteCv" style="display:none"><canvas></canvas></div>
@@ -1337,6 +1345,7 @@ const APP_VER = 145;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   /* 笔记区手写板：与标注引擎同一套笔画格式（归一化 + 平滑） */
   function noteDrawOn(id, silent) {
     const wrap = $('#noteCv'); if (!wrap) return;
+    if (ANNO.on) ANNO.close();
     wrap.style.display = '';
     const dt = $('#drawTools'); if (dt) dt.style.display = '';
     const bd = $('#btnDraw'); if (bd) bd.classList.add('on');
@@ -1401,6 +1410,15 @@ const APP_VER = 145;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     };
     cv.onpointerup = end; cv.onpointercancel = end; cv.onpointerleave = end;
     noteToolSync();
+    undockNoteTools();
+    if (dt) {
+      // Escape the note card's clipped/scrolling ancestor without losing handlers.
+      const anchor = document.createComment('handwriting tools');
+      dt.before(anchor); document.body.appendChild(dt);
+      const release = ANNO.dockToolbar(dt);
+      document.body.classList.add('notetoolmode');
+      releaseNoteTools = () => { release(); if (anchor.parentNode) anchor.replaceWith(dt); else dt.remove(); };
+    }
     if (!silent) ZS.toast('手写板已打开；想滑动页面时点「✍️ 书写中」切到滚动', 2600);
   }
   function noteToolSync() {
@@ -2418,6 +2436,7 @@ const APP_VER = 145;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (!host && tgt.endsWith('-img')) host = $(`.pgwrap[data-tgt="${tgt}"][data-id="${id}"]`);
     if (!host && tgt === 'a-img') host = $(`.pgwrap[data-tgt="a-imgfull"][data-id="${id}"]`);
     if (!host) return ZS.toast('找不到可标注的区域');
+    if (releaseNoteTools && S.openNoteId) window.ZS_NOTEDRAW(S.openNoteId);
     // 自动展开祖先折叠块
     let p = host;
     while (p && p !== document.body) { if (p.classList && p.classList.contains('acc')) p.classList.add('open'); p = p.parentElement; }
@@ -2439,6 +2458,7 @@ const APP_VER = 145;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (w.style.display === 'none') noteDrawOn(id);
     else {
       w.style.display = 'none';
+      undockNoteTools();
       document.body.classList.remove('notedraw');
       const dt = $('#drawTools'); if (dt) dt.style.display = 'none';
       const bd = $('#btnDraw'); if (bd) bd.classList.remove('on');
@@ -2483,6 +2503,7 @@ const APP_VER = 145;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   window.ZS_NOTEDEL = id => {
     ZS.confirm('删除本题的全部笔记（文字 + 手写 + 图片）？', () => {
       delete ZS.data.notes[id];
+      undockNoteTools();
       if (nd && nd.id === id) nd = null;
       document.body.classList.remove('notedraw');
       ZS.save(true); renderNote(id); ZS.toast('已删除');

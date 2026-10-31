@@ -13,7 +13,53 @@ window.ANNO = (function () {
   };
   const seen = new WeakSet();
   let obsList = [];
+  let releaseBar = null;
   let visible = localStorage.getItem('zz720.annoOn') !== '0';
+
+  // Fixed CSS alone follows the layout viewport, which can be outside the
+  // visible screen after a pinch zoom. Keep this UI in visual-viewport space;
+  // the drawing canvas and its saved coordinates remain in document space.
+  function dockToolbar(bar) {
+    if (!bar) return () => {};
+    let frame = null, observer = null, active = true;
+    const viewport = window.visualViewport;
+    function position() {
+      frame = null;
+      if (!active || !viewport) return;
+      const scale = viewport.scale || 1;
+      bar.style.width = viewport.width * scale + 'px';
+      bar.style.maxHeight = viewport.height * scale / 2 + 'px';
+      const top = viewport.offsetTop + viewport.height - bar.offsetHeight / scale;
+      bar.style.transform = 'translate(' + viewport.offsetLeft + 'px,' + top + 'px) scale(' + (1 / scale) + ')';
+    }
+    function schedule() {
+      if (active && frame === null) frame = window.requestAnimationFrame(position);
+    }
+    bar.classList.add('screen-docked');
+    if (viewport) { // CSS fixed positioning remains the fallback.
+      bar.classList.add('visual-docked');
+      viewport.addEventListener('resize', schedule);
+      viewport.addEventListener('scroll', schedule);
+      window.addEventListener('resize', schedule);
+      window.addEventListener('scroll', schedule, { passive: true });
+      if (window.ResizeObserver) {
+        observer = new ResizeObserver(schedule);
+        observer.observe(bar);
+      }
+      position();
+    }
+    return () => {
+      active = false;
+      viewport?.removeEventListener('resize', schedule);
+      viewport?.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('scroll', schedule);
+      observer?.disconnect();
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      bar.classList.remove('screen-docked', 'visual-docked');
+      ['width', 'max-height', 'transform'].forEach(name => bar.style.removeProperty(name));
+    };
+  }
 
   const width = () => WIDTHS[st.wi];
 
@@ -298,8 +344,9 @@ window.ANNO = (function () {
     cs.appendChild(hb);
     bar.querySelectorAll('[data-a]').forEach(b => b.onclick = () => act(b.dataset.a));
     syncBar();
+    releaseBar = dockToolbar(bar);
   }
-  function hideBar() { const b = document.getElementById('annobar'); if (b) b.classList.remove('show'); }
+  function hideBar() { releaseBar?.(); releaseBar = null; const b = document.getElementById('annobar'); if (b) b.classList.remove('show'); }
   function syncBar() {
     const bar = document.getElementById('annobar'); if (!bar) return;
     ['pen', 'hl', 'eraser'].forEach(m => {
@@ -377,7 +424,7 @@ window.ANNO = (function () {
     flush();
   }
   return {
-    open, close, flush: flushCurrent, renderScope, renderOne, setVisible, paintOn, WIDTHS, repaintAll,
+    open, close, flush: flushCurrent, renderScope, renderOne, setVisible, paintOn, WIDTHS, repaintAll, dockToolbar,
     get on() { return st.on; },
     get widthIndex() { return st.wi; },
     get visible() { return visible; },
