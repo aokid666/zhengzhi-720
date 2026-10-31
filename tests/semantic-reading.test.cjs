@@ -89,3 +89,18 @@ test('history review keeps complete distinctions, partial textbook coverage and 
  const method=row('4-31');assert(method.references.every(e=>e.covers==='BCD'&&e.quote.includes('思想方法')));
  assert(get('4-24','s').some(e=>e.partial&&e.covers==='BC'));
 });
+
+test('close reading corrects the two legal soul concepts and preserves rights subcategories',async()=>{
+ const n=read('data/lecture-links/tuijie8.json'),x=read('data/extra-links/tuijie8.json');
+ const qid='pr-tuijie8-choice-5-06',native=n.items[qid],extra=x.items[qid];
+ assert.deepEqual(native.clear.k.expected,[320]);assert.deepEqual(native.clear.m.expected,['u229']);
+ assert(!native.k.length&&!native.s.length&&!native.m.length);assert(!extra.refs.some(e=>e.source==='tuijie-manual-upper'&&e.page===236));
+ assert(extra.refs.some(e=>e.source==='tuijie-manual-upper'&&e.page===239&&e.quote.includes('社会主义核心价值观')));
+ assert(x.items['pr-tuijie8-choice-5-12'].refs.some(e=>e.source==='tuijie-manual-upper'&&e.page===236),'the same page remains valid for the distinct leadership question');
+ const ctx={window:{},console,fetch:async()=>({ok:true,json:async()=>n})};vm.runInNewContext(fs.readFileSync(root+'js/lecture-links.js','utf8'),ctx);
+ const q=structuredClone(questions.get(qid));await ctx.window.LECTURE_LINKS.apply([q]);assert.equal(q.kPages.length,0);assert.equal(q.mRefs.length,0);assert.equal(questions.get(qid).kPages[0],320,'bank data is preserved');
+ const poet=n.items['pr-tuijie8-choice-7-30'].m;assert(!poet.some(e=>e.page==='u209'));assert(poet.some(e=>e.page==='u220'&&e.covers==='BC'));
+ const rights=x.items['pr-tuijie8-choice-5-30'].refs;assert(rights.some(e=>e.source==='tuijie-manual-upper'&&e.page===243&&e.covers==='AD'));
+ const moral=x.items['pr-tuijie8-choice-5-04'].refs;assert(moral.some(e=>e.source==='tuijie-manual-upper'&&e.page===228&&e.quote.includes('学校')));
+ const fair=n.items['pr-tuijie8-choice-6-31'].m;assert(fair.some(e=>e.page==='u234'&&e.covers==='ABC'));assert(!fair.some(e=>e.method==='question-reviewed-reading'&&e.covers.includes('D')));
+});

@@ -4,7 +4,7 @@ window.LECTURE_LINKS=(()=>{
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  function signature(q){let a=[q.module||'',q.stem||'',q.answer||'',q.cloze?.text||''];Object.keys(q.options||{}).sort().forEach(k=>a.push(k+':'+q.options[k]));['left','right'].forEach(s=>(q[s]||[]).forEach(i=>a.push(i.key+':'+i.text)));(q.analysis||[]).forEach(i=>a.push('analysis:'+(i.k||'')+'='+(i.t||'')));Object.keys(q.matchMap||{}).sort().forEach(k=>a.push('map:'+k+'='+q.matchMap[k].join(',')));let h=2166136261;const text=a.join('\x1f');for(let i=0;i<text.length;i++)h=Math.imul(h^text.charCodeAt(i),16777619)>>>0;return h.toString(16).padStart(8,'0');}
  const group=q=>q.bookId||(q.source==='m'?'manual':'original');
- async function load(key){if(!pending.has(key))pending.set(key,fetch('data/lecture-links/'+encodeURIComponent(key)+'.json?v=142').then(r=>{if(!r.ok)throw Error('补充讲义定位加载失败');return r.json();}).catch(e=>{pending.delete(key);console.warn(e.message);return {items:{},loadFailed:true};}));return pending.get(key);}
+ async function load(key){if(!pending.has(key))pending.set(key,fetch('data/lecture-links/'+encodeURIComponent(key)+'.json?v=143').then(r=>{if(!r.ok)throw Error('补充讲义定位加载失败');return r.json();}).catch(e=>{pending.delete(key);console.warn(e.message);return {items:{},loadFailed:true};}));return pending.get(key);}
  async function apply(qs){
   const entries=await Promise.all([...new Set(qs.map(group))].map(async key=>[key,await load(key)])),data=Object.fromEntries(entries);
   const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -12,6 +12,15 @@ window.LECTURE_LINKS=(()=>{
    q._lectureLinkError=!!data[group(q)].loadFailed;
    const row=data[group(q)].items[q.id];if(!row||row.sig!==signature(q))continue;
    for(const [kind,field] of [['k','kPages'],['s','sPages'],['m','mRefs']]){
+    const cleared=row.clear?.[kind];
+    if(cleared){
+     if(same(q[field]||[],cleared.expected)||!(q[field]||[]).length){
+      q[field]=[];
+      if(q.lectureEvidence)delete q.lectureEvidence[kind];
+      (q.lectureCorrections||(q.lectureCorrections={}))[kind]=cleared.reason;
+     }
+     continue;
+    }
     if(!row[kind]?.length)continue;
     const pages=row[kind].map(e=>kind==='m'?e.page:Number(e.page)),current=q[field]||[],original=row.extend?.[kind];
     if(Array.isArray(original)){
@@ -40,6 +49,6 @@ window.LECTURE_LINKS=(()=>{
   for(const term of ['社会主义核心价值观','新民主主义革命','马克思主义中国化','社会主要矛盾','主观能动性','资本价值构成','感性认识','理性认识','物质运动','劳动生产率','共同富裕','中国式现代化','实践','矛盾','真理','价值'])if(value.includes(term))return term;
   return value.slice(0,16);
  }
- function missing(q,label,extra=false){const failed=extra?q._extraLectureError:q._lectureLinkError,kind={'知识清单':'k','速成班讲义':'s','背诵手册':'m','腿姐背诵手册':'tj','史纲专题资料':'history'}[label];return '<div class="hint">'+(failed?esc(label)+'定位数据加载失败，请重试。<button class="btn tiny" data-q="'+esc(q.id)+'" onclick="ZS_RETRYLECTURES(this.dataset.q)">重新加载</button>':'尚未自动确认'+esc(label)+'的对应页。可按本题考点检索整本资料。'+(kind?'<div class="acts"><button class="btn tiny" data-q="'+esc(q.id)+'" data-kind="'+kind+'" onclick="ZS_FINDQLECTURE(this.dataset.q,this.dataset.kind)">在这份讲义中查找本题考点</button></div>':''))+'</div>';}
+ function missing(q,label,extra=false){const failed=extra?q._extraLectureError:q._lectureLinkError,kind={'知识清单':'k','速成班讲义':'s','背诵手册':'m','腿姐背诵手册':'tj','史纲专题资料':'history'}[label];return '<div class="hint">'+(failed?esc(label)+'定位数据加载失败，请重试。<button class="btn tiny" data-q="'+esc(q.id)+'" onclick="ZS_RETRYLECTURES(this.dataset.q)">重新加载</button>':(q.lectureCorrections?.[kind]?esc(q.lectureCorrections[kind])+' ':'')+'尚未自动确认'+esc(label)+'的对应页。可按本题考点检索整本资料。'+(kind?'<div class="acts"><button class="btn tiny" data-q="'+esc(q.id)+'" data-kind="'+kind+'" onclick="ZS_FINDQLECTURE(this.dataset.q,this.dataset.kind)">在这份讲义中查找本题考点</button></div>':''))+'</div>';}
  return {apply,evidence,signature,missing,query};
 })();

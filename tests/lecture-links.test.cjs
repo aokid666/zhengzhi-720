@@ -44,3 +44,13 @@ test('reviewed additions keep original pages, reject independent page edits and 
  await api.apply([q]);assert.equal(JSON.stringify(q.kPages),'[114,164]');assert.equal(q.lectureEvidence.k.length,2);
  assert(!q.progress);assert.equal(q.stem,'两个阶段的共同点');
 });
+
+test('audited mismatches clear only the original page list, expose the reason and leave independent edits intact',async()=>{
+ const q={id:'soul',module:'思修',stem:'社会主义法治建设的灵魂',answer:'A',options:{A:'社会主义核心价值观'},kPages:[320],mRefs:['u229'],sPages:[]};let row;
+ const ctx={window:{},console,fetch:async()=>({ok:true,json:async()=>({items:{soul:row}})})};vm.runInNewContext(src,ctx);const api=ctx.window.LECTURE_LINKS;
+ row={sig:api.signature(q),clear:{k:{expected:[320],reason:'原文讲党的领导，不是本题的核心价值观。'},m:{expected:['u229'],reason:'旧页概念不同。'}}};
+ const independent={...q,kPages:[312],mRefs:['u214']};await api.apply([independent]);assert.deepEqual(independent.kPages,[312]);assert.deepEqual(independent.mRefs,['u214']);assert(!independent.lectureCorrections);
+ const stale={...q,stem:'其他人修改后的题目'};await api.apply([stale]);assert.deepEqual(stale.kPages,[320]);
+ q.lectureEvidence={k:[{page:'320',quote:'旧定位'}]};await api.apply([q]);assert.equal(q.kPages.length,0);assert.equal(q.mRefs.length,0);assert(!q.lectureEvidence.k);assert(api.missing(q,'知识清单').includes('原文讲党的领导'));
+ await api.apply([q]);assert.equal(q.kPages.length,0);assert(api.missing(q,'知识清单').includes('尚未自动确认'));assert(!q.progress);
+});
