@@ -54,3 +54,14 @@ test('audited mismatches clear only the original page list, expose the reason an
  q.lectureEvidence={k:[{page:'320',quote:'旧定位'}]};await api.apply([q]);assert.equal(q.kPages.length,0);assert.equal(q.mRefs.length,0);assert(!q.lectureEvidence.k);assert(api.missing(q,'知识清单').includes('原文讲党的领导'));
  await api.apply([q]);assert.equal(q.kPages.length,0);assert(api.missing(q,'知识清单').includes('尚未自动确认'));assert(!q.progress);
 });
+
+test('the visible reference for a duplicate original page prefers explicit reviewed option coverage',()=>{
+ const ctx={window:{},console};vm.runInNewContext(fs.readFileSync(__dirname+'/../js/extra-lectures.js','utf8'),ctx);
+ const old={source:'upper',page:226,quote:'关系介绍',method:'statement'},reviewed={source:'upper',page:226,quote:'精读关系',method:'question-reviewed-reading',partial:true,covers:'AD'},other={source:'lower',page:226,quote:'另一册'};
+ const input=[old,other,reviewed],before=JSON.stringify(input),picked=ctx.window.EXTRA_LECTURES.selectReferences(input);
+ assert.equal(picked.length,2);assert.equal(picked[0],reviewed);assert.equal(picked[1],other);assert.equal(JSON.stringify(input),before,'selection must preserve stored reference history');
+ assert.equal(ctx.window.EXTRA_LECTURES.selectReferences([reviewed,old])[0],reviewed);
+ const x=JSON.parse(fs.readFileSync(__dirname+'/../data/extra-links/tuijie8.json','utf8'));
+ const visible=ctx.window.EXTRA_LECTURES.selectReferences(x.items['pr-tuijie8-choice-5-24'].refs).find(e=>e.source==='tuijie-manual-upper'&&e.page===226);
+ assert(visible.partial&&visible.covers==='AD');assert(visible.note.includes('尚未完整展开选项B'));
+});
