@@ -5,6 +5,20 @@ const questions=new Map(read('data/practice/tuijie8.json').questions.map(q=>[q.i
 const corrections=new Map(manifest.moduleCorrections.map(c=>[c.id,c]));
 const ctx={window:{},console};vm.runInNewContext(fs.readFileSync(root+'js/lecture-links.js','utf8'),ctx);
 const signature=ctx.window.LECTURE_LINKS.signature;
+test('Mao and Xi reading distinguishes exact hats, feasibility, significance and incomplete option support',()=>{
+ const row=id=>manifest.questions.find(q=>q.id==='pr-tuijie8-choice-'+id);
+ const refs=(id,k)=>row(id).references.filter(e=>e.kind===k);
+ const agriculture=refs('2-08','tj-u');assert(agriculture.some(e=>e.page==='93'&&e.covers==='B'&&e.quote.includes('遵循的原则')));
+ const ransom=row('2-25');assert(ransom.references.every(e=>e.kind==='k'&&e.page==='147'&&e.covers==='ABCD'));assert(ransom.references[0].quote.includes('方式的意义'));assert(!ransom.references[0].quote.includes('方式的原因'));
+ assert(refs('2-21','k').some(e=>e.covers==='BCD'));assert(refs('2-21','m').every(e=>e.covers==='D'));
+ assert(refs('3-07','tj-u').some(e=>e.page==='147'&&e.covers==='C'&&e.quote.includes('主力军')));assert(!row('3-07').references.some(e=>['k','s','m'].includes(e.kind)),'a list of strategic science forces does not identify the main force of basic research');
+ assert(refs('3-10','tj-u').some(e=>e.page==='150'&&e.quote.includes('历史责任')));
+ assert(refs('3-02','k').some(e=>e.page==='180'&&e.covers==='B'));assert(refs('3-03','k').some(e=>e.page==='183'&&e.covers==='A'));
+ assert(refs('6-23','m').every(e=>e.covers==='BD'));assert(refs('7-23','m').some(e=>e.covers==='ACD'));assert(refs('7-23','s').every(e=>e.covers==='AC'));assert(refs('7-23','tj-u').every(e=>e.covers==='AD'));
+ assert(refs('2-28','s').some(e=>e.page==='169'&&e.covers==='A'));assert(refs('2-28','s').some(e=>e.page==='170'&&e.contextOnly));
+ const modern=refs('3-20','m');assert(modern.some(e=>e.page==='u104'&&e.covers==='AB'));assert(modern.some(e=>e.page==='u105'&&e.covers==='D'));
+ const dates=refs('2-30','tj-u');assert.equal(new Set(dates.map(e=>e.page)).size,dates.length);assert(dates.some(e=>e.page==='102'&&e.covers==='AC'&&e.quote.includes('党的十四大')));
+});
 test('reading decisions remain bound to exactly the reviewed stems, options, keys and analyses',()=>{
  for(const row of [...manifest.questions,...manifest.moduleCorrections]){
   const q=questions.get(row.id),c=corrections.get(row.id);assert(q);

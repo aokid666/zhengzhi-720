@@ -7,7 +7,7 @@ import copy,hashlib,importlib.util,json,pathlib,urllib.request,concurrent.future
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('review',ROOT/'scripts/review-lecture-links.py')
 r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r);r.ROOT=ROOT
-VERSION=143
+VERSION=144
 def read(path):return json.loads((ROOT/path).read_text())
 def write(path,value):
  p=ROOT/path;value=json.dumps(value,ensure_ascii=False,separators=(',',':'))
