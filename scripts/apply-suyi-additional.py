@@ -29,9 +29,9 @@ def main(document=None):
   row['status']='complete' if ids and set(row['covered'])==ids else 'partial' if row['covered'] else 'related' if row['references'] else 'unconfirmed';row.setdefault('manualConcepts',[])
   if decision['concept'] not in row['manualConcepts']:row['manualConcepts'].append(decision['concept'])
   item['suyiStatus'].update(status=row['status'],covered=row['covered'],uncovered=[u['id'] for u in row['units'] if u['id'] not in row['covered']],reviewedUnits=sorted(reviewed))
- for group,m in maps.items():m['version']=150;dump('data/extra-links/'+group+'.json',m)
+ for group,m in maps.items():m['version']=151;dump('data/extra-links/'+group+'.json',m)
  counts=collections.Counter();books=collections.defaultdict(collections.Counter)
  for row in report['items']:counts[row['status']]+=1;books[row['book']][row['status']]+=1
- report['version']=150;report['summary']=dict(counts);report['books']=dict(books);report['additionalManualDecisions']=len(manifest['questions']);dump('data/suyi-all-pairing-report.json',report);print(json.dumps(report['summary'],ensure_ascii=False))
+ report['version']=151;report['summary']=dict(counts);report['books']=dict(books);report['additionalManualDecisions']=len(manifest['questions']);dump('data/suyi-all-pairing-report.json',report);print(json.dumps(report['summary'],ensure_ascii=False))
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--document');a=p.parse_args();main(a.document)
