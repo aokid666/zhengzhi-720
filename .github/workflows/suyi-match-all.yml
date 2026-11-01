@@ -38,7 +38,13 @@ jobs:
           pattern: suyi-shard-*
           path: shards
           merge-multiple: true
-      - run: python scripts/suyi-match-all.py finalize --directory shards
+      - name: Assemble source evidence and retain reviewed decisions
+        run: |
+          python scripts/suyi-match-all.py finalize --directory shards
+          if [ -f scripts/suyi-additional-reviewed.json ]; then
+            python scripts/apply-suyi-additional.py
+            python scripts/package-suyi-audit.py
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: suyi-all-pairing-audit
@@ -46,9 +52,11 @@ jobs:
           retention-days: 30
       - name: Publish reviewable results branch
         run: |
-          git switch -c codex/suyi-all-paired-v148-r2
+          pairing_branch="codex/suyi-pairing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git switch -c "$pairing_branch"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add data/extra-links data/suyi-all-pairing-report.json
+          if [ -f data/suyi-pairing-status.json ]; then git add data/suyi-pairing-status.json; fi
           git commit -m 'Audit all 4662 questions against SuYi with per-answer source coverage'
-          git push origin HEAD:codex/suyi-all-paired-v148-r2
+          git push origin "HEAD:refs/heads/$pairing_branch"
