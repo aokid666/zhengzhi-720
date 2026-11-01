@@ -641,7 +641,7 @@ const APP_VER = 148;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       if(browsePositions.size>80)browsePositions.delete(browsePositions.keys().next().value);
     }
     if(h.startsWith('q/')&&!S.route.startsWith('q/')) {
-      S.questionDirectory=/^l\//.test(S.route)||/^sprint\/(questions|judgements)(\/|$)/.test(S.route)||/^sprint\/practice\/[^/]+$/.test(S.route)||S.route==='queue'?S.route:null;
+      S.questionDirectory=/^l\//.test(S.route)||/^sprint\/(questions|judgements)(\/|$)/.test(S.route)||/^sprint\/practice\/[^/]+$/.test(S.route)||S.route==='queue'||S.route==='suyi-pairing'?S.route:null;
     }
     S.route = h;
     S.remotePending = false;

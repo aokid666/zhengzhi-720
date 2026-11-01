@@ -1,0 +1,394 @@
+{
+  "version": 148,
+  "sourceSha256": "8102cc75642c020f9af3dc07f688a78a70e49a9ea4fe94d2ec307a6598ef451f",
+  "questions": [
+    {
+      "id": "pr-cf-upper-choice-0098",
+      "sig": "c45777d3",
+      "concept": "practice",
+      "reasoning": "题目从干中学、田间科研或中国实践中产生认识，考点是实践的来源、基础及目的作用；不能仅因出现实践一词就配页。",
+      "references": [
+        {
+          "page": 23,
+          "quote": "1, 实践决定认识: 实践是认识的基础/来源 /动力 (现实的需要)、栓验标准 /目的 (认识世界是\n为了改造世界)",
+          "covers": [
+            "D"
+          ],
+          "relatedUnits": [
+            "D"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-cf-upper-choice-0178",
+      "sig": "93040abe",
+      "concept": "conditions",
+      "reasoning": "题目不是否认人的能动性，而是强调发挥能动性还须一定物质条件和手段。讲义对这一条件有直接表述。",
+      "references": [
+        {
+          "page": 14,
+          "quote": "G) 正确发挥人的主观能动性，还要依赖于一定的物质条件和物质手段",
+          "covers": [
+            "C"
+          ],
+          "relatedUnits": [
+            "C"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-cf-upper-choice-0203",
+      "sig": "9abd10d9",
+      "concept": "people",
+      "reasoning": "题目考查人民群众是历史创造者的唯物史观依据，须区分人民群众与每个普通个人。材料的政策应用不据此宣称全部讲解已覆盖。",
+      "references": [
+        {
+          "page": 36,
+          "quote": "GD 人民群众是历史的创造者。人人只是自己历史的创造者;而非历史的创造者 (V)",
+          "covers": [],
+          "relatedUnits": [
+            "A"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-dalizi-true-choice-2015-01",
+      "sig": "f6ca9d46",
+      "concept": "practice",
+      "reasoning": "题目从干中学、田间科研或中国实践中产生认识，考点是实践的来源、基础及目的作用；不能仅因出现实践一词就配页。",
+      "references": [
+        {
+          "page": 23,
+          "quote": "1, 实践决定认识: 实践是认识的基础/来源 /动力 (现实的需要)、栓验标准 /目的 (认识世界是\n为了改造世界)",
+          "covers": [
+            "B"
+          ],
+          "relatedUnits": [
+            "B"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-dalizi-true-choice-2018-03",
+      "sig": "6d57a728",
+      "concept": "people",
+      "reasoning": "题目考查人民群众是历史创造者的唯物史观依据，须区分人民群众与每个普通个人。材料的政策应用不据此宣称全部讲解已覆盖。",
+      "references": [
+        {
+          "page": 36,
+          "quote": "GD 人民群众是历史的创造者。人人只是自己历史的创造者;而非历史的创造者 (V)",
+          "covers": [
+            "D"
+          ],
+          "relatedUnits": [
+            "D"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-mipeng6-choice-2-18",
+      "sig": "d36be5ed",
+      "concept": "practice",
+      "reasoning": "题目从干中学、田间科研或中国实践中产生认识，考点是实践的来源、基础及目的作用；不能仅因出现实践一词就配页。",
+      "references": [
+        {
+          "page": 23,
+          "quote": "1, 实践决定认识: 实践是认识的基础/来源 /动力 (现实的需要)、栓验标准 /目的 (认识世界是\n为了改造世界)",
+          "covers": [],
+          "relatedUnits": [
+            "B"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-mipeng6-choice-3-18",
+      "sig": "38d06bf9",
+      "concept": "people",
+      "reasoning": "题目考查人民群众是历史创造者的唯物史观依据，须区分人民群众与每个普通个人。材料的政策应用不据此宣称全部讲解已覆盖。",
+      "references": [
+        {
+          "page": 36,
+          "quote": "GD 人民群众是历史的创造者。人人只是自己历史的创造者;而非历史的创造者 (V)",
+          "covers": [],
+          "relatedUnits": [
+            "C"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-second-marx-matching-0011",
+      "sig": "949c0f8b",
+      "concept": "practice",
+      "reasoning": "题目从干中学、田间科研或中国实践中产生认识，考点是实践的来源、基础及目的作用；不能仅因出现实践一词就配页。",
+      "references": [
+        {
+          "page": 23,
+          "quote": "1, 实践决定认识: 实践是认识的基础/来源 /动力 (现实的需要)、栓验标准 /目的 (认识世界是\n为了改造世界)",
+          "covers": [
+            "A→3"
+          ],
+          "relatedUnits": [
+            "A→3"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-second-marx-matching-0017",
+      "sig": "1c78a981",
+      "concept": "people",
+      "reasoning": "题目考查人民群众是历史创造者的唯物史观依据，须区分人民群众与每个普通个人。材料的政策应用不据此宣称全部讲解已覆盖。",
+      "references": [
+        {
+          "page": 36,
+          "quote": "GD 人民群众是历史的创造者。人人只是自己历史的创造者;而非历史的创造者 (V)",
+          "covers": [],
+          "relatedUnits": [
+            "C→3"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-tuijie-manual-exercises-matching-020-01",
+      "sig": "67f23461",
+      "concept": "ai",
+      "reasoning": "人工智能是人类智能的物化，是对人脑思维运行机制的模拟和延伸；讲义第15页的实质定义直接对应这一考点。",
+      "references": [
+        {
+          "page": 15,
+          "quote": "4 人工智能\n实质 | 对人脑组织结构与思维运行机制的模仿，是人类智能的物化",
+          "covers": [
+            "G→7"
+          ],
+          "relatedUnits": [
+            "G→7"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-tuijie8-choice-7-18",
+      "sig": "728f3717",
+      "concept": "people",
+      "reasoning": "题目考查人民群众是历史创造者的唯物史观依据，须区分人民群众与每个普通个人。材料的政策应用不据此宣称全部讲解已覆盖。",
+      "references": [
+        {
+          "page": 36,
+          "quote": "GD 人民群众是历史的创造者。人人只是自己历史的创造者;而非历史的创造者 (V)",
+          "covers": [
+            "B"
+          ],
+          "relatedUnits": [
+            "B"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q016",
+      "sig": "f18f983c",
+      "concept": "ai",
+      "reasoning": "人工智能是人类智能的物化，是对人脑思维运行机制的模拟和延伸；讲义第15页的实质定义直接对应这一考点。",
+      "references": [
+        {
+          "page": 15,
+          "quote": "4 人工智能\n实质 | 对人脑组织结构与思维运行机制的模仿，是人类智能的物化",
+          "covers": [
+            "B"
+          ],
+          "relatedUnits": [
+            "B"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q034",
+      "sig": "30066650",
+      "concept": "ai",
+      "reasoning": "人工智能是人类智能的物化，是对人脑思维运行机制的模拟和延伸；讲义第15页的实质定义直接对应这一考点。",
+      "references": [
+        {
+          "page": 15,
+          "quote": "4 人工智能\n实质 | 对人脑组织结构与思维运行机制的模仿，是人类智能的物化",
+          "covers": [
+            "B"
+          ],
+          "relatedUnits": [
+            "B"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q036",
+      "sig": "8ee6b249",
+      "concept": "matter",
+      "reasoning": "题目以微观物质形态变化说明客观存在不依赖意识。讲义区分具体物质形态与物质共同特性，依据是客观实在性。",
+      "references": [
+        {
+          "page": 12,
+          "quote": "3. 列宁 (全面科学的规定): 物质是标志客观实在的哲学范畴。物质的共同特性(唯一特性 / RAR\n的规定) 是客观实在性，它存在于人的意识之外，为人的意识所反映。",
+          "covers": [
+            "A"
+          ],
+          "relatedUnits": [
+            "A"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q051",
+      "sig": "522edca2",
+      "concept": "conditions",
+      "reasoning": "题目不是否认人的能动性，而是强调发挥能动性还须一定物质条件和手段。讲义对这一条件有直接表述。",
+      "references": [
+        {
+          "page": 14,
+          "quote": "G) 正确发挥人的主观能动性，还要依赖于一定的物质条件和物质手段",
+          "covers": [
+            "C"
+          ],
+          "relatedUnits": [
+            "C"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q053",
+      "sig": "13952cf4",
+      "concept": "matter",
+      "reasoning": "题目以微观物质形态变化说明客观存在不依赖意识。讲义区分具体物质形态与物质共同特性，依据是客观实在性。",
+      "references": [
+        {
+          "page": 12,
+          "quote": "3. 列宁 (全面科学的规定): 物质是标志客观实在的哲学范畴。物质的共同特性(唯一特性 / RAR\n的规定) 是客观实在性，它存在于人的意识之外，为人的意识所反映。",
+          "covers": [
+            "A"
+          ],
+          "relatedUnits": [
+            "A"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q054",
+      "sig": "78e912a3",
+      "concept": "truth",
+      "reasoning": "本题以盲人摸象说明应全面具体认识对象。讲义明确说真理是具体的、全面的；次序和标点变化不改变考点。",
+      "references": [
+        {
+          "page": 27,
+          "quote": "4. 真理是具体的、全面的、一元的、不断发展的，而不是抽象的、永恒不变的",
+          "covers": [
+            "A"
+          ],
+          "relatedUnits": [
+            "A"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q060",
+      "sig": "a00dd8b9",
+      "concept": "indirect",
+      "reasoning": "系统阅读已有典籍属于取得间接经验；讲义直接说明一个人的多数知识来自间接经验，同时指出最终仍源于实践。",
+      "references": [
+        {
+          "page": 23,
+          "quote": "@@ 间接经验: 一个人的多数知识还是来自间接经验，是从书本和传授\n中得来的(间接经验归根到底也来自实践，来自别人的实践)",
+          "covers": [
+            "D"
+          ],
+          "relatedUnits": [
+            "D"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q061",
+      "sig": "5a81673b",
+      "concept": "practice",
+      "reasoning": "题目从干中学、田间科研或中国实践中产生认识，考点是实践的来源、基础及目的作用；不能仅因出现实践一词就配页。",
+      "references": [
+        {
+          "page": 23,
+          "quote": "1, 实践决定认识: 实践是认识的基础/来源 /动力 (现实的需要)、栓验标准 /目的 (认识世界是\n为了改造世界)",
+          "covers": [
+            "B"
+          ],
+          "relatedUnits": [
+            "B"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-cf-lower-choice-0379",
+      "sig": "b337ce89",
+      "concept": "culture",
+      "reasoning": "此题的限定关系是说到底要坚定什么自信；依据是第86页表格续行而非只包含四个自信的标题。OCR跨栏请核对原图。",
+      "references": [
+        {
+          "page": 86,
+          "quote": "色社会主义道路自信、理论自信、制度自信，说到底是要坚定文化自信",
+          "covers": [
+            "D"
+          ],
+          "relatedUnits": [
+            "D"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-hat-xi-cloze-0010",
+      "sig": "6beb457d",
+      "concept": "culture",
+      "reasoning": "此题的限定关系是说到底要坚定什么自信；依据是第86页表格续行而非只包含四个自信的标题。OCR跨栏请核对原图。",
+      "references": [
+        {
+          "page": 86,
+          "quote": "色社会主义道路自信、理论自信、制度自信，说到底是要坚定文化自信",
+          "covers": [
+            "1"
+          ],
+          "relatedUnits": [
+            "1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-second-xi-matching-0001",
+      "sig": "da0a9fb3",
+      "concept": "culture",
+      "reasoning": "此题的限定关系是说到底要坚定什么自信；依据是第86页表格续行而非只包含四个自信的标题。OCR跨栏请核对原图。",
+      "references": [
+        {
+          "page": 86,
+          "quote": "色社会主义道路自信、理论自信、制度自信，说到底是要坚定文化自信",
+          "covers": [
+            "B→5"
+          ],
+          "relatedUnits": [
+            "B→5"
+          ]
+        }
+      ]
+    }
+  ]
+}

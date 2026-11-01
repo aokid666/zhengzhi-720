@@ -18,4 +18,11 @@ $('#extraCollapse').click();assert($('#extraTools').hidden);$('#extraCollapse').
 $('[data-toc-page="125"]').click();assert.equal($('#extraPage').value,'125');
 await go('q/pr-tuijie8-choice-1-04');await wait(()=>$('#opts'));w.ZS_SEL('pr-tuijie8-choice-1-04','D');w.ZS_SUBMIT('pr-tuijie8-choice-1-04');await wait(()=>$('#lectExtra-suyi'));
 assert($('#lectExtra-suyi img').src.includes('/0019.png'));assert($('#lectExtra-suyi').textContent.includes('量变是质变的必要准备'));
+assert.equal($('#lectExtra-suyi [data-status]').dataset.status,'complete');
+await go('suyi-pairing');await wait(()=>$('#suyiRows'));
+const progress=JSON.parse(fs.readFileSync('data/suyi-pairing-status.json'));assert.equal(w.document.querySelectorAll('.suyi-report-row').length,50);assert($('#suyiRange').textContent.includes('4662'));$('#suyiNext').click();assert($('#suyiRange').textContent.includes('第 2'));
+$('#suyiBook').value='tuijie8';$('#suyiBook').dispatchEvent(new w.Event('change'));$('#suyiState').value='unconfirmed';$('#suyiState').dispatchEvent(new w.Event('change'));assert([...w.document.querySelectorAll('.suyi-report-row')].every(el=>el.href.includes('pr-tuijie8')));assert($('#suyiRows').textContent.includes('待核实'));
+$('#suyiQuery').value='不存在的检索词XYZ';$('#suyiQuery').dispatchEvent(new w.Event('input'));assert.equal(w.document.querySelectorAll('.suyi-report-row').length,0);assert($('#suyiRows').textContent.includes('没有符合'));
+await go('q/q002');await wait(()=>$('#opts'));w.ZS_SEL('q002','D');w.ZS_SUBMIT('q002');await wait(()=>$('#lectExtra-suyi [data-status]'));assert.equal($('#lectExtra-suyi [data-status]').dataset.status,progress.items.find(r=>r.id==='q002').status);assert($('#lectExtra-suyi a[href="#/suyi-pairing"]'));
+w.ZS_BACK();await wait(()=>$('#suyiQuery'));assert.equal($('#suyiQuery').value,'不存在的检索词XYZ');assert.equal($('#suyiBook').value,'tuijie8');
 console.log('SuYi reader, split PDF navigation, search and question evidence passed');await w.happyDOM.abort();await w.happyDOM.close();

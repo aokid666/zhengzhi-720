@@ -23,4 +23,5 @@ jobs:
       - run: node tests/lecture-race-ui.mjs
       - run: node tests/handwriting-ui.mjs
       - run: node tests/suyi-ui.mjs
+      - run: python scripts/package-suyi-audit.py --check
       - run: git diff --check
