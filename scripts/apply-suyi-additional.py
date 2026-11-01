@@ -14,6 +14,11 @@ def main(document=None):
   q=qs[decision['id']];row=rows[q['id']];assert decision['sig']==row['sig']==r.signature(q);assert len(decision['reasoning'])>=20;ids={u['id'] for u in row['units']};group=row['book']
   if group not in maps:maps[group]=read('data/extra-links/'+group+'.json')
   item=maps[group]['items'][q['id']];assert item['sig']==row['sig'];reviewed=set(item['suyiStatus'].get('reviewedUnits',[]))
+  clear=set(decision.get('clearUnits',[]));row['covered']=[u for u in row['covered'] if u not in clear]
+  for target in decision.get('removeReferences',[]):
+   matches=lambda e:e['page']==target['page'] and e['quote']==target['quote']
+   row['references']=[e for e in row['references'] if not matches(e)]
+   item['refs']=[e for e in item['refs'] if not(e.get('source')==SID and matches(e))]
   for ref in decision['references']:
    raw=d['pages'][ref['page']-1]['text'];assert ref['quote'] in raw;assert set(ref['covers'])<=ids
    key=(ref['page'],ref['quote']);row['references']=[e for e in row['references'] if not(e.get('method')=='concept-reviewed' and (e['page'],e['quote'])==key)]
