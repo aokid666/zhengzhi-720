@@ -1,0 +1,21 @@
+import {Window} from 'happy-dom';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';
+process.chdir(path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..')); import assert from 'node:assert/strict';
+const w=new Window({url:'http://localhost/',settings:{enableJavaScriptEvaluation:true,disableCSSFileLoading:true,disableJavaScriptFileLoading:true}});w.localStorage.setItem('zz720.v1.cfg',JSON.stringify({gate:'0',auto:false}));w.document.write(fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,''));w.fetch=async u=>{const url=String(u);if(url.startsWith('https://aokid666.github.io/zz-manual-'))return new Response(JSON.stringify({lines:[]}));if(url.startsWith('https://aokid666.github.io/')){const catalog=JSON.parse(fs.readFileSync('data/extra-lectures.json'));const source=catalog.sources.find(s=>s.dataUrl===url);if(source)return new Response(JSON.stringify({pages:source.pages.map(p=>({...p,text:'原文检索测试：党的一大 · PDF '+p.page}))}));}return new Response(fs.readFileSync(path.join('.',url.split('?')[0])),{status:200});};let scrollY=0,lastTarget='';Object.defineProperty(w,'scrollY',{get:()=>scrollY});w.scrollTo=(x,y)=>{scrollY=y;};w.HTMLElement.prototype.scrollIntoView=function(){lastTarget=this.id;};w.HTMLElement.prototype.setPointerCapture=()=>{};w.ResizeObserver=class{observe(){}disconnect(){}};w.HTMLCanvasElement.prototype.getContext=()=>new Proxy({},{get:(_,k)=>k==='measureText'?()=>({width:8}):()=>{}});
+for(const n of ['store','annotate','lecture-links','extra-lectures','manual','cloze','test-mode','practice','question-copy','app'])w.eval(fs.readFileSync('js/'+n+'.js','utf8'));w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
+const $=s=>w.document.querySelector(s),wait=async(fn)=>{for(let i=0;i<400;i++){if(fn())return;await new Promise(r=>setTimeout(r,10));}throw Error('Timeout: '+fn);};const go=async h=>{w.ZS_GO(h);await new Promise(r=>setTimeout(r,20));};
+await wait(()=>$('#view').textContent.includes('冲刺板块'));
+
+assert($('#view a[href="#/extra/suyi-manual-2027/1"]'));
+await go('extra/suyi-manual-2027/97');await wait(()=>$('#extraPdf'));
+assert.equal(w.document.querySelectorAll('#extraPages section').length,246);
+assert($('#extraPdf').href.includes('P087-097.pdf#page=11'));
+$('#extraPage').value=98;$('#extraPage').dispatchEvent(new w.Event('change'));
+assert($('#extraPdf').href.includes('P098-107.pdf#page=1'));
+$('#extraSearch').value='PDF 100';$('#extraSearch').dispatchEvent(new w.Event('input'));
+assert.equal(w.document.querySelectorAll('#extraHits button').length,1);$('#extraHits button').click();
+assert.equal($('#extraPage').value,'100');assert($('#extraPdf').href.endsWith('#page=3'));
+$('#extraCollapse').click();assert($('#extraTools').hidden);$('#extraCollapse').click();assert(!$('#extraTools').hidden);
+$('[data-toc-page="125"]').click();assert.equal($('#extraPage').value,'125');
+await go('q/pr-tuijie8-choice-1-04');await wait(()=>$('#opts'));w.ZS_SEL('pr-tuijie8-choice-1-04','D');w.ZS_SUBMIT('pr-tuijie8-choice-1-04');await wait(()=>$('#lectExtra-suyi'));
+assert($('#lectExtra-suyi img').src.includes('/0019.png'));assert($('#lectExtra-suyi').textContent.includes('量变是质变的必要准备'));
+console.log('SuYi reader, split PDF navigation, search and question evidence passed');await w.happyDOM.abort();await w.happyDOM.close();

@@ -2,7 +2,7 @@
 const DATA_VER = 43;
 const TOC_VER = 2;      // 目录数据单独计数，改动目录不必让题库重新下载
 const QUESTION_VER = 45; // 修订选项文字时只刷新题库，不重新下载讲义文字
-const APP_VER = 146;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
+const APP_VER = 147;     // 每次改动前端都 +1，和 index.html 的 ?v= 保持一致
 (function () {
   'use strict';
   const $ = (s, r) => (r || document).querySelector(s);
@@ -808,7 +808,7 @@ const APP_VER = 146;     // 每次改动前端都 +1，和 index.html 的 ?v= �
         <div class="tiny muted">逐题附原讲义解析、对应知识清单和速成班讲义的文字与原页截图。</div>
       </div>
       <div class="sec-title">🚀 冲刺板块</div>
-      <div class="card sprint-home"><div class="sprint-home-heading"><b>背诵、练题与易混点复盘</b><a href="#/sprint">查看全部 →</a></div><div class="sprint-added-links"><a href="#/sprint/practice/group/second"><b>二刷学成 · 五模块</b><span>连线 / 填序号 →</span></a><a href="#/sprint/practice/group/cloze"><b>肖帽子题</b><span>蓝色答案挖空 →</span></a></div><div class="sprint-home-links"><a href="#/sprint/practice/tuijie8"><b>腿姐八套卷</b><span>专项模拟 / 选择题 →</span></a><a href="#/sprint/practice/tuijie-selftest"><b>腿姐背练自测</b><span>手册与自测练习 →</span></a><a href="#/sprint/practice/tuijie-manual-exercises"><b>腿姐手册专题自测</b><span>判断订正 / 连线 / 填空 →</span></a><a href="#/sprint/topics"><b>专题挖空</b><span>123 个专题 →</span></a><a href="#/sprint/practice"><b>选择题 / 笔记</b><span>选择 / 连线 / 挖空 →</span></a><a href="#/sprint/questions"><b>手册习题190</b><span>193 道题 →</span></a><a href="#/sprint/practice/mipeng6"><b>米鹏6套卷</b><span>选择题 / 材料分析 →</span></a><a href="#/sprint/practice/dalizi-true"><b>大李子历年真题</b><span>2015—2025 · 363 题 →</span></a></div></div>
+      <div class="card sprint-home"><div class="sprint-home-heading"><b>背诵、练题与易混点复盘</b><a href="#/sprint">查看全部 →</a></div><div class="sprint-added-links"><a href="#/extra/suyi-manual-2027/1"><b>苏一提分手册</b><span>246页 · 讲义对照 / 全文搜索 →</span></a><a href="#/sprint/practice/group/second"><b>二刷学成 · 五模块</b><span>连线 / 填序号 →</span></a><a href="#/sprint/practice/group/cloze"><b>肖帽子题</b><span>蓝色答案挖空 →</span></a></div><div class="sprint-home-links"><a href="#/sprint/practice/tuijie8"><b>腿姐八套卷</b><span>专项模拟 / 选择题 →</span></a><a href="#/sprint/practice/tuijie-selftest"><b>腿姐背练自测</b><span>手册与自测练习 →</span></a><a href="#/sprint/practice/tuijie-manual-exercises"><b>腿姐手册专题自测</b><span>判断订正 / 连线 / 填空 →</span></a><a href="#/sprint/topics"><b>专题挖空</b><span>123 个专题 →</span></a><a href="#/sprint/practice"><b>选择题 / 笔记</b><span>选择 / 连线 / 挖空 →</span></a><a href="#/sprint/questions"><b>手册习题190</b><span>193 道题 →</span></a><a href="#/sprint/practice/mipeng6"><b>米鹏6套卷</b><span>选择题 / 材料分析 →</span></a><a href="#/sprint/practice/dalizi-true"><b>大李子历年真题</b><span>2015—2025 · 363 题 →</span></a></div></div>
       <div class="sec-title">🔄 艾宾浩斯复习</div>
       <div class="card pad">${reviewChooser()}
         <div class="tiny muted" style="margin-bottom:6px">答对：复习间隔按 1 / 2 / 4 / 7 / 15 / 30 天递增；答错：回到第 1 档，半天后再来。</div>
@@ -1199,7 +1199,7 @@ const APP_VER = 146;     // 每次改动前端都 +1，和 index.html 的 ?v= �
 
   window.ZS_FINDQLECTURE = async (id,kind) => {
     const q=S.byId[id];if(!q)return;const keyword=LECTURE_LINKS.query(q);
-    if(['tj','history'].includes(kind)){try{await EXTRA_LECTURES.search(q,kind==='tj'?'tuijie':'history',keyword);}catch(e){ZS.toast(e.message);}return;}
+    if(['tj','history','suyi'].includes(kind)){try{await EXTRA_LECTURES.search(q,kind==='tj'?'tuijie':kind,keyword);}catch(e){ZS.toast(e.message);}return;}
     if(!['k','s','m'].includes(kind))return;await needLect();if(S.curId!==id||!S.route.startsWith('q/'))return;
     const hits=docPageResults(kind,keyword),page=hits[0]?.n||((PAGE_OFF[kind]||0)+1);S.docFind={kind,keyword,page};S.docSearchQ=keyword;S.searchDocKind=kind;go('lect/'+kind+'/'+(page-(PAGE_OFF[kind]||0)));
   };
