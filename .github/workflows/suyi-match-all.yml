@@ -46,9 +46,9 @@ jobs:
           retention-days: 30
       - name: Publish reviewable results branch
         run: |
-          git switch -c codex/suyi-all-paired-v148
+          git switch -c codex/suyi-all-paired-v148-r2
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add data/extra-links data/suyi-all-pairing-report.json
           git commit -m 'Audit all 4662 questions against SuYi with per-answer source coverage'
-          git push origin HEAD:codex/suyi-all-paired-v148
+          git push origin HEAD:codex/suyi-all-paired-v148-r2

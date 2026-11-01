@@ -7,6 +7,7 @@ judgement corrections remain related evidence rather than complete solutions.
 import argparse,collections,copy,difflib,hashlib,importlib.util,json,pathlib,re,urllib.request
 ROOT=pathlib.Path(__file__).resolve().parents[1];VERSION=148;SID='suyi-manual-2027'
 spec=importlib.util.spec_from_file_location('review',ROOT/'scripts/review-lecture-links.py');r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
+r.QUALIFIERS += ['说到底','精髓','实质','本质特征','最重要的原因','第一次全面','唯一途径','主要来源']
 def read(p):return json.loads((ROOT/p).read_text())
 def dump(p,x):
  p=pathlib.Path(p);p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(x,ensure_ascii=False,separators=(',',':')))
@@ -66,6 +67,12 @@ class Matcher:
   for u in us:
    hits=[h for h in self.find(u['prompt'],u['answer']) if self.accepted(h,u['answer'],u['prompt'])]
    if hits:add(hits[0],u['id'],'answer');covered.append(u['id'])
+   else:
+    # A theoretical clause may be embedded in a long option with an application
+    # to the question material. Keep that clause as related evidence only.
+    candidates=[h for h in self.find(u['prompt'],u['answer']) if not FALSE.search(h['quote']) and h['answerRun']>=18 and len(r.norm(u['answer']))>=20]
+    if candidates:
+     add(candidates[0],None,'principle');related.append(u['id'])
   # Supplemental explanation: supports a topic, never silently fills an uncovered
   # short answer or turns a written/judgement item into a complete-answer claim.
   if not proofs:
@@ -77,7 +84,7 @@ class Matcher:
   status='complete' if us and len(covered)==len(us) else 'partial' if covered else 'related' if proofs else 'unconfirmed'
   # Cap duplicate views, prioritizing distinct covered answers, not a whole page per option.
   refs=list(proofs.values());refs.sort(key=lambda e:(-len(e['covers']),-e['answerRun'],e['page']))
-  return {'id':q['id'],'sig':r.signature(q),'book':q.get('bookId') or ('manual' if q.get('source')=='m' else 'original'),'status':status,'units':[{**u,'prompt':u['prompt'][:200],'answer':u['answer'][:350]} for u in us],'covered':covered,'references':refs,'module':q.get('module',''),'stem':q['stem'][:140]}
+  return {'id':q['id'],'sig':r.signature(q),'book':q.get('bookId') or ('manual' if q.get('source')=='m' else 'original'),'status':status,'units':[{**u,'prompt':u['prompt'][:200],'answer':u['answer'][:350]} for u in us],'covered':covered,'relatedUnits':related,'references':refs,'module':q.get('module',''),'stem':q['stem'][:140]}
 def shard(index,count,out):
  s,d=source();m=Matcher(d);qs=r.pool();rows=[]
  for n,q in enumerate(qs):
