@@ -28,7 +28,7 @@ def run(document=None,check=False):
   stem=q['stem'];preview=stem if len(stem)<=320 else stem[:140]+'……'+stem[-160:]
   items.append({'id':q['id'],'book':group,'module':q.get('module',''),'chapter':q.get('chapterTitle') or q.get('chapter',''),'stem':preview,'status':row['status'],'unitCount':len(ids),'coveredCount':len(row['covered'])})
  assert dict(summary)==a['summary'];assert dict(books)==a['books']
- compact={'version':152,'source':SID,'questions':len(items),'summary':dict(summary),'books':dict(books),'items':items}
+ compact={'version':153,'source':SID,'questions':len(items),'summary':dict(summary),'books':dict(books),'items':items}
  path='data/suyi-pairing-status.json'
  if check:assert read(path)==compact
  else:dump(path,compact)

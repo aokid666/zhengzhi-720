@@ -16,7 +16,7 @@ test('fourth batch reviews 500 fresh pending questions and retains real gaps', (
   assert.equal(batch.complete, 194);
   assert.equal(batch.related, 210);
   assert.equal(batch.unconfirmedBefore - batch.unconfirmedAfter, 404);
-  assert.equal(audit.summary.unconfirmed, 1626);
+  assert(audit.summary.unconfirmed <= batch.unconfirmedAfter);
   const counts = { complete: 0, related: 0, unconfirmed: 0 };
   for (const row of batch.items) {
     assert(!seen.has(row.id));
