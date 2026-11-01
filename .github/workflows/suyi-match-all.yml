@@ -1,6 +1,9 @@
 name: Pair every bank with SuYi source facts
 on:
   workflow_dispatch:
+  push:
+    branches: [codex/suyi-all-source-v148]
+    paths: [scripts/suyi-match-all.py, .github/workflows/suyi-match-all.yml]
 permissions:
   contents: read
 jobs:
