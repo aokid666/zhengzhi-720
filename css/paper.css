@@ -1,0 +1,21 @@
+/* Paper practice scrolls with the existing page, including on mobile. */
+.paper-top { margin: 1rem 0; }
+.paper-top h1 { margin: 0 0 .5rem; }
+.paper-top .acts { align-items: center; }
+.paper-jump { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.paper-jump input { width: 5rem; }
+.paper-list { display: grid; gap: 1rem; }
+.paper-question { scroll-margin-top: 8rem; min-width: 0; }
+.paper-question-header { margin-bottom: .75rem; }
+.paper-question-header h2 { font-size: 1.1rem; margin: 0 0 .25rem; }
+.paper-options { display: grid; gap: .25rem; }
+.paper-options .opt { width: 100%; text-align: start; font: inherit; color: inherit; }
+.paper-options .opt:disabled { opacity: 1; cursor: default; }
+.paper-options .opt .v { overflow-wrap: anywhere; }
+.paper-match-choices { list-style: none; padding-inline-start: 0; }
+.paper-match-choices li { margin-bottom: .4rem; }
+.paper-match-row, .paper-written { display: grid; gap: .4rem; margin-block: .75rem; }
+.paper-match-row input { width: min(100%,12rem); }
+.paper-written textarea { width: 100%; resize: vertical; }
+.paper-explanation, .paper-answer { margin-top: 1rem; }
+.paper-sentinel { padding-block: 1rem; }

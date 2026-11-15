@@ -67,13 +67,15 @@ window.PRACTICE = (() => {
       state.chapter=$('#pChapter').value;state.filter=$('#pFilter').value;state.query=$('#pQuery').value.trim();if(reset)state.page=1;
       const ch=state.chapter,f=state.filter,t=state.query;
       const qs=d.questions.filter(q=>(!ch||q.module+' · '+q.chapter===ch)&&(!t||(q.stem+' '+Object.values(q.options).join(' ')+(q.left||[]).map(i=>i.text).join(' ')+(q.right||[]).map(i=>i.text).join(' ')).includes(t))&&(f==='wrong'?c.isWrongNow(q.id):f==='star'?c.flag(q.id,'star'):f==='undone'?!c.isDone(q.id):true));
-      listIds=qs.map(q=>q.id);if((collectionId(id)==='cf'||['pastpaper','mock','cloze','exercise'].includes(b.kind)||b.studyStage==='second')&&localStorage.getItem('zz720.listMode.'+collectionId(id))==='numbers'){ $('#pList').innerHTML='<div class="sprint-result-count">'+qs.length+' 道练习</div>'+MANUAL.numberGrid(qs,c);return;}const size=20,pages=Math.max(1,Math.ceil(qs.length/size));state.page=Math.min(pages,state.page);const start=(state.page-1)*size,visible=qs.slice(start,start+size);let group='';
+      const addPaperButton=()=>c.paperButton?.($('#pList'),qs,(shortTitle[id]||b.title)+' · 纸卷');
+      listIds=qs.map(q=>q.id);if((collectionId(id)==='cf'||['pastpaper','mock','cloze','exercise'].includes(b.kind)||b.studyStage==='second')&&localStorage.getItem('zz720.listMode.'+collectionId(id))==='numbers'){ $('#pList').innerHTML='<div class="sprint-result-count">'+qs.length+' 道练习</div>'+MANUAL.numberGrid(qs,c);addPaperButton();return;}const size=20,pages=Math.max(1,Math.ceil(qs.length/size));state.page=Math.min(pages,state.page);const start=(state.page-1)*size,visible=qs.slice(start,start+size);let group='';
       const pager=qs.length>size?'<div class="sprint-pager"><button class="btn" id="pPrevPage" '+(state.page<=1?'disabled':'')+'>上一页</button><span>'+state.page+' / '+pages+' 页</span><button class="btn" id="pNextPage" '+(state.page>=pages?'disabled':'')+'>下一页</button></div>':'';
       $('#pList').innerHTML='<div class="sprint-result-count">'+qs.length+' 道练习'+(qs.length?' · 显示 '+(start+1)+'–'+(start+visible.length):'')+'</div>'+visible.map(q=>{
         const chapter=q.module+' · '+q.chapter,heading=chapter!==group?'<h2 class="p-list-chapter">'+esc(chapter)+'</h2>':'';group=chapter;
         const snippet=q.type==='matching'?(q.left||[]).slice(0,2).map(i=>i.text).join('；'):q.stem;
         return heading+'<button class="card p-qrow" onclick="ZS_GO(\'q/'+q.id+'\')"><span class="p-row-number">'+String(q.no).padStart(2,'0')+'</span><span class="p-row-content"><b>'+esc(q.section)+(q.originalNo?' · 原题 '+q.originalNo:'')+'</b><span class="p-row-snippet">'+esc(snippet)+'</span><small>'+esc(badge(q,c))+'</small></span><span class="p-row-arrow" aria-hidden="true">›</span></button>';
       }).join('')+pager+(qs.length?'':'<div class="empty">没有符合条件的题目，试试其他筛选条件。</div>');
+      addPaperButton();
       if($('#pPrevPage'))$('#pPrevPage').onclick=()=>{state.page--;update(false);$('#pList').scrollIntoView({block:'start',behavior:'smooth'});};
       if($('#pNextPage'))$('#pNextPage').onclick=()=>{state.page++;update(false);$('#pList').scrollIntoView({block:'start',behavior:'smooth'});};
     };

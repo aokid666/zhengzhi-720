@@ -124,11 +124,13 @@ window.MANUAL = (() => {
     ctx.S.manualJudgeIds=judge&&blockId?qs.map(q=>q.id):null;
     const route=judge?'sprint/judgements/':'sprint/questions/',stateKey=route+(filter||'all')+'/'+(blockId||'');let page=listPages.get(stateKey)||1;const size=20;
     frame('<div class="sprint-page"><a class="sprint-back" href="#/sprint">‹ 冲刺板块</a><div class="hero sprint-hero"><span class="sprint-eyebrow">背诵手册</span><h1>'+(judge?'概念辨析判断练习':'习题190')+'</h1><p>'+(judge?'根据原书干扰项与辨析练习，提交后核对原文。':'原书实际收录193题，保留原编号；提交后查看解析与资料对照。')+'</p></div><div class="sprint-list-tools">'+[['all','全部'],['wrong','错题'],['star','收藏'],['undone','未做']].map(([k,v])=>'<button class="btn '+(filter===k?'main':'')+'" onclick="ZS_GO(\''+route+k+(blockId?'/'+blockId:'')+'\')">'+v+'</button>').join('')+'<a href="#/sprint/points">点拨与易混考点 →</a></div>'+(!judge?listToggle('m'):'')+'<div id="mQuestionList"></div></div>');
+    const addPaperButton=()=>ctx.paperButton?.(document.getElementById('mQuestionList'),qs,(judge?'概念辨析判断练习':'背诵手册习题190')+' · 纸卷');
     const update=()=>{
-      if(!judge&&localStorage.getItem('zz720.listMode.manual190')==='numbers'){document.getElementById('mQuestionList').innerHTML='<div class="sprint-result-count">'+qs.length+' 道练习</div>'+numberGrid(qs,ctx);return;}
+      if(!judge&&localStorage.getItem('zz720.listMode.manual190')==='numbers'){document.getElementById('mQuestionList').innerHTML='<div class="sprint-result-count">'+qs.length+' 道练习</div>'+numberGrid(qs,ctx);addPaperButton();return;}
       page=Math.min(page,Math.max(1,Math.ceil(qs.length/size)));listPages.set(stateKey,page);
       const pages=Math.max(1,Math.ceil(qs.length/size)),start=(page-1)*size,visible=qs.slice(start,start+size);
       document.getElementById('mQuestionList').innerHTML='<div class="sprint-result-count">'+qs.length+' 道练习'+(qs.length?' · 显示 '+(start+1)+'–'+(start+visible.length):'')+'</div>'+visible.map(q=>'<button class="card pad m-qrow" onclick="ZS_GO(\'q/'+q.id+'\')"><b>'+esc(judge?q.chapter:q.module+' · '+q.section+' · 原题 '+q.no)+'</b><span>'+esc(q.stem)+'</span><small>'+badge(q)+'</small></button>').join('')+(qs.length>size?'<div class="sprint-pager"><button class="btn" id="mPrevList" '+(page<=1?'disabled':'')+'>上一页</button><span>'+page+' / '+pages+' 页</span><button class="btn" id="mNextList" '+(page>=pages?'disabled':'')+'>下一页</button></div>':'')+(qs.length?'':'<div class="empty">这里还没有题目。</div>');
+      addPaperButton();
       const prev=document.getElementById('mPrevList'),next=document.getElementById('mNextList');if(prev)prev.onclick=()=>{page--;update();document.getElementById('mQuestionList').scrollIntoView({block:'start',behavior:'smooth'});};if(next)next.onclick=()=>{page++;update();document.getElementById('mQuestionList').scrollIntoView({block:'start',behavior:'smooth'});};
     };if(!judge)bindListToggle('m','manual190',update);update();
   }

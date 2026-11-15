@@ -87,6 +87,7 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   }
   window.ZS_BACK = () => {
     const h=S.route||'';
+    if(h==='paper')return go(readPaper()?.back||'');
     if(h.startsWith('q/')){const q=S.byId[h.slice(2)];return go(q?questionDirectory(q):'');}
     if(h.startsWith('l/'))return go('');
     if(h.startsWith('sprint/practice/'))return go(h.includes('/read/')?'sprint/practice/'+PRACTICE.collectionId(h.split('/')[2]):'sprint/practice');
@@ -429,7 +430,7 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   function applyRemoteView() {
     updateSyncStatus();
     // 当前题目与讲义保持原位；下一次主动导航时再装配新数据。
-    if (S.route.startsWith('q/') || S.route.startsWith('lect/')) {
+    if (S.route.startsWith('q/') || S.route.startsWith('lect/') || S.route==='paper') {
       S.remotePending = true;
       const hint = $('#syncRemoteHint'); if (hint) hint.hidden = false;
       return;
@@ -630,6 +631,78 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     requestAnimationFrame(()=>{if(renderedRoute===S.route)apply();});
   }
   /* ---------- 路由 ---------- */
+  let paperSession = null;
+  let disposePaper = null;
+  const paperKey = 'zz720.paper.v1';
+  function readPaper() {
+    if (paperSession) return paperSession;
+    try { return JSON.parse(sessionStorage.getItem(paperKey)||'null'); } catch(e) { return null; }
+  }
+
+  function openPaper(questions, title, firstId) {
+    if (window.ZS_READER_MODE || !window.ZS_PAPER) return;
+    if (!questions.length) return ZS.toast('没有符合条件的题目');
+    if (S.q || questions.some(q=>TEST_MODE.isReview(q.id))) return ZS.toast('请先退出当前队列或测试复习，再打开纸卷模式');
+    TEST_MODE.leave('paper');
+    const fromQuestion = S.route.startsWith('q/');
+    paperSession = {
+      ids: questions.map(q=>q.id),
+      books: [...new Set(questions.map(q=>q.bookId).filter(Boolean))],
+      title,
+      back: fromQuestion ? questionDirectory(questions.find(q=>q.id===firstId)||questions[0]) : S.route,
+      first: Math.max(0,questions.findIndex(q=>q.id===firstId))
+    };
+    try { sessionStorage.setItem(paperKey,JSON.stringify(paperSession)); } catch(e) {}
+    browsePositions.delete('paper');
+    go('paper');
+  }
+
+  function paperButton(container, questions, title, firstId) {
+    if (!container || !questions.length || window.ZS_READER_MODE || !window.ZS_PAPER) return;
+    const row = document.createElement('div');
+    const button = document.createElement('button');
+    row.className = 'acts';
+    button.type = 'button';
+    button.className = 'btn';
+    button.textContent = '纸卷模式 · 上下滚动';
+    button.onclick = () => openPaper(questions,title,firstId);
+    row.append(button);
+    container.prepend(row);
+  }
+
+  async function renderPaper() {
+    showQNav(false);
+    const session = readPaper();
+    if (!session?.ids?.length) {
+      shell('<div class="empty">请从题库目录打开纸卷模式。<div class="acts"><a class="btn" href="#/">返回首页</a></div></div>');
+      return;
+    }
+    try {
+      if (session.ids.some(id=>!S.byId[id]) && session.books.length) {
+        shell('<div class="empty">正在加载纸卷…</div>',true);
+        await Promise.all(session.books.map(id=>PRACTICE.needBook(id,S)));
+      }
+      if (S.route!=='paper') return;
+      const questions = session.ids.map(id=>S.byId[id]).filter(Boolean);
+      const resume = browsePositions.get('paper') > 0;
+      if (!questions.length) throw Error('没有找到纸卷题目');
+      shell('<section class="paper"><header class="card pad paper-top"><h1>'+esc(session.title)+'</h1>'+
+        '<div class="acts"><button type="button" class="btn paper-exit">返回题目目录</button><span class="paper-loaded tiny muted" role="status"></span></div>'+
+        '<form class="paper-jump"><label>跳到第 <input name="position" type="number" required min="1" max="'+questions.length+'" inputmode="numeric"> 题</label><button class="btn" type="submit">跳转</button></form>'+
+        '</header><div class="paper-list"></div><div class="paper-sentinel"><button type="button" class="btn paper-more">加载后续题目</button></div></section>');
+      const root = $('#view .paper');
+      root.querySelector('.paper-exit').onclick = () => go(session.back||'');
+      disposePaper = ZS_PAPER.render(root,questions,{
+        S,P,flag,toggleFlag,setLastQ,setProg,savedSelection,stopRestore:()=>stopRestore(),
+        analysis:analysisHtml,reset:(id,paint)=>confirmRedo(id,()=>doRedo(id,paint))
+      },resume ? 0 : session.first);
+    } catch(e) {
+      if (S.route!=='paper') return;
+      shell('<div class="empty">'+esc(e.message)+'<div class="acts"><button type="button" class="btn paper-exit">返回题目目录</button></div></div>');
+      $('.paper-exit').onclick = () => go(session.back||'');
+    }
+  }
+
   function route() {
     let h = location.hash.replace(/^#\/?/, '');
     try { h = decodeURIComponent(h); } catch (e) { }
@@ -641,7 +714,7 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       if(browsePositions.size>80)browsePositions.delete(browsePositions.keys().next().value);
     }
     if(h.startsWith('q/')&&!S.route.startsWith('q/')) {
-      S.questionDirectory=/^l\//.test(S.route)||/^sprint\/(questions|judgements)(\/|$)/.test(S.route)||/^sprint\/practice\/[^/]+$/.test(S.route)||S.route==='queue'||S.route==='suyi-pairing'?S.route:null;
+      S.questionDirectory=/^l\//.test(S.route)||/^sprint\/(questions|judgements)(\/|$)/.test(S.route)||/^sprint\/practice\/[^/]+$/.test(S.route)||S.route==='queue'||S.route==='suyi-pairing'||S.route==='paper'?S.route:null;
     }
     S.route = h;
     S.remotePending = false;
@@ -655,8 +728,9 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     if (S.back.length > 40) S.back.splice(0, S.back.length - 40);
     /* 离开题目页 → 队列「暂存」，可随时从「队列」页继续 */
     if (p !== 'q') parkQ();
-    if (p === 'sprint' && a === 'practice') return PRACTICE.render(h, {shell,showQNav,P,flag,isWrongNow,isDone,S});
-    if (p === 'sprint' || (p === 'l' && a && /^[78]-/.test(a))) return MANUAL.render(p === 'l' ? (a.startsWith('8-') ? 'sprint/judgements' : 'sprint/questions') : h, {shell,showQNav,P,flag,isWrongNow,isDone,S});
+    if (p === 'paper') return renderPaper();
+    if (p === 'sprint' && a === 'practice') return PRACTICE.render(h, {shell,showQNav,P,flag,isWrongNow,isDone,S,paperButton});
+    if (p === 'sprint' || (p === 'l' && a && /^[78]-/.test(a))) return MANUAL.render(p === 'l' ? (a.startsWith('8-') ? 'sprint/judgements' : 'sprint/questions') : h, {shell,showQNav,P,flag,isWrongNow,isDone,S,paperButton});
     if(p==='suyi-pairing')return EXTRA_LECTURES.pairingReport({shell,showQNav});
     if(p==='extra')return EXTRA_LECTURES.reader(h,{shell,showQNav,stopRestore:()=>stopRestore()});
     if (p === 'l' && a) return renderChapter(a);
@@ -672,6 +746,8 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   const go = h => { if(window.ZS_READER_MODE){const url=new URL(window.location.href);url.hash='/'+h;window.location.replace(url.href);}else location.hash = '#/' + h; };
 
   function shell(inner, loading = false) {
+    disposePaper?.();
+    disposePaper = null;
     const y = renderedRoute === S.route ? pageScrollY() : (browsePositions.get(S.route) || 0);
     stopRestore();
     MANUAL.leave();
@@ -882,11 +958,19 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     });
     h += `</div></div>`;
     shell(h);
+    paperButton($('#view'),list,[list[0].module,list[0].chapter,'纸卷'].join(' · '));
   }
 
   /* ---------- 题目 ---------- */
   function qPool(id) { const reviewed=window.TEST_MODE?.pool(id);if(reviewed)return reviewed;const q=S.byId[id]; return q && q.source === 'p' ? PRACTICE.pool(id) : q && q.exerciseKind === 'judgement' ? (S.manualJudgeIds && S.manualJudgeIds.includes(id) ? S.manualJudgeIds.map(k=>S.byId[k]).filter(Boolean) : (S.judgeQs || [])) : q && q.source === 'm' ? (S.sprintQs || []) : S.qs; }
   function qIndexOf(id) { return qPool(id).findIndex(q => q.id === id); }
+
+  function questionPaperButton(q) {
+    if (S.q || TEST_MODE.testing(q) || TEST_MODE.isReview(q.id) || S.questionDirectory==='paper') return;
+    const questions = qPool(q.id).filter(item=>q.source==='p' || q.source==='m' ||
+      (item.moduleIdx===q.moduleIdx && item.chapter===q.chapter));
+    paperButton($('#view'),questions,[q.module,q.chapter,'纸卷'].filter(Boolean).join(' · '),q.id);
+  }
 
   function renderQuestion(id) {
     const q = S.byId[id];
@@ -898,7 +982,7 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     S.cur = q; S.curId = id;
     const testing=window.TEST_MODE?.prepare(q)||false, testResult=window.TEST_MODE?.result(id);
     setLastQ(id);
-    if (q.source === 'p' && q.type !== 'choice') { clearInterval(S._mt); PRACTICE.renderQuestion(q, {shell,showQNav,P,flag,isWrongNow,isDone,setProg,qIndexOf,renderQuestion,renderNote,paintLect,needLect,S}); window.QUESTION_COPY?.mount(q); return; }
+    if (q.source === 'p' && q.type !== 'choice') { clearInterval(S._mt); PRACTICE.renderQuestion(q, {shell,showQNav,P,flag,isWrongNow,isDone,setProg,qIndexOf,renderQuestion,renderNote,paintLect,needLect,S}); window.QUESTION_COPY?.mount(q); questionPaperButton(q); return; }
     showQNav(true, qIndexOf(id));
     const p = testResult?Object.assign({},P(id)||{tries:1,rights:0},{s:testResult.right?'right':'wrong',sel:testResult.sel}):P(id);
     const sbRec = inSb(id) ? (S.sb && S.sb[id]) : null;
@@ -1028,6 +1112,7 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
     }
     shell(h);
     window.QUESTION_COPY?.mount(q);
+    questionPaperButton(q);
     if (revealed) {
       q._lectDone = 0;
       needLect().then(() => { if(S.cur===q && S.route==='q/'+q.id){paintLect(q);ANNO.renderScope();} });
@@ -2194,12 +2279,12 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
   };
   window.ZS_REVEAL = id => {if(window.TEST_MODE?.testing(S.byId[id]))return ZS.toast('请先提交测试，再看答案和解析');S['rev_' + id] = true; renderQuestion(id); };
   /* 重做：保留历史次数与复习进度，只把本题切回「待作答」状态 */
-  function doRedo(id) {
+  function doRedo(id, paint = () => renderQuestion(id)) {
     window.TEST_MODE?.forget(id);
     if (S.byId[id] && S.byId[id].source === 'p') PRACTICE.reset(id);
     S['redo_' + id] = true; delete S['rev_' + id];if(window.HAT_CLOZE)HAT_CLOZE.reset(id,S); S['sel_' + id] = [];
     if ((ZS.data.flags[id] || {}).guess) { ZS.data.flags[id].guess = false; ZS.data.flags[id].ts = Date.now(); ZS.save(); }
-    renderQuestion(id);
+    paint();
     ZS.toast('已重置本题，可以重做（累计次数保留）');
   }
   window.ZS_REDO = id => {
@@ -2207,12 +2292,15 @@ const APP_VER = 154;     // 每次改动前端都 +1，和 index.html 的 ?v= �
       delete S.sb[id]; delete S['sel_' + id]; saveSession();
       return renderQuestion(id);
     }
+    confirmRedo(id,()=>doRedo(id));
+  };
+  function confirmRedo(id, apply) {
     const p = P(id);
     const msg = p && p.s
       ? '确定重做本题吗？\n（会清掉本题这次的作答结果，累计做了几次/对几次仍然保留）'
       : '确定重做本题吗？\n（会清掉当前选择）';
-    ZS.confirm(msg, () => doRedo(id));
-  };
+    ZS.confirm(msg, apply);
+  }
   window.ZS_QNAVREDO = () => { if (S.curId) ZS_REDO(S.curId); };
 
   /* 批量重做：kind = 'ch' 本章 / 'mi' 本模块 / 'all' 全部 */
